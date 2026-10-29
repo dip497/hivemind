@@ -1,7 +1,8 @@
 /**
  * The live wallpapers installed packages hold, as this window knows them: listed from main
  * (main/wallpaper-packages.ts) when first asked for, and again whenever plugins may have changed
- * (`hivemind:reload-views`: an install, a switch, `hive plugins install` through the view rescan).
+ * (`hivemind:reload-views`: an install, a switch, `hive plugins install` through the view rescan),
+ * and whenever main says packages changed in any window (`onWallpapersChanged`).
  * And the ones turned off this session for misbehaving, which draw as the plain background until
  * the app starts again.
  */
@@ -29,13 +30,20 @@ export function reloadWallpapers(): Promise<void> {
   return loading;
 }
 
+let offChanged = () => {};
+
 function subscribe(cb: () => void): () => void {
-  if (listeners.size === 0) window.addEventListener("hivemind:reload-views", onReload);
+  if (listeners.size === 0) {
+    window.addEventListener("hivemind:reload-views", onReload);
+    offChanged = window.hive.onWallpapersChanged(onReload);
+  }
   listeners.add(cb);
   if (!loaded && !loading) void reloadWallpapers();
   return () => {
     listeners.delete(cb);
-    if (listeners.size === 0) window.removeEventListener("hivemind:reload-views", onReload);
+    if (listeners.size > 0) return;
+    window.removeEventListener("hivemind:reload-views", onReload);
+    offChanged();
   };
 }
 const onReload = () => { void reloadWallpapers(); };

@@ -59,11 +59,14 @@ export interface ConnectWallpaperOptions {
 /** Wait for the app's port and its hello; resolves with the wallpaper's client. */
 export function connectWallpaper(opts: ConnectWallpaperOptions = {}): Promise<WallpaperClient> {
   const target = opts.target ?? window;
+  // Framed, as it always is in the app, the app is the page it is framed in: a frame of its own
+  // is not it. (Unframed, it is a test's window, handed the port by a fake app.)
+  const from = opts.target || window.parent === window ? null : window.parent;
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => { target.removeEventListener("message", onWindow); reject(new Error("hivemind: no wallpaper handshake")); }, opts.timeoutMs ?? 10_000);
     const onWindow = (e: MessageEvent) => {
       const port = e.ports?.[0];
-      if (!port || (e.data as { type?: unknown } | null)?.type !== PORT_HANDSHAKE) return;
+      if (!port || (e.data as { type?: unknown } | null)?.type !== PORT_HANDSHAKE || (from && e.source !== from)) return;
       target.removeEventListener("message", onWindow);
       new Wallpaper(port, (c) => { clearTimeout(timer); resolve(c); });
     };

@@ -5,6 +5,9 @@
  * and only while it is there), a click on the water, and which creature is under the pointer, which
  * the scene says. A click on that creature goes to its agent's tile; anywhere else, the water is the
  * scene's to answer.
+ *
+ * What a scene says is under the pointer counts only while the pointer is over the water, and its
+ * name goes with the pointer: a click can open only the agent named where the person clicks.
  */
 import type { Box, CreatureSpec, Look, SceneMode } from "./scene";
 
@@ -20,6 +23,8 @@ export interface PageLook extends Look {
 export interface SceneEvents {
   /** The creature under the pointer, and where the pointer is; null when there is none. */
   hover(key: string | null, at: { x: number; y: number }): void;
+  /** The pointer moved while over that creature (at most once a frame). */
+  move(at: { x: number; y: number }): void;
   /** A click landed on this creature: go to its agent. */
   open(key: string): void;
   /** It misbehaved and is off for the session (a package's wallpaper). */
@@ -98,8 +103,9 @@ export abstract class PageScene implements SceneEngine {
   /** A click on the water, and the creature it opened, if any. */
   protected abstract sendClick(x: number, y: number, opened: string | null): void;
 
-  /** The scene says which creature is under the pointer. */
+  /** The scene says which creature is under the pointer: none, while the pointer is not over the water. */
   protected hover(key: string | null) {
+    if (!this.pointer.active) key = null;
     if (key === this.hovered) return;
     this.hovered = key;
     this.events.hover(key, { x: this.pointer.x, y: this.pointer.y });
@@ -125,14 +131,16 @@ export abstract class PageScene implements SceneEngine {
   private onPointerMove = (e: PointerEvent) => {
     if (this.mode === "hold") return;
     const active = e.pointerType !== "touch" && overWater(e);
+    // Onto a tile or a panel: no creature is under the pointer there, whatever the scene says next.
+    if (!active && this.hovered) this.hover(null);
     if (!active && !this.pointer.active) return;
     this.pointer = { x: e.clientX, y: e.clientY, active };
-    if (!active && this.hovered) this.hover(null);
     if (this.pointerQueued) return;
     this.pointerQueued = true;
     requestAnimationFrame(() => {
       this.pointerQueued = false;
       this.sendPointer(this.pointer.x, this.pointer.y, this.pointer.active);
+      if (this.hovered) this.events.move({ x: this.pointer.x, y: this.pointer.y });
     });
   };
 

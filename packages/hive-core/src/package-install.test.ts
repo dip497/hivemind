@@ -176,6 +176,26 @@ test("a live wallpaper on its own is no package, and one whose entry is not buil
   await expect(installPackage(path.dirname(path.dirname(bees)), { dryRun: true })).rejects.toThrow(/its entry, dist\/main\.js, is not a file in its folder: build it first/);
 });
 
+// A preview is decoded in the app's own page: only the three pictures the picker shows are taken,
+// by what the file is, not by its name.
+test.each([
+  ["a PNG", [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13], null],
+  ["a JPEG", [0xff, 0xd8, 0xff, 0xe0, 0, 0x10], null],
+  ["a WebP", [0x52, 0x49, 0x46, 0x46, 0x24, 0, 0, 0, 0x57, 0x45, 0x42, 0x50], null],
+  ["a BMP named .png", [0x42, 0x4d, 0x36, 0, 0, 0, 0, 0, 0, 0, 0x36, 0], /its preview, preview\.png, is not a PNG, JPEG or WebP picture/],
+  ["a WAV named .png, a RIFF as a WebP is", [0x52, 0x49, 0x46, 0x46, 0x24, 0, 0, 0, 0x57, 0x41, 0x56, 0x45], /its preview, preview\.png, is not a PNG, JPEG or WebP picture/],
+  ["an SVG named .png", [...Buffer.from("<svg xmlns=")], /its preview, preview\.png, is not a PNG, JPEG or WebP picture/],
+  ["an empty file", [], /its preview, preview\.png, is not a PNG, JPEG or WebP picture/],
+] as const)("a live wallpaper whose preview is %s", async (_name, bytes, refused) => {
+  const root = hive();
+  const bees = path.join(root, "wallpapers", "bees");
+  fs.writeFileSync(path.join(bees, "hivemind-wallpaper.json"), JSON.stringify({ protocol: 1, name: "Bees", entry: "dist/main.js", preview: "preview.png" }));
+  fs.writeFileSync(path.join(bees, "preview.png"), Buffer.from(bytes));
+  const install = installPackage(root, { dryRun: true });
+  if (refused) await expect(install).rejects.toThrow(refused);
+  else await expect(install).resolves.toBeTruthy();
+});
+
 test("an install says which live wallpaper the package offers, and a package offering one it does not hold is refused", async () => {
   expect((await installPackage(hive({ wallpaper: "@acme/hive/bees", agents: [] }), { dryRun: true })).startWallpaper).toBe("@acme/hive/bees");
   fs.rmSync(path.join(tmp, "hive"), { recursive: true });

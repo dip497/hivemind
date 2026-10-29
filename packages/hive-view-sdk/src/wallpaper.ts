@@ -20,6 +20,7 @@
  * `./wallpaper-client.ts`; this module needs no window, so the app's own code and HiveHub read it.
  */
 import { isSafeRelativePath } from "./manifest.js";
+import { quoted } from "./protocol.js";
 
 export const WALLPAPER_PROTOCOL = 1;
 /** The file that makes a folder in a package a live wallpaper. */
@@ -121,27 +122,29 @@ export function parseWallpaperHostMessage(raw: unknown): Parsed<WallpaperHostMes
     case "done": return isId(raw.id) ? ok({ type: "done", id: raw.id }) : bad("id must be a string");
     case "pointer": return isNum(raw.x) && isNum(raw.y) && typeof raw.over === "boolean" ? ok({ type: "pointer", x: raw.x, y: raw.y, over: raw.over }) : bad("pointer is {x, y, over}");
     case "click": return isNum(raw.x) && isNum(raw.y) && (raw.id === null || isId(raw.id)) ? ok({ type: "click", x: raw.x, y: raw.y, id: raw.id }) : bad("click is {x, y, id}");
-    default: return { ok: false, reason: `unknown message type ${JSON.stringify(raw.type)}` };
+    default: return { ok: false, reason: `unknown message type ${quoted(raw.type)}` };
   }
 }
 
-/** The app's side: check a message from a wallpaper. What it may say is checked here; whether the
- *  app asked for it (a creature it knows, a click it sent) is the host's to check. */
+/** The app's side: check a message from a wallpaper, which carries its own keys and no others (the
+ *  app reads every message it is sent). What it may say is checked here; whether the app asked for
+ *  it (a creature it knows, a click it sent) is the host's to check. */
 export function parseWallpaperMessage(raw: unknown): Parsed<WallpaperMessage> {
   if (!isObj(raw) || typeof raw.type !== "string") return { ok: false, reason: "not an object with a string type" };
   const bad = (why: string): Parsed<WallpaperMessage> => ({ ok: false, reason: `${raw.type}: ${why}` });
+  const only = (...keys: string[]) => Object.keys(raw).every((k) => k === "type" || keys.includes(k));
   switch (raw.type) {
-    case "ready": return isNum(raw.protocol) ? { ok: true, msg: { type: "ready", protocol: raw.protocol } } : bad("protocol must be a number");
-    case "drawn": return { ok: true, msg: { type: "drawn" } };
-    case "hover": return raw.id === null || isId(raw.id) ? { ok: true, msg: { type: "hover", id: raw.id } } : bad("id must be a string or null");
-    default: return { ok: false, reason: `unknown message type ${JSON.stringify(raw.type)}` };
+    case "ready": return isNum(raw.protocol) && only("protocol") ? { ok: true, msg: { type: "ready", protocol: raw.protocol } } : bad("is {type, protocol}, protocol a number");
+    case "drawn": return only() ? { ok: true, msg: { type: "drawn" } } : bad("is {type} alone");
+    case "hover": return (raw.id === null || isId(raw.id)) && only("id") ? { ok: true, msg: { type: "hover", id: raw.id } } : bad("is {type, id}, id a string or null");
+    default: return { ok: false, reason: `unknown message type ${quoted(raw.type)}` };
   }
 }
 
 /** Why the app refuses a well-formed message, given the creatures it sent, or null when it takes
  *  it: a wallpaper names only a creature it was told of. */
 export function wallpaperRefusal(m: WallpaperMessage, creatures: ReadonlySet<string>): string | null {
-  if (m.type === "hover" && m.id !== null && !creatures.has(m.id)) return `hover: ${JSON.stringify(m.id).slice(0, 40)} is not a creature the app sent`;
+  if (m.type === "hover" && m.id !== null && !creatures.has(m.id)) return `hover: ${quoted(m.id)} is not a creature the app sent`;
   return null;
 }
 
@@ -168,7 +171,7 @@ const UNSAFE_TEXT = /[\u0000-\u001f\u007f\u2028\u2029\u202a-\u202e\u2066-\u2069]
 export function validateWallpaperManifest(raw: unknown): { ok: true; manifest: WallpaperManifest } | { ok: false; errors: string[] } {
   if (!isObj(raw)) return { ok: false, errors: [`${WALLPAPER_MANIFEST} must be a JSON object`] };
   const errors: string[] = [];
-  for (const k of Object.keys(raw)) if (!MANIFEST_FIELDS.has(k)) errors.push(`there is no field ${JSON.stringify(k).slice(0, 60)}; it takes ${[...MANIFEST_FIELDS].filter((f) => f !== "$schema").join(", ")}`);
+  for (const k of Object.keys(raw)) if (!MANIFEST_FIELDS.has(k)) errors.push(`there is no field ${quoted(k, 60)}; it takes ${[...MANIFEST_FIELDS].filter((f) => f !== "$schema").join(", ")}`);
   if (!Number.isInteger(raw.protocol) || (raw.protocol as number) < 1) errors.push(`"protocol" is a whole number; this SDK speaks ${WALLPAPER_PROTOCOL}`);
   const text = (k: string, max: number, required: boolean) => {
     const v = raw[k];

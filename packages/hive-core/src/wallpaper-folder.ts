@@ -9,7 +9,19 @@ import { validateWallpaperManifest, WALLPAPER_MANIFEST, type WallpaperManifest }
 import { installedMembers } from "./installed-packages.js";
 import type { PackageOf } from "./plugin-settings.js";
 import { resolvePackageFile } from "./view-files.js";
-import { readWallpaper, type WallpaperFolderFile } from "./wallpaper-format.js";
+import { PREVIEW_HEAD_BYTES, readWallpaper, type WallpaperFolderFile } from "./wallpaper-format.js";
+
+/** The first bytes of a file, to say what picture it is. */
+export async function fileHead(file: string): Promise<Uint8Array> {
+  const fh = await fs.open(file, "r");
+  try {
+    const head = new Uint8Array(PREVIEW_HEAD_BYTES);
+    const { bytesRead } = await fh.read(head, 0, PREVIEW_HEAD_BYTES, 0);
+    return head.subarray(0, bytesRead);
+  } finally {
+    await fh.close();
+  }
+}
 
 /** The wallpaper in `dir`, a member of package `packageId`: its id and what its manifest says.
  *  Throws why not. Its entry and preview count as there only inside its folder, through any link:
@@ -19,13 +31,14 @@ export async function readWallpaperFolder(dir: string, packageId: string | undef
   const files: WallpaperFolderFile[] = [];
   if (json !== null) {
     let named: string[] = [];
+    let preview: string | undefined;
     try {
       const v = validateWallpaperManifest(JSON.parse(json));
-      if (v.ok) named = [v.manifest.entry, ...(v.manifest.preview ? [v.manifest.preview] : [])];
+      if (v.ok) { preview = v.manifest.preview; named = [v.manifest.entry, ...(preview ? [preview] : [])]; }
     } catch { /* readWallpaper says why */ }
     for (const rel of named) {
       const at = resolvePackageFile(dir, rel);
-      if (at.status === 200) files.push({ path: rel, bytes: (await fs.stat(at.abs)).size });
+      if (at.status === 200) files.push({ path: rel, bytes: (await fs.stat(at.abs)).size, ...(rel === preview ? { head: await fileHead(at.abs) } : {}) });
     }
   }
   const r = readWallpaper(path.basename(path.resolve(dir)), packageId, json, files);

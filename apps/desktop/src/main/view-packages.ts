@@ -108,7 +108,8 @@ export function handleViewProtocol(): void {
   serveScheme(VIEW_SCHEME, async (request) => {
     try {
       const u = new URL(request.url);
-      const source = served.get(u.host) ?? wallpapers.get(u.host);
+      // A wallpaper's host first: a view a repository ships may be named like one.
+      const source = wallpapers.get(u.host) ?? served.get(u.host);
       if (!source) return new Response("unknown view", { status: 404 });
       const rel = decodeURIComponent(u.pathname.replace(/^\/+/, ""));
       if (source.repo) {
@@ -167,7 +168,7 @@ export function startViewWatchdog(win: BrowserWindow): () => void {
     for (const f of frames) {
       let id = "";
       // The frame knows its host; the registry knows ids. Report the id or nothing is disabled.
-      try { const host = new URL(f.url).host; id = served.get(host)?.id ?? wallpapers.get(host)?.id ?? host; } catch { continue; }
+      try { const host = new URL(f.url).host; id = wallpapers.get(host)?.id ?? served.get(host)?.id ?? host; } catch { continue; }
       seen.add(id);
       const cpu = byPid.get(f.osProcessId) ?? 0;
       const n = cpu >= RUNAWAY_CPU_PCT ? (strikes.get(id) ?? 0) + 1 : 0;

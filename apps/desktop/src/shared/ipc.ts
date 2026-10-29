@@ -397,6 +397,8 @@ export interface HiveIpc {
   /** The live wallpapers installed packages hold, each with where its frame loads from or why it
    *  cannot be used. Rescans on every call. */
   listWallpapers(): Promise<WallpaperPackageInfo[]>;
+  /** A package was switched, removed or put back: list them again. */
+  onWallpapersChanged(cb: () => void): () => void;
   viewOpen(id: string, workspace: string, screen: ViewScreen): Promise<{ session: string }>;
   viewPost(session: string, message: PluginMessage, workspace: string): void;
   viewScreen(session: string, screen: ViewScreen, workspace: string): void;

@@ -45,6 +45,13 @@ function boxesOnPage(frosted: boolean): Box[] {
   return out;
 }
 
+/** Where the name goes: beside the pointer, on its left near the window's right edge so it is never
+ *  cut off. */
+function labelAt(at: { x: number; y: number }): { left: string; right: string; top: string } {
+  const flip = at.x > window.innerWidth - 260;
+  return { left: flip ? "" : `${at.x + 14}px`, right: flip ? `${window.innerWidth - at.x + 14}px` : "", top: `${at.y + 16}px` };
+}
+
 const rosterKey = (creatures: CreatureSpec[]) => creatures.map((s) => `${s.key}:${s.variant}:${s.size}:${s.mood}`).join("|");
 
 export function LiveWallpaper({ scene, colour, agents, paused, animate, frosted, seeThrough, page, text, attention, dark, monoFont, nameOf, onOpen }: {
@@ -76,8 +83,10 @@ export function LiveWallpaper({ scene, colour, agents, paused, animate, frosted,
 }): React.ReactElement {
   const hostRef = useRef<HTMLDivElement>(null);
   const [engine, setEngine] = useState<SceneEngine | null>(null);
-  /** The creature under the pointer, and where the pointer was when it came. */
+  /** The creature under the pointer, and where the pointer was when it came; its name then goes
+   *  with the pointer, set on the label itself, not drawn again. */
   const [over, setOver] = useState<{ key: string; x: number; y: number } | null>(null);
+  const labelRef = useRef<HTMLDivElement>(null);
   const openRef = useRef(onOpen);
   openRef.current = onOpen;
   const sceneKey = typeof scene === "string" ? scene : `${scene.id} ${scene.url}`;
@@ -98,6 +107,7 @@ export function LiveWallpaper({ scene, colour, agents, paused, animate, frosted,
     if (!shown) return;
     const events = {
       hover: (key: string | null, at: { x: number; y: number }) => setOver(key ? { key, ...at } : null),
+      move: (at: { x: number; y: number }) => { if (labelRef.current) Object.assign(labelRef.current.style, labelAt(at)); },
       open: (key: string) => openRef.current(key),
       disable: (reason: string) => {
         if (typeof scene === "string") return;
@@ -183,9 +193,7 @@ export function LiveWallpaper({ scene, colour, agents, paused, animate, frosted,
     <div ref={hostRef} className="hm-live" />
     {/* Over everything, as a tooltip is: the wallpaper's own layer is behind the canvas. */}
     {over && name && createPortal(
-      <div className="hm-live-label" role="tooltip" data-creature={over.key}
-        // Beside the pointer, on its left near the window's right edge so it is never cut off.
-        style={over.x > window.innerWidth - 260 ? { right: window.innerWidth - over.x + 14, top: over.y + 16 } : { left: over.x + 14, top: over.y + 16 }}>
+      <div ref={labelRef} className="hm-live-label" role="tooltip" data-creature={over.key} style={labelAt(over)}>
         <span className="hm-live-label-name">{name}</span> · {statusWord(statusOf(over.key) ?? null)}
       </div>,
       document.body,

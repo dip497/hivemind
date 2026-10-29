@@ -1,10 +1,15 @@
 // A package's live wallpaper in the built app: installed while the app was closed, it is offered
 // once as the background and Use draws it, in its sandboxed frame, told each agent's creature and
-// where their tiles are; the pointer over a creature names its agent and a click there goes to its
-// tile, on the app's own scenes too; and a wallpaper that names creatures it was never sent is
-// turned off for the session, the plain background showing instead.
+// where their tiles are, by handles that are not the tiles' ids; the pointer over a creature names
+// its agent and a click there goes to its tile, on the app's own scenes too. A wallpaper that names
+// creatures it was never sent is turned off for the session, the plain background showing instead;
+// one that says a creature is under the pointer while the pointer is over a tile is not heard; one
+// that takes the keyboard is turned off, the terminal that had it getting it back; a package switched
+// off stops its wallpaper in every window; and a view the repository ships named like a wallpaper's
+// origin is never served there.
 import { test, expect, _electron as electron, type ElectronApplication, type Frame, type Page } from "@playwright/test";
 import { execSync, spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -48,6 +53,15 @@ function standInAgent(): void {
   ].join("\n"));
 }
 
+/** A view the repository ships, named like the wallpaper's own origin: it must never be served there. */
+function impostorView(wallpaper: string): void {
+  const id = `wp-${createHash("sha256").update(wallpaper).digest("hex").slice(0, 32)}`;
+  const dir = path.join(repo, ".hivemind", "views", id);
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, "hivemind-view.json"), JSON.stringify({ id, name: "Impostor", version: "0.0.1", entry: "index.html" }));
+  fs.writeFileSync(path.join(dir, "index.html"), "<!doctype html><title>Impostor</title><p>impostor</p>");
+}
+
 const install = (dir: string) => {
   const r = spawnSync("bun", [cli, "plugins", "install", dir, "--json"], { cwd: repo, env, encoding: "utf8" });
   if (r.status !== 0) throw new Error(r.stderr || r.stdout);
@@ -83,6 +97,7 @@ test.beforeAll(async () => {
   for (const d of [repo, path.join(root, "home")]) fs.mkdirSync(d, { recursive: true });
   execSync("git init -q && git commit -q --allow-empty -m init", { cwd: repo, env: { ...env, GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@t", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@t" } });
   standInAgent();
+  impostorView("@e2e/pond/dots");
   // Installed while the app is closed: it is offered when the app starts.
   install(fixture("pond"));
   install(fixture("rogue"));
@@ -108,34 +123,38 @@ test("offered once as the background, Use draws it, told each agent's creature a
   expect(await page.evaluate(() => window.hive.settingsGet().then((s) => s.appearance.wallpaper.kind))).toBe("@e2e/pond/dots");
   const frame = await wallpaperFrame("@e2e/pond/dots");
   const ids = await tiles();
-  await expect.poll(() => frame.evaluate(() => (window as unknown as { seen: { creatures: Array<{ id: string; agent: string }> } }).seen.creatures.map((c) => `${c.id}:${c.agent}`).sort()))
-    .toEqual(ids.map((id) => `${id}:pond`).sort());
-  // Each agent's tile, by its creature's id; never its name, folder or output.
-  const told = await frame.evaluate(() => (window as unknown as { seen: { tiles: Array<{ id?: string }>; look: Record<string, unknown> } }).seen);
-  expect(told.tiles.map((t) => t.id).filter(Boolean).sort()).toEqual([...ids].sort());
+  await expect.poll(() => frame.evaluate(() => (window as unknown as { seen: { creatures: Array<{ agent: string }> } }).seen.creatures.map((c) => c.agent)))
+    .toEqual(ids.map(() => "pond"));
+  // Each agent's tile, by its creature's id: a handle, never the tile's own id, name, folder or output.
+  const told = await frame.evaluate(() => (window as unknown as { seen: { creatures: Array<{ id: string }>; tiles: Array<{ id?: string }>; look: Record<string, unknown> } }).seen);
+  const handles = told.creatures.map((c) => c.id);
+  expect(told.tiles.map((t) => t.id).filter(Boolean).sort()).toEqual([...handles].sort());
+  expect(handles.filter((h) => ids.includes(h))).toEqual([]);
   expect(Object.keys(told.look).sort()).toEqual(["attention", "colour", "dark", "mono", "page", "text"]);
   await shot("2-drawn");
 });
 
 test("the pointer over a creature names its agent, and a click there goes to its tile", async () => {
   const frame = await wallpaperFrame("@e2e/pond/dots");
-  const [first] = await tiles();
+  const handle = await frame.evaluate(() => (window as unknown as { seen: { creatures: Array<{ id: string }> } }).seen.creatures[0]!.id);
   await zoomOut();
   await expect.poll(() => openWater(40)).not.toBeNull();
   const water = await openWater(40);
   expect(water, "some empty canvas to put the creature on").not.toBeNull();
-  await frame.evaluate(([id, at]) => (window as unknown as { place: (id: string, at: unknown) => void }).place(id, at), [first!, water!] as const);
+  await frame.evaluate(([id, at]) => (window as unknown as { place: (id: string, at: unknown) => void }).place(id, at), [handle, water!] as const);
   // Its tile is not selected, so going to it shows.
   await page.locator(".react-flow__pane").click({ position: { x: 5, y: 5 } });
   await page.mouse.move(water!.x + 2, water!.y + 2);
   await page.mouse.move(water!.x, water!.y);
   const label = page.locator(".hm-live-label");
-  await expect(label).toHaveAttribute("data-creature", first!);
+  await expect(label).toHaveCount(1);
+  const tile = await label.getAttribute("data-creature");
+  expect(await tiles()).toContain(tile);
   await expect(label).toContainText("Pond");
   await shot("3-hover");
   await page.mouse.click(water!.x, water!.y);
-  await expect(page.locator(`.react-flow__node[data-id="${first}"].selected`)).toHaveCount(1);
-  await expect.poll(() => frame.evaluate(() => (window as unknown as { seen: { clicks: Array<string | null> } }).seen.clicks)).toContain(first);
+  await expect(page.locator(`.react-flow__node[data-id="${tile}"].selected`)).toHaveCount(1);
+  await expect.poll(() => frame.evaluate(() => (window as unknown as { seen: { clicks: Array<string | null> } }).seen.clicks)).toContain(handle);
   // Off it, the label goes.
   await page.mouse.move(water!.x + 200, water!.y);
   await expect(label).toHaveCount(0);
@@ -147,6 +166,64 @@ test("a wallpaper that names creatures it was never sent is turned off, and the 
   await expect(page.locator('.hm-wallpaper[data-scene="mono"]')).toHaveCount(1);
   await expect(page.locator(".hm-live-frame")).toHaveCount(0);
   await shot("4-turned-off");
+});
+
+type Liar = { seen: { creatures: Array<{ id: string }> }; say: (m: unknown) => void; steal: () => void };
+const middleOf = async (tile: string) => {
+  const b = (await page.locator(`.react-flow__node[data-id="${tile}"]`).boundingBox())!;
+  return { x: b.x + b.width / 2, y: b.y + b.height / 2 };
+};
+
+test("what a wallpaper says is under the pointer counts only over open water, and the name goes with the pointer", async () => {
+  await page.evaluate(() => window.hive.settingsSet("appearance.wallpaper.kind", "@e2e/rogue/liar"));
+  const frame = await wallpaperFrame("@e2e/rogue/liar");
+  await expect.poll(() => frame.evaluate(() => (window as unknown as Liar).seen.creatures.length)).toBe(2);
+  const handle = await frame.evaluate(() => (window as unknown as Liar).seen.creatures[0]!.id);
+  const say = () => frame.evaluate((id) => (window as unknown as Liar).say({ type: "hover", id }), handle);
+  const label = page.locator(".hm-live-label");
+  const [tile] = await tiles();
+  const onTile = await middleOf(tile!);
+  // Over a tile, a creature it says is under the pointer is not heard. Nothing shows that it was
+  // not, so the test gives it a few frames.
+  await page.mouse.move(onTile.x, onTile.y);
+  await say();
+  await page.waitForTimeout(300);
+  await expect(label).toHaveCount(0);
+  // Over the water it is, and the name goes with the pointer.
+  const water = (await openWater(60))!;
+  await page.mouse.move(water.x, water.y);
+  await say();
+  await expect(label).toHaveCount(1);
+  const was = (await label.boundingBox())!;
+  await page.mouse.move(water.x - 40, water.y - 40, { steps: 4 });
+  await expect.poll(async () => (await label.boundingBox())!.x).toBeLessThan(was.x - 30);
+  // Onto a tile, the name goes, though the wallpaper never says so.
+  await page.mouse.move(onTile.x, onTile.y);
+  await expect(label).toHaveCount(0);
+});
+
+test("a wallpaper that takes the keyboard is turned off, and the terminal that had it gets it back", async () => {
+  const frame = await wallpaperFrame("@e2e/rogue/liar");
+  const [tile] = await tiles();
+  const focusedTile = () => page.evaluate(() => document.activeElement?.closest(".react-flow__node")?.getAttribute("data-id") ?? null);
+  const at = await middleOf(tile!);
+  await page.mouse.click(at.x, at.y);
+  await expect.poll(focusedTile).toBe(tile);
+  await frame.evaluate(() => (window as unknown as Liar).steal());
+  await expect(page.getByText(/The Liar live wallpaper was turned off: it took the keyboard/)).toBeVisible();
+  await expect(page.locator(".hm-live-frame")).toHaveCount(0);
+  await expect.poll(focusedTile).toBe(tile);
+  await shot("4b-took-the-keyboard");
+});
+
+test("a package switched off stops its wallpaper in every window, not only the one that switched it", async () => {
+  await page.evaluate(() => window.hive.settingsSet("appearance.wallpaper.kind", "@e2e/pond/dots"));
+  await expect(page.locator('.hm-live-frame[data-drawn][data-wallpaper="@e2e/pond/dots"]')).toBeVisible();
+  // As from another window: main switches it and tells every window; this one asks for nothing.
+  await page.evaluate(() => window.hive.switchPackage("@e2e/pond", false));
+  await expect(page.locator(".hm-live-frame")).toHaveCount(0);
+  await expect(page.locator('.hm-wallpaper[data-scene="mono"]')).toHaveCount(1);
+  await page.evaluate(() => window.hive.switchPackage("@e2e/pond", true));
 });
 
 test("on the app's own scenes too: the pointer over a shark names its agent, and a click there goes to its tile", async () => {

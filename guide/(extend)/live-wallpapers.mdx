@@ -37,10 +37,15 @@ What it is told is less than a view is:
 - The colours to draw in, and whether to run, keep its last frame or show one settled frame.
 - The pointer and clicks over empty canvas, and a turn an agent finished well.
 
-It is never told an agent's name, a folder, a command or anything a terminal shows. It has no
-network and no permissions, and it cannot change the workspace. The two things it says back are
-that its first frame is up, and which creature is under the pointer. The app shows that agent's
-name and state there, and a click there goes to the agent's tile.
+It is never told an agent's name, a folder, a command, a tile's own id or anything a terminal
+shows. It loads and fetches nothing from the network, has no permissions, never has the keyboard,
+and cannot change the workspace. The two things it says back are that its first frame is up, and
+which creature is under the pointer. While the pointer is over empty canvas, the app shows that
+agent's name and state beside the pointer, and a click there goes to the agent's tile.
+
+Like a view, its frame can still open a WebRTC connection, which no page policy in Chromium
+stops, and so could send what it is told elsewhere. Install live wallpapers, like views, from
+people you trust.
 
 It is not drawn behind a view you installed, which lays its tiles out itself, nor on the
 [phone page](/phone).
@@ -316,6 +321,7 @@ background instead, when it:
 - sends 8 messages that are malformed, or that name a creature the app did not send;
 - sends more than 120 messages a second;
 - asks for a newer protocol than this Hivemind speaks;
+- takes the keyboard (focuses anything in its frame);
 - uses 60% of a CPU core for six seconds.
 
 The scene runs in a process of its own, so it never slows your terminals, but a busy one is still

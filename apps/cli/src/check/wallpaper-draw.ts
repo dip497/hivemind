@@ -3,10 +3,14 @@
  *  Chromium, handed a port with the views' handshake, and answered by a host that checks everything
  *  it sends as the app does (`fakeWallpaperHost`: `parseWallpaperMessage`, `wallpaperRefusal`, the
  *  protocol). The host plays the app for a moment: agents in every state, their tiles, each look and
- *  mode, the pointer and a click. The wallpaper's code runs only in the browser's sandbox.
+ *  mode, the pointer and a click. The wallpaper's code runs in a sandboxed frame, as in the app, of
+ *  a Chromium started as Playwright starts it, without its own OS sandbox: `hive plugins check`
+ *  runs a package's code on this computer, as its tools' and widgets' draws do, so check only a
+ *  package you would install.
  *
- *  Chromium is Playwright's, found where Node would find it: this CLI ships no browser, and on a
- *  computer without one the draw is not run, and says so, rather than failed. */
+ *  Chromium is Playwright's, found where Node would find it (a `node_modules` from the working
+ *  folder up, NODE_PATH, npm's global folder): this CLI ships no browser, and on a computer without
+ *  one the draw is not run, and says so, rather than failed. */
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import { createRequire } from "node:module";

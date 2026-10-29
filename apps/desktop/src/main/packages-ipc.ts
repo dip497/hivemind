@@ -17,6 +17,7 @@ import { dialogStart, rememberPick } from "./dialog-start";
 import { reloadSettings } from "./settings-store.js";
 import { widgetsChanged } from "./widgets.js";
 import { toolsChanged } from "./tool-packages.js";
+import { wallpapersChanged } from "./wallpaper-packages.js";
 import type { PackageReview } from "../shared/ipc.js";
 
 const runsOf = (kind: string) => memberKind(kind)?.runs ?? "in the app";
@@ -63,6 +64,7 @@ async function changed(): Promise<void> {
   await reloadSettings();
   widgetsChanged();
   toolsChanged();
+  wallpapersChanged();
 }
 
 export function installPackagesIpc(): void {

@@ -3,7 +3,7 @@
 // every live wallpaper runs on.
 import { describe, expect, test } from "bun:test";
 import {
-  parseWallpaperHostMessage, sceneClock, validateWallpaperManifest, wallpaperRefusal,
+  parseWallpaperHostMessage, parseWallpaperMessage, sceneClock, validateWallpaperManifest, wallpaperRefusal,
   type WallpaperCreature,
 } from "../src/wallpaper.js";
 import { fakeWallpaperHost } from "../src/testing.js";
@@ -97,6 +97,29 @@ describe("what the app takes back from a wallpaper", () => {
     const why = wallpaperRefusal(m, new Set(["a"]));
     if (expected === null) expect(why).toBe(null);
     else expect(why).toMatch(expected);
+  });
+});
+
+describe("what a wallpaper may say", () => {
+  test.each([
+    ["ready", { type: "ready", protocol: 1 }, true],
+    ["drawn", { type: "drawn" }, true],
+    ["hover", { type: "hover", id: "a" }, true],
+    // The app reads every message it is sent: what it does not take is refused, not carried.
+    ["ready with more", { type: "ready", protocol: 1, padding: "x" }, false],
+    ["drawn with more", { type: "drawn", frame: 1 }, false],
+    ["hover with more", { type: "hover", id: "a", at: { x: 1, y: 2 } }, false],
+  ] as const)("%s", (_name, raw, ok) => {
+    expect(parseWallpaperMessage(raw).ok).toBe(ok);
+  });
+
+  test("a type it does not know is quoted short, its controls and bidi characters escaped", () => {
+    const r = parseWallpaperMessage({ type: `\u202eevil\u2028${"x".repeat(5000)}` });
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.reason.length).toBeLessThan(80);
+    expect(r.reason).toContain("\\u202eevil\\u2028");
+    expect(r.reason).not.toMatch(/[\u202e\u2028]/);
   });
 });
 

@@ -45,11 +45,13 @@ The app tells the wallpaper:
   pointer over empty canvas), `click { x, y, id }` (a click on empty canvas; `id` is the creature
   the app opened, or `null` for open water).
 
-It is never told a name, a folder, a command, a reply or anything a terminal shows. It can do
-nothing to the workspace. It says three things back: `ready` (it speaks protocol 1), `drawn`
-(its first frame is up, so the app shows the layer) and `hover { id }` (the creature under the
-pointer). The app then shows that agent's name and state by the pointer, and a click there goes to
-the agent's tile.
+It is never told a name, a folder, a command, a reply, a tile's own id or anything a terminal
+shows: a creature's `id` is a handle for this session, the same on its tile. It can do nothing to
+the workspace. It says three things back, each with its own keys and no others: `ready` (it speaks
+protocol 1), `drawn` (its first frame is up, so the app shows the layer) and `hover { id }` (the
+creature under the pointer). While the pointer is over empty canvas, the app then shows that
+agent's name and state beside the pointer, and a click there goes to the agent's tile; a `hover`
+while the pointer is over a tile or a panel is not heard.
 
 That asymmetry is the design: the scene decides how the agents look; it decides nothing else.
 
@@ -423,7 +425,7 @@ https://hivemind.griiken.com/guide/packages/.
 
 ## What the sandbox refuses
 
-The wallpaper runs in a sandboxed frame like a view: an opaque origin, `default-src 'none'`, no
+The wallpaper runs in a sandboxed frame like a view: an opaque origin, `default-src 'none'`, nothing
 network, no permissions, in its own process.
 
 | You wrote | What happens |
@@ -444,6 +446,7 @@ a notice, and draws the plain background instead, when it:
 - sends 8 messages that do not parse, or that name a creature the app never sent;
 - sends more than 120 messages a second (it answers the pointer at most once a frame: far fewer);
 - says `ready` with a newer protocol than the app speaks;
+- takes the keyboard: anything in its frame focused (an input, a `tabindex`), by script or not;
 - uses 60% of a CPU core for six seconds.
 
 `hive plugins check` and `fakeWallpaperHost`'s `refused` catch the first three before the person

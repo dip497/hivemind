@@ -219,6 +219,7 @@ hive plugins add <folder> --to <package folder>
 hive plugins check <folder> [--json]    # its types, its manifest and its code drawn once; file:line for each problem
                                         # of a package: hivemind-package.json and every member with its own check
                                         # a live wallpaper, once built: drawn in headless Chromium (Playwright's) against a fake app
+                                        # it runs the plugin's code on this computer: check only what you would install
 hive plugins install <folder>|<id>      # a folder holding a plugin, or one from HiveHub by its id: installed as a package
                                         # owner/name and @owner/name are always HiveHub's: a folder is ./x, ../x, /x or ~/x
                                         # a tool arrives off: hive plugins enable @owner/name

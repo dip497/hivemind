@@ -56,6 +56,42 @@ goes or changes state (keyed on the roster); tile boxes once a second while runn
 a frame while the canvas moves; the pointer at most once a frame while it is over empty canvas.
 Each goes to one port. Hit-testing is the scene's: a few distance checks per creature (8 at most).
 
+## Security review (2026-10-29)
+
+An independent review of the branch found these; each is fixed where it lives, with a test that
+fails without the fix unless said:
+
+- **The keyboard.** A cross-origin frame can focus itself without the person doing anything, and
+  `inert` does not stop it. `PluginEngine` watches the window's `blur`: when focus went to the
+  wallpaper's frame, the frame is removed, what had focus gets it back and the wallpaper is off for
+  the session. Keys typed in the moment before are lost to it.
+- **A click it chooses.** A `hover` counts only while the pointer is over empty canvas (it was taken
+  at any time and stuck), is cleared as the pointer leaves the water, and the name goes with the
+  pointer, so a click opens only the agent named where the person clicks.
+- **What it is told.** A creature and its tile carry a random handle for the session, not the tile's
+  id (which said its kind and when it was made); tiles with no creature carry none.
+- **What it says.** Messages carry their own keys and nothing else, and a refusal quotes what it
+  sent at most 40 characters long, controls and bidi characters escaped (the view protocol too).
+  Hover is taken at most once a frame.
+- **Its origin.** A wallpaper's host is looked up before a view's, so a view a repository ships
+  named `wp-<hash>` cannot take a wallpaper's origin.
+- **Its preview.** Read and decoded only for a package that is on, and only a PNG, JPEG or WebP by
+  its bytes; `hive plugins check` and install refuse another. HiveHub reads no preview bytes, so it
+  does not refuse one yet.
+- **Switched off.** Every window hears that a package changed (`wallpapers:changed`), so a wallpaper
+  switched off in one window stops in the others.
+- **The handshake** is taken only from the parent frame when the page is framed (hardening: no
+  other frame shares a wallpaper's page today; no test).
+
+Open: **WebRTC.** The frame's CSP stops `fetch` and loading, but no page policy Chromium has stops
+`RTCPeerConnection`. Measured in this app's Electron: the window's
+`setWebRTCIPHandlingPolicy("disable_non_proxied_udp")` stops STUN over UDP but not TURN over TCP,
+and a CSP `webrtc` directive is ignored. A wallpaper could send what it is told (programs, states,
+tile layout, the pointer) and the computer's address to a server. Views share it, as the phone
+design already says (§11). Closing it needs isolation outside the page (a session of its own whose
+WebRTC goes through a proxy that refuses, or the scene in a worker, which has no
+`RTCPeerConnection`); the guide says to install wallpapers, like views, from people you trust.
+
 ## Not now
 
 - A theme naming a live wallpaper (`theme.json` reserves `scene`): an app without the wallpaper
