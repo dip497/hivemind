@@ -7,8 +7,8 @@
  */
 import SceneWorker from "./worker?worker";
 import { PageScene, type PageLook, type SceneEvents } from "./page-scene";
-import type { Box, CreatureSpec, SceneMode } from "./scene";
-import type { FaceSource, SceneAnswer, SceneId, SceneMessage } from "./worker";
+import type { SceneMode } from "./scene";
+import type { FaceSource, SceneId, SceneMessage } from "./worker";
 
 export type { SceneId };
 
@@ -50,7 +50,6 @@ export class LiveEngine extends PageScene {
     this.font = getComputedStyle(host).fontFamily;
     const offscreen = canvas.transferControlToOffscreen();
     this.post({ type: "start", scene, canvas: offscreen, font: this.font, faces: facesOf(this.font) }, [offscreen]);
-    this.worker.onmessage = ({ data }: MessageEvent<SceneAnswer>) => { if (data.type === "hover") this.hover(data.key); };
     this.resize();
   }
 
@@ -67,20 +66,8 @@ export class LiveEngine extends PageScene {
     this.post({ type: "font", font, faces: facesOf(font) });
   }
 
-  setLook({ page, text, colour }: PageLook) {
-    this.post({ type: "look", look: { page, text, colour } });
-  }
-
-  setRoster(creatures: CreatureSpec[]) {
-    this.post({ type: "roster", creatures });
-  }
-
-  setBoxes(boxes: Box[], seeThrough: boolean) {
-    this.post({ type: "boxes", boxes, seeThrough });
-  }
-
-  finished(key: string) {
-    this.post({ type: "finished", key });
+  setLook({ page, text }: PageLook) {
+    this.post({ type: "look", look: { page, text } });
   }
 
   protected sendMode(mode: SceneMode) {
@@ -95,8 +82,8 @@ export class LiveEngine extends PageScene {
     this.post({ type: "pointer", x, y, active });
   }
 
-  protected sendClick(x: number, y: number, opened: string | null) {
-    this.post({ type: "click", x, y, opened });
+  protected sendClick(x: number, y: number) {
+    this.post({ type: "click", x, y });
   }
 
   private post(m: SceneMessage, transfer: Transferable[] = []) {

@@ -6,27 +6,20 @@ import { useWorkspaceOccluded } from "./workspace-occlusion";
 import { LiveWallpaper } from "./live/LiveWallpaper";
 import { lightOf, waterCss } from "./live/palette";
 import { cssColorToHex } from "./workspace/css-color";
-import type { SceneAgent } from "./live/roster";
 import { usableWallpaper, useWallpapers } from "./live/wallpaper-store";
-
-const NO_AGENTS: readonly SceneAgent[] = [];
-const NO_NAME = () => null;
-const NO_OPEN = () => {};
 
 /**
  * `embedded` renders the SAME scene as an absolute fill (position:absolute,
  * z-index:0) of its positioned parent instead of the default fixed full-window
  * layer — used by the terminal fit-to-screen overlay so the fullscreen terminal
  * sits over a clean copy of the live wallpaper (not the canvas + other tiles).
- * `agents` are the workspace's agents, for a live scene, which draws them (Shoal). `live` is false
- * behind a plugin view, which paints its own scene: a live scene shows its water there and runs
- * nothing. `nameOf` names an agent's tile for the label over its creature, and `onOpen` goes to it.
+ * `live` is false behind a plugin view, which paints its own scene: a live scene shows its water
+ * there and runs nothing.
  */
-export function Wallpaper({ embedded = false, covering = false, agents = NO_AGENTS, live = true, nameOf = NO_NAME, onOpen = NO_OPEN }: {
-  embedded?: boolean; covering?: boolean; agents?: readonly SceneAgent[]; live?: boolean;
-  nameOf?: (tileId: string) => string | null; onOpen?: (tileId: string) => void;
+export function Wallpaper({ embedded = false, covering = false, live = true }: {
+  embedded?: boolean; covering?: boolean; live?: boolean;
 } = {}): React.ReactElement | null {
-  const { glass, contentGlass, wallpaper, wallpaperColour, videoSrc, imageSrc, themeId, animate, palette, monoFont, mode } = useTheme();
+  const { glass, wallpaper, videoSrc, imageSrc, themeId, animate, palette, monoFont, mode } = useTheme();
   const { wallpapers } = useWallpapers();
   const cls = embedded ? " embedded" : "";
   const [inactive, setInactive] = useState(false);
@@ -95,13 +88,13 @@ export function Wallpaper({ embedded = false, covering = false, agents = NO_AGEN
   const sceneEl: React.ReactElement | null = (() => {
     if (!wallpaperDrawn({ glass, wallpaper, themeId })) return null;
 
-    // A live scene (Shoal, Koi Pond …): drawn on a canvas in the theme's colours or its own, its
-    // creatures the agents. Only the full-window copy behind the app's own views runs it; a copy
-    // behind a fullscreen tile or a docked slot is covered by the tile, so it shows the water alone.
-    const shared = { colour: wallpaperColour, agents, paused, animate, frosted: glass, seeThrough: contentGlass, page: palette.bg, text: palette.fg, attention: palette.warn, dark: mode !== "light", monoFont, nameOf, onOpen };
+    // A live scene (Shoal, Koi Pond …): drawn on a canvas in its own colours, light or dark by the
+    // theme's. Only the full-window copy behind the app's own views runs it; a copy behind a
+    // fullscreen tile or a docked slot is covered by the tile, so it shows the water alone.
+    const shared = { paused, animate, page: palette.bg, text: palette.fg, dark: mode !== "light", monoFont };
     if (isLiveScene(wallpaper)) {
       return (
-        <div className={`hm-wallpaper${cls}`} data-scene={wallpaper} style={{ background: wallpaperColour ? waterCss(wallpaper, lightOf(cssColorToHex(palette.bg), cssColorToHex(palette.fg))) : "var(--color-bg)" }} aria-hidden="true">
+        <div className={`hm-wallpaper${cls}`} data-scene={wallpaper} style={{ background: waterCss(wallpaper, lightOf(cssColorToHex(palette.bg), cssColorToHex(palette.fg))) }} aria-hidden="true">
           {!embedded && live && <LiveWallpaper scene={wallpaper} {...shared} />}
         </div>
       );
