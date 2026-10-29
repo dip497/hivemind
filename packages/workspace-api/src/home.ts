@@ -80,7 +80,20 @@ export interface KeyedSnapshot<T> {
   rows: Array<[string, T]>;
 }
 
-/** What the `home` stream answers: both sequences whole, or what came after the positions given. */
+/** How the computer looks, for the phone to look the same (0.5): its theme's colours, each
+ *  `#rrggbb`, its terminal's, and its wallpaper. Never a file of the computer's. */
+export interface HomeLook {
+  mode: "dark" | "light";
+  /** The palette's tokens, and the accent's `brand` and `accent`. */
+  colors: Record<string, string>;
+  /** `background`, `foreground`, `cursor`, `selection`, then `ansi`: the 16 in xterm's order. */
+  terminal: { background: string; foreground: string; cursor: string; selection: string; ansi: string[] };
+  /** A built-in wallpaper's id (`none` for none), and whether a live one is in its own colours. */
+  wallpaper: { kind: string; colour: boolean };
+}
+
+/** What the `home` stream answers: both sequences whole, or what came after the positions given;
+ *  and the look, whole, in every answer to a follow and whenever it changes. */
 export type HomeMessage =
-  | { t: "home"; layout: KeyedSnapshot<HomeRow>; lines: KeyedSnapshot<string> }
-  | { t: "changes"; layout?: { seq: number; changes: KeyedChange<HomeRow>[] }; lines?: { seq: number; changes: KeyedChange<string>[] } };
+  | { t: "home"; layout: KeyedSnapshot<HomeRow>; lines: KeyedSnapshot<string>; look?: HomeLook }
+  | { t: "changes"; layout?: { seq: number; changes: KeyedChange<HomeRow>[] }; lines?: { seq: number; changes: KeyedChange<string>[] }; look?: HomeLook };

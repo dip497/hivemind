@@ -29,6 +29,8 @@ import { Terminals, type SessionOutput } from "../src/terminals.ts";
 import type { WaitingStatus } from "../src/needs.ts";
 import type { LayersShown } from "../src/home.ts";
 import type { HomeMessage } from "@hivemind/workspace-api/home";
+import { appearance } from "../src/appearance.ts";
+import { DEFAULT_APPEARANCE, PRESETS, type SharedAppearance } from "@hivemind/core/settings-schema";
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "hm-peer-links-"));
 after(() => fs.rmSync(tmp, { recursive: true, force: true }));
@@ -141,7 +143,7 @@ function linkPair(device: string, computer: string) {
 /** The person's computer, holding the workspace `api`, with their phone and laptop paired. */
 /** The person's computer, holding the workspace `api` with two agents' tiles. `lines`: each tile's
  *  last line, in place of a map the test sets. */
-function computer(o: { lines?: Pick<TileLines, "get" | "followAll"> } = {}) {
+function computer(o: { lines?: Pick<TileLines, "get" | "followAll">; look?: SharedAppearance } = {}) {
   const dir = path.join(tmp, String(made++));
   const repo = path.join(dir, "api");
   const person = newSeed();
@@ -202,7 +204,12 @@ function computer(o: { lines?: Pick<TileLines, "get" | "followAll"> } = {}) {
       ])),
     },
   };
-  const server = new WorkspaceServer([...workspaceDomains, terminals], new Intents(new AuditLog({ file: path.join(dir, "audit.jsonl") })));
+  // How this computer looks, told to its guests as its settings change (`appearance.ts`).
+  let look = o.look;
+  let recoloured: ((a: SharedAppearance) => void) | null = null;
+  const looks = look ? [appearance({ current: () => look!, onChange: (l) => { recoloured = l; }, server: () => server })] : [];
+  const recolour = (a: SharedAppearance) => { look = a; recoloured?.(a); };
+  const server = new WorkspaceServer([...workspaceDomains, terminals, ...looks], new Intents(new AuditLog({ file: path.join(dir, "audit.jsonl") })));
   // The agent of t1 waits on the person; t2's works.
   let statuses: WaitingStatus[] = [
     { tileId: "t1", status: { state: "waiting", kind: "permission", since: T, title: "Editing Nav.tsx" } },
@@ -271,7 +278,7 @@ function computer(o: { lines?: Pick<TileLines, "get" | "followAll"> } = {}) {
     };
     return { heard, send: (stream: string, m: unknown) => deviceEnd.send(stream, JSON.stringify(m)), open, closed: computerEnd.closed, hangUp: () => deviceEnd.close("done"), room: deviceEnd.room };
   };
-  return { repo, workspace, phone, laptop, person: idOf(person), daemons, links, shown, lines, watched, typed, answered, sent, keyed, driven, viewed, subscribed, unpaired, introduced, forgot, guests, host, connect, statusChanged, output, another };
+  return { repo, workspace, phone, laptop, person: idOf(person), daemons, links, shown, lines, watched, typed, answered, sent, keyed, driven, viewed, subscribed, unpaired, introduced, forgot, guests, host, connect, statusChanged, output, another, recolour };
 }
 const until = async (done: () => boolean) => { for (let t = 0; t < 5_000 && !done(); t += 20) await wait(20); };
 
@@ -670,6 +677,39 @@ test("an owner's device whose link has no room is sent no list of agents, howeve
   await wait(200);
   assert.equal(lists(phone).length, 2);
   assert.deepEqual(lists(phone)[1], lists(laptop).at(-1));
+});
+
+test("the phone following Home is told how the computer looks, every colour in hex and no file of its own; and the look again, alone, when the computer is recoloured", async () => {
+  const dusk = { ...DEFAULT_APPEARANCE, wallpaper: { ...DEFAULT_APPEARANCE.wallpaper, kind: "image" as const, imageSrc: "hivemedia://media/secret.png" } };
+  const c = computer({ look: dusk });
+  const phone = c.connect(c.phone);
+  const heard = () => phone.heard.get("home")!.map((m) => JSON.parse(m) as HomeMessage);
+  phone.send("home", { t: "follow" });
+  await until(() => heard().length === 1);
+  const first = heard()[0]!.look!;
+  assert.equal(first.mode, DEFAULT_APPEARANCE.mode);
+  const hexes = [...Object.values(first.colors), first.terminal.background, first.terminal.foreground, first.terminal.cursor, first.terminal.selection, ...first.terminal.ansi];
+  assert.deepEqual(hexes.filter((h) => !/^#[0-9a-f]{6}$/.test(h)), []);
+  assert.equal(first.terminal.ansi.length, 16);
+  assert.ok(first.colors.brand && first.colors.bg && first.colors.fg);
+  // A picture is a file on the computer: the phone is told the default wallpaper, never its path.
+  assert.equal(first.wallpaper.kind, DEFAULT_APPEARANCE.wallpaper.kind);
+  assert.ok(!JSON.stringify(heard()[0]).includes("secret"));
+
+  const light = PRESETS["catppuccin-latte"]!;
+  c.recolour({ ...dusk, mode: light.mode, palette: light.palette, terminal: light.terminal, wallpaper: { ...dusk.wallpaper, kind: "koi", colour: true } });
+  await until(() => heard().length === 2);
+  const [again] = heard().slice(1);
+  assert.deepEqual(Object.keys(again!).sort(), ["look", "t"]);
+  assert.equal(again!.look!.mode, "light");
+  assert.notEqual(again!.look!.colors.bg, first.colors.bg);
+  assert.deepEqual(again!.look!.wallpaper, { kind: "koi", colour: true });
+
+  // A device that starts following then is told the look as it is now.
+  const later = c.connect(c.phone);
+  later.send("home", { t: "follow" });
+  await until(() => later.heard.get("home")!.length === 1);
+  assert.deepEqual((JSON.parse(later.heard.get("home")![0]!) as HomeMessage).look, again!.look);
 });
 
 test("an owner's device whose link has no room is sent nothing of Home, and once room returns, what came after where it was, in one message; then each change as before", async () => {

@@ -11,7 +11,10 @@ import { workspaceCounts, type LayerStatus } from "@hivemind/core/layers";
 import type { Structure } from "@hivemind/view-host/structure";
 import type { AgentItem } from "@hivemind/workspace-api/agents";
 import { GENERIC_AGENT_ICON, type AgentProviderDef } from "@hivemind/agents";
-import type { HomeMessage, HomeRow, HomeTile } from "@hivemind/workspace-api/home";
+import type { HomeLook, HomeMessage, HomeRow, HomeTile } from "@hivemind/workspace-api/home";
+import { accentOf } from "@hivemind/core/appearance-extra";
+import { cssColorToHex } from "@hivemind/core/css-color";
+import { PALETTE_KEYS, type SharedAppearance } from "@hivemind/core/settings-schema";
 import { isTerminalKind, type KeptCore } from "@hivemind/workspace-doc/shapes";
 import { KeyedFeed } from "./keyed-feed.js";
 import { heldBoards, type HeldBoard } from "./needs.js";
@@ -118,9 +121,33 @@ export function homeLines(held: HeldBoard[], line: (tile: string) => string | un
   return lines;
 }
 
+/** How the computer looks, as Home sends it (`HomeLook`): what a guest is shown of it
+ *  (`sharedAppearance`, no file of the computer's), every colour `#rrggbb`. */
+export function homeLook(a: SharedAppearance): HomeLook {
+  const hex = (v: string, or: string) => cssColorToHex(v, or);
+  const accent = accentOf(a, a.accentCustom ? { accent: a.accentCustom } : null);
+  const colors: Record<string, string> = {};
+  for (const k of PALETTE_KEYS) colors[k] = hex(a.palette[k], a.mode === "dark" ? "#000000" : "#ffffff");
+  colors.brand = hex(accent.brand, colors.fg!);
+  colors.accent = hex(accent.accent, colors.brand);
+  const t = a.terminal;
+  return {
+    mode: a.mode,
+    colors,
+    terminal: {
+      background: hex(t.background, colors.bg!), foreground: hex(t.foreground, colors.fg!),
+      cursor: hex(t.cursor, colors.fg!), selection: hex(t.selection, colors.select!),
+      ansi: t.ansi.slice(0, 16).map((c) => hex(c, colors.fg!)),
+    },
+    wallpaper: { kind: a.wallpaper.kind, colour: a.wallpaper.colour },
+  };
+}
+
 export interface HomeFeedOptions {
   rows(): Map<string, HomeRow>;
   lines(): Map<string, string>;
+  /** How the computer looks now; null while not known, and left out, Home says nothing of it. */
+  look?(): HomeLook | null;
   /** The least time between two workings-out (ms). */
   every?: number;
   keep?: number;
@@ -141,6 +168,9 @@ export class HomeFeed {
   private stale = false;
   /** What changed since Home was last worked out may change its layout, not only its lines. */
   private layoutStale = false;
+  /** The look as last sent, and whether it may have changed since. */
+  private lookSent: string | null = null;
+  private lookStale = true;
 
   constructor(private readonly o: HomeFeedOptions) {
     const caps = { ...(o.keep ? { keep: o.keep } : {}), ...(o.bytes ? { bytes: o.bytes } : {}) };
@@ -154,6 +184,23 @@ export class HomeFeed {
   changed(): void {
     this.layoutStale = true;
     this.linesChanged();
+  }
+
+  /** How the computer looks may have changed: told, soon, when it did. */
+  lookChanged(): void {
+    this.lookStale = true;
+    this.linesChanged();
+  }
+
+  /** The look, when it changed since it was last sent. */
+  private newLook(): HomeLook | null {
+    const look = this.lookStale ? this.o.look?.() : null;
+    if (!look) return null;
+    this.lookStale = false;
+    const json = JSON.stringify(look);
+    if (json === this.lookSent) return null;
+    this.lookSent = json;
+    return look;
   }
 
   /** Only a tile's last line changed: its lines are worked out again, soon, and its layout not. */
@@ -178,11 +225,13 @@ export class HomeFeed {
     const layout = this.layoutStale ? this.layout.set(this.o.rows()) : [];
     this.layoutStale = false;
     const lines = this.lines.set(this.o.lines());
-    if (!layout.length && !lines.length) return;
+    const look = this.newLook();
+    if (!layout.length && !lines.length && !look) return;
     const m: HomeMessage = {
       t: "changes",
       ...(layout.length ? { layout: { seq: layout.at(-1)!.seq, changes: layout } } : {}),
       ...(lines.length ? { lines: { seq: lines.at(-1)!.seq, changes: lines } } : {}),
+      ...(look ? { look } : {}),
     };
     for (const f of this.followers) f(m);
   }
@@ -193,8 +242,10 @@ export class HomeFeed {
     if (this.due || this.stale) this.refresh();
     const layout = at.layout === undefined ? null : this.layout.since(at.layout);
     const lines = at.lines === undefined ? null : this.lines.since(at.lines);
-    if (!layout || !lines) return { t: "home", layout: this.layout.snapshot(), lines: this.lines.snapshot() };
-    return { t: "changes", layout, lines };
+    this.newLook();
+    const look = this.lookSent ? { look: JSON.parse(this.lookSent) as HomeLook } : {};
+    if (!layout || !lines) return { t: "home", layout: this.layout.snapshot(), lines: this.lines.snapshot(), ...look };
+    return { t: "changes", layout, lines, ...look };
   }
 
   /** Tell `f` each change from now on, until what this returns is called. */

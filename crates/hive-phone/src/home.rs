@@ -224,13 +224,73 @@ pub struct At {
     pub lines: u64,
 }
 
-/// What the phone holds of Home: each row and each tile's last line by its key, and how far it has
-/// followed. Kept as it is, it is followed on from where it was.
+/// How the computer looks (0.5), for the phone to look the same: its colours by token, each
+/// `#rrggbb`, its terminal's, and its wallpaper.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Look {
+    pub mode: String,
+    pub colors: BTreeMap<String, String>,
+    pub terminal: TerminalLook,
+    pub wallpaper: WallpaperLook,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TerminalLook {
+    pub background: String,
+    pub foreground: String,
+    pub cursor: String,
+    pub selection: String,
+    pub ansi: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WallpaperLook {
+    pub kind: String,
+    pub colour: bool,
+}
+
+const fn is_hex(s: &str) -> bool {
+    let b = s.as_bytes();
+    if b.len() != 7 || b[0] != b'#' {
+        return false;
+    }
+    let mut i = 1;
+    while i < 7 {
+        if !b[i].is_ascii_hexdigit() {
+            return false;
+        }
+        i += 1;
+    }
+    true
+}
+
+fn is_word(s: &str, most: usize) -> bool {
+    !s.is_empty() && s.len() <= most && s.bytes().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == b'-')
+}
+
+/// A look read as the phone holds it: none unless every colour is `#rrggbb`, the mode `dark` or
+/// `light`, there are the 16 terminal colours and the wallpaper is named by a word. A colour token
+/// it cannot read is left out.
+fn look_of(value: &Value) -> Option<Look> {
+    let mut look: Look = serde_json::from_value(value.clone()).ok()?;
+    look.colors.retain(|k, v| is_word(k, 16) && is_hex(v));
+    let t = &look.terminal;
+    let terminal_ok = [&t.background, &t.foreground, &t.cursor, &t.selection].iter().all(|c| is_hex(c))
+        && t.ansi.len() == 16
+        && t.ansi.iter().all(|c| is_hex(c));
+    let ok = (look.mode == "dark" || look.mode == "light") && terminal_ok && is_word(&look.wallpaper.kind, 32);
+    ok.then_some(look)
+}
+
+/// What the phone holds of Home: each row and each tile's last line by its key, how far it has
+/// followed, and how the computer looks. Kept as it is, it is followed on from where it was.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Home {
     pub at: Option<At>,
     pub rows: BTreeMap<String, Row>,
     pub lines: BTreeMap<String, String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub look: Option<Look>,
 }
 
 /// A row read as the phone holds it; none for one it cannot read.
@@ -296,7 +356,14 @@ impl Home {
     /// ignored.
     pub fn apply(&mut self, message: &Value) -> bool {
         let before = (self.at, self.rows.len(), self.lines.len());
-        match message.get("t").and_then(Value::as_str) {
+        let looked = match message.get("look").and_then(look_of) {
+            Some(look) if self.look.as_ref() != Some(&look) => {
+                self.look = Some(look);
+                true
+            }
+            _ => false,
+        };
+        looked | match message.get("t").and_then(Value::as_str) {
             Some("home") => {
                 let line = |v: &Value| v.as_str().map(str::to_string);
                 let (Some((layout, rows)), Some((lines, said))) = (
