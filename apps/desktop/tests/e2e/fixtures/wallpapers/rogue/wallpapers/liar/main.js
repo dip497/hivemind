@@ -1,11 +1,9 @@
-// A live wallpaper that lies, for the e2e suite: past the SDK, it says whatever a test has it say
-// (`window.say`), whatever the pointer is doing, and it can try to take the keyboard
-// (`window.steal`, a moment after it is asked, so the asking returns before the app removes the
-// frame). What the app tells it is kept on `window.seen`.
+// A live wallpaper of its own making, for the e2e suite: past the SDK, it keeps every message the
+// app sends it, as sent, on `window.heard`, and it can try to take the keyboard (`window.steal`, a
+// moment after it is asked, so the asking returns before the app removes the frame).
 let port = null;
-const seen = { creatures: [], tiles: [] };
-window.seen = seen;
-window.say = (m) => port.postMessage(m);
+const heard = [];
+window.heard = heard;
 window.steal = () => setTimeout(() => {
   const input = document.createElement("input");
   document.body.append(input);
@@ -15,11 +13,8 @@ window.addEventListener("message", (e) => {
   const p = e.ports?.[0];
   if (!p || e.data?.type !== "hivemind-view:port") return;
   port = p;
-  port.onmessage = ({ data: m }) => {
-    if (m.type === "hello" || m.type === "creatures") seen.creatures = m.creatures;
-    if (m.type === "hello" || m.type === "tiles") seen.tiles = m.tiles;
-  };
+  port.onmessage = ({ data }) => { heard.push(data); };
   port.start();
-  port.postMessage({ type: "ready", protocol: 1 });
+  port.postMessage({ type: "ready", protocol: 2 });
   port.postMessage({ type: "drawn" });
 });

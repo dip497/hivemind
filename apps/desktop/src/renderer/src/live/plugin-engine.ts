@@ -3,19 +3,16 @@
  * own scenes have their canvas (an opaque origin of its own, `hm-view://<host>`, under the views'
  * policy: no fetch or loading from anywhere else, nothing of the app's), and one port to it, the link
  * that checks everything it sends (`@hivemind/view-host/wallpaper-link`). What it is told is what the
- * app's scenes are, in the words of live wallpaper protocol 1: no tile's name, folder or output, and
- * not even its id: each agent's tile is named by a handle of this session's, the same for its
- * creature and its tile. It is shown once it has drawn its first frame, so a slow one never flashes
- * empty. It never has the keyboard: one that takes it is turned off, and what had it gets it back.
+ * app's scenes are, in the words of live wallpaper protocol 2: its size, the theme's colours, whether
+ * to run, and the pointer and clicks over empty canvas; nothing of the workspace. It is shown once it
+ * has drawn its first frame, so a slow one never flashes empty. It never has the keyboard: one that
+ * takes it is turned off, and what had it gets it back.
  */
 import { PORT_HANDSHAKE } from "@hivemind/view-sdk/protocol";
-import type { AgentState, WallpaperLook } from "@hivemind/view-sdk/wallpaper";
+import type { WallpaperLook } from "@hivemind/view-sdk/wallpaper";
 import { WallpaperLink } from "@hivemind/view-host/wallpaper-link";
 import { PageScene, type PageLook, type SceneEvents } from "./page-scene";
-import type { Box, CreatureSpec, Mood, SceneMode } from "./scene";
-
-/** What an agent is doing, in the protocol's words. */
-const STATE: Record<Mood, AgentState> = { hunt: "working", cruise: "ready", surface: "needs-you", rest: "resting" };
+import type { SceneMode } from "./scene";
 
 const hex = (n: number) => `#${n.toString(16).padStart(6, "0")}`;
 
@@ -27,14 +24,6 @@ export class PluginEngine extends PageScene {
   private link: WallpaperLink;
   private look: PageLook | null = null;
   private offRunaway: () => void;
-  /** Each agent tile's handle, and back: what the wallpaper calls it instead of its id. Only a
-   *  creature's tile has one, so no other tile is named. */
-  private handles = new Map<string, string>();
-  private keys = new Map<string, string>();
-  private boxes: { list: Box[]; seeThrough: boolean } | null = null;
-  /** What it last said is under the pointer, taken at most once a frame. */
-  private saidHover: string | null = null;
-  private hoverFrame = 0;
   /** What had the keyboard before it, to give it back. */
   private hadFocus: Element | null = document.activeElement;
 
@@ -58,12 +47,11 @@ export class PluginEngine extends PageScene {
     const r = host.getBoundingClientRect();
     this.link = new WallpaperLink({
       onDrawn: () => { frame.dataset.drawn = "1"; },
-      onHover: (id) => this.heard(id),
       onDisable: (reason) => events.disable?.(reason),
     }, {
       viewport: { w: Math.round(r.width), h: Math.round(r.height), dpr: Math.min(window.devicePixelRatio || 1, 2) },
       look: this.lookOf(look),
-      mode: "hold", creatures: [], tiles: [], seeThrough: false,
+      mode: "hold",
     });
     frame.addEventListener("load", () => {
       const ch = new MessageChannel();
@@ -84,7 +72,6 @@ export class PluginEngine extends PageScene {
   destroy() {
     this.offRunaway();
     this.link.dispose();
-    cancelAnimationFrame(this.hoverFrame);
     window.removeEventListener("focusin", this.onFocusIn);
     window.removeEventListener("blur", this.onBlur);
     super.destroy();
@@ -98,25 +85,6 @@ export class PluginEngine extends PageScene {
   /** The terminals' font is the person's; a wallpaper may draw in it. */
   fontChanged() {
     if (this.look) this.link.setLook(this.lookOf(this.look));
-  }
-
-  setRoster(creatures: CreatureSpec[]) {
-    this.link.setCreatures(creatures.map((c) => ({ id: this.handleOf(c.key), agent: c.agent ?? null, kind: c.variant, size: c.size, state: STATE[c.mood] })));
-    // A new creature's tile, told before it had a handle, is named now.
-    if (this.boxes) this.setBoxes(this.boxes.list, this.boxes.seeThrough);
-  }
-
-  setBoxes(boxes: Box[], seeThrough: boolean) {
-    this.boxes = { list: boxes, seeThrough };
-    this.link.setTiles(boxes.map((b) => {
-      const id = b.key ? this.handles.get(b.key) : undefined;
-      return { x0: b.x0, y0: b.y0, x1: b.x1, y1: b.y1, ...(id ? { id } : {}) };
-    }), seeThrough);
-  }
-
-  finished(key: string) {
-    const id = this.handles.get(key);
-    if (id) this.link.done(id);
   }
 
   protected sendMode(mode: SceneMode) {
@@ -135,26 +103,6 @@ export class PluginEngine extends PageScene {
     this.link.click(x, y);
   }
 
-  private handleOf(key: string): string {
-    let h = this.handles.get(key);
-    if (!h) {
-      h = crypto.randomUUID();
-      this.handles.set(key, h);
-      this.keys.set(h, key);
-    }
-    return h;
-  }
-
-  /** It may change its mind as often as it likes; the page hears the last word once a frame. */
-  private heard(id: string | null) {
-    this.saidHover = id;
-    if (this.hoverFrame) return;
-    this.hoverFrame = requestAnimationFrame(() => {
-      this.hoverFrame = 0;
-      this.hover(this.saidHover === null ? null : this.keys.get(this.saidHover) ?? null);
-    });
-  }
-
   private onFocusIn = (e: FocusEvent) => {
     if (e.target !== this.frame) this.hadFocus = e.target as Element;
   };
@@ -170,6 +118,6 @@ export class PluginEngine extends PageScene {
   };
 
   private lookOf(l: PageLook): WallpaperLook {
-    return { page: hex(l.page), text: hex(l.text), attention: hex(l.attention), dark: l.dark, colour: l.colour, mono: l.mono || getComputedStyle(this.host).fontFamily };
+    return { page: hex(l.page), text: hex(l.text), dark: l.dark, mono: l.mono || getComputedStyle(this.host).fontFamily };
   }
 }

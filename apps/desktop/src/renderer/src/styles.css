@@ -1264,15 +1264,6 @@ html.content-glass .hm-term-fs-panel {
    above takes every pointer event (the app tells the frame); it shows once it has drawn. */
 .hm-live > .hm-live-frame { display: block; width: 100%; height: 100%; border: 0; background: transparent; pointer-events: none; opacity: 0; transition: opacity 0.4s ease-out; }
 .hm-live > .hm-live-frame[data-drawn] { opacity: 1; }
-/* The agent under the pointer, over its creature: its name and what it is doing. A click goes to it. */
-.hm-live-label {
-  position: fixed; z-index: 60; pointer-events: none; white-space: nowrap;
-  padding: 2px 8px; border-radius: 6px; font-family: var(--font-ui); font-size: var(--text-label); font-weight: 500; line-height: 18px;
-  color: var(--color-fg2); background: color-mix(in srgb, var(--color-bg2) 92%, transparent);
-  border: 1px solid var(--color-line); box-shadow: 0 2px 8px color-mix(in srgb, var(--color-bg) 40%, transparent);
-}
-.hm-live-label-name { color: var(--color-fg); font-weight: 600; }
-:root[data-over-creature] .react-flow__pane { cursor: pointer; }
 
 /* PERF — the blooms are plain composited textures on purpose. They used to
    carry `border-radius: 50%` + `filter: blur(60px)` + `mix-blend-mode: screen`,

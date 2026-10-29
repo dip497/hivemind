@@ -140,7 +140,7 @@ function harbourAndSea(version: string, start: { view?: string; wallpaper?: stri
     "hivemind-package.json": JSON.stringify({ apiVersion: 2, id: "@acme/harbour", name: "Harbour", version, views: [{ path: "views/isle" }], wallpapers: [{ path: "wallpapers/sea" }], startup: start }),
     "views/isle/hivemind-view.json": JSON.stringify({ id: "@acme/isle", name: "isle", version, entry: "index.html" }),
     "views/isle/index.html": "<!doctype html>",
-    "wallpapers/sea/hivemind-wallpaper.json": JSON.stringify({ protocol: 1, name: "Sea", entry: "main.js" }),
+    "wallpapers/sea/hivemind-wallpaper.json": JSON.stringify({ protocol: 2, name: "Sea", entry: "main.js" }),
     "wallpapers/sea/main.js": "",
   };
   for (const [f, text] of Object.entries(files)) {

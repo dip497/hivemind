@@ -116,13 +116,13 @@ describe("settings schema", () => {
     };
     const got = sharedAppearance(host);
     expect(got).toMatchObject({ preset: "nord", accent: "ice", mode: "light", overlayMedia: [], uiFont: DEFAULT_APPEARANCE.uiFont, monoFont: DEFAULT_APPEARANCE.monoFont });
-    expect(got.wallpaper).toEqual({ kind: DEFAULT_APPEARANCE.wallpaper.kind, brightness: 0.7, colour: false });
+    expect(got.wallpaper).toEqual({ kind: DEFAULT_APPEARANCE.wallpaper.kind, brightness: 0.7 });
     expect(JSON.stringify(got)).not.toContain("host");
-    expect(sharedAppearance({ ...host, wallpaper: { kind: "aurora", imageSrc: "file:///etc/passwd" } }).wallpaper).toEqual({ kind: "aurora", brightness: DEFAULT_APPEARANCE.wallpaper.brightness, colour: false });
-    // A live scene in its own colours is the host's look: the guest sees it so.
-    expect(sharedAppearance({ ...host, wallpaper: { kind: "shoal", colour: true } }).wallpaper).toEqual({ kind: "shoal", brightness: DEFAULT_APPEARANCE.wallpaper.brightness, colour: true });
+    expect(sharedAppearance({ ...host, wallpaper: { kind: "aurora", imageSrc: "file:///etc/passwd" } }).wallpaper).toEqual({ kind: "aurora", brightness: DEFAULT_APPEARANCE.wallpaper.brightness });
+    // A live scene is the host's look: the guest sees it so.
+    expect(sharedAppearance({ ...host, wallpaper: { kind: "shoal" } }).wallpaper).toEqual({ kind: "shoal", brightness: DEFAULT_APPEARANCE.wallpaper.brightness });
     // A package's live wallpaper is the host's install, which a guest may not have: the default one.
-    expect(sharedAppearance({ ...host, wallpaper: { kind: "@acme/hive/bees", colour: true } }).wallpaper).toEqual({ kind: DEFAULT_APPEARANCE.wallpaper.kind, brightness: DEFAULT_APPEARANCE.wallpaper.brightness, colour: true });
+    expect(sharedAppearance({ ...host, wallpaper: { kind: "@acme/hive/bees" } }).wallpaper).toEqual({ kind: DEFAULT_APPEARANCE.wallpaper.kind, brightness: DEFAULT_APPEARANCE.wallpaper.brightness });
     expect(sharedAppearance({ accent: "<script>", radius: 9999, palette: { bg: "url(x)" } })).toMatchObject({ accent: DEFAULT_APPEARANCE.accent, radius: 24, palette: { bg: DEFAULT_APPEARANCE.palette.bg } });
     // A key this build does not know, which settings keep, never reaches a guest; nor does a picture's path.
     const later = sharedAppearance({ ...host, wallpaper: { kind: "image", imageSrc: "hivemedia://media/host-cat.png", brightness: 0.7 }, theme: { before: "/home/host/theme.json" } });
@@ -133,12 +133,12 @@ describe("settings schema", () => {
     const layer = (url: string) => ({ id: url, url, kind: "image", opacity: 1, fit: "cover", size: 1, anchor: "center" });
     const mine = mergeAppearance({
       ...applyPreset(DEFAULT_APPEARANCE, PRESETS.nord!), radius: 6,
-      wallpaper: { kind: "image", imageSrc: "hm-media://v/%2Fhome%2Falice%2Fcat.png", videoSrc: "hivemedia://media/alice-clip.mp4", brightness: 0.7, colour: true },
+      wallpaper: { kind: "image", imageSrc: "hm-media://v/%2Fhome%2Falice%2Fcat.png", videoSrc: "hivemedia://media/alice-clip.mp4", brightness: 0.7 },
       overlayMedia: [layer("hivemedia://media/alice-cat.png")], someFutureKey: { before: "/home/alice/theme.json" },
     });
     const { theme, leftOut, note } = exportAppearance(mine);
     expect(JSON.stringify(theme)).not.toContain("alice");
-    expect(theme).toMatchObject({ preset: "nord", radius: 6, wallpaper: { kind: "image", brightness: 0.7, colour: true } });
+    expect(theme).toMatchObject({ preset: "nord", radius: 6, wallpaper: { kind: "image", brightness: 0.7 } });
     expect([leftOut, note]).toEqual([["wallpaper.imageSrc", "wallpaper.videoSrc", "overlayMedia"], expect.stringContaining("the wallpaper picture, the wallpaper video and the overlays")]);
     expect(exportAppearance(DEFAULT_APPEARANCE)).toMatchObject({ leftOut: [], note: null });
     // Your own file back undoes everything; someone else's keeps their media.
@@ -310,14 +310,14 @@ describe("settings schema", () => {
 
   test("mergeSettings: junk falls back per field, values are clamped, an unknown top-level key is left to the file writer", () => {
     const s = mergeSettings({
-      v: "99", appearance: { preset: 7, glass: { opacity: 5, blur: "x", enabled: "yes" }, wallpaper: { kind: "lava", videoSrc: "blob:abc", colour: "yes" }, terminal: { ansi: ["#000"] }, palette: { bg: "javascript:alert(1)" }, pluginSurfaces: "glass" },
+      v: "99", appearance: { preset: 7, glass: { opacity: 5, blur: "x", enabled: "yes" }, wallpaper: { kind: "lava", videoSrc: "blob:abc" }, terminal: { ansi: ["#000"] }, palette: { bg: "javascript:alert(1)" }, pluginSurfaces: "glass" },
       views: { defaultView: "orbit", chrome: { orbit: { island: "left" }, world: { island: "hidden" }, "../x": { island: "top" } } },
       plugins: { disabled: ["a", 3, "b"] }, agents: { defaultAgent: "" }, extra: true,
     });
     expect(s.v).toBe(1);
     expect(s.appearance.preset).toBe("signal");
     expect(s.appearance.glass).toEqual({ ...DEFAULT_APPEARANCE.glass, opacity: 0.95 });
-    expect(s.appearance.wallpaper).toEqual({ kind: DEFAULT_APPEARANCE.wallpaper.kind, videoSrc: undefined, imageSrc: undefined, brightness: 0.85, colour: false });
+    expect(s.appearance.wallpaper).toEqual({ kind: DEFAULT_APPEARANCE.wallpaper.kind, videoSrc: undefined, imageSrc: undefined, brightness: 0.85 });
     expect(s.appearance.terminal.ansi[0]).toBe("#000");
     expect(s.appearance.terminal.ansi[1]).toBe(SIGNAL.terminal.ansi[1]);
     expect(s.appearance.palette.bg).toBe(SIGNAL.palette.bg);

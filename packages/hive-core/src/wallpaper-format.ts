@@ -40,6 +40,7 @@ export function readWallpaper(folderName: string, packageId: string | undefined,
   if (!v.ok) return { problem: `${WALLPAPER_MANIFEST}: ${v.errors.join("; ")}` };
   const m = v.manifest;
   if (m.protocol > WALLPAPER_PROTOCOL) return { problem: `it needs live wallpaper protocol ${m.protocol}; this Hivemind has ${WALLPAPER_PROTOCOL}: update Hivemind to use it` };
+  if (m.protocol < WALLPAPER_PROTOCOL) return { problem: `it speaks live wallpaper protocol ${m.protocol}, which this Hivemind no longer does: build it again with the SDK this app serves, and set "protocol" to ${WALLPAPER_PROTOCOL}` };
   const file = (p: string) => files.find((f) => f.path === p);
   if (!file(m.entry)) return { problem: `its entry, ${m.entry}, is not a file in its folder${/^dist\//.test(m.entry) ? ": build it first" : ""}` };
   if (m.preview) {

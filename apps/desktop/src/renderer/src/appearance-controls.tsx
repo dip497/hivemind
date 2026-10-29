@@ -287,11 +287,9 @@ export function BackgroundControls({ t }: { t: ThemeState }) {
   const plugin = pluginId ? usableWallpaper(wallpapers, pluginId) : null;
   const current = pluginId ? wallpapers.find((w) => w.id === pluginId)?.name ?? pluginId.slice(pluginId.lastIndexOf("/") + 1) : WALLPAPERS.find((w) => w.id === t.wallpaper)?.label ?? "None";
   const live = isLiveScene(t.wallpaper) ? t.wallpaper : null;
-  // A live scene's swatch in its own colours when Colour is on, else on the page as it draws.
+  // A live scene's swatch in its own colours, light or dark as the scene draws by the theme's.
   const light = lightOf(hexOf(t.palette.bg), hexOf(t.palette.fg));
-  const liveSwatch = (id: LiveSceneId) => t.wallpaperColour
-    ? { background: waterCss(id, light), color: swatchInk(id, light) }
-    : undefined;
+  const liveSwatch = (id: LiveSceneId) => ({ background: waterCss(id, light), color: swatchInk(id, light) });
   return (
     <>
       {/* The picker is a disclosure: eleven scenes are a rare choice, and an
@@ -355,25 +353,19 @@ export function BackgroundControls({ t }: { t: ThemeState }) {
       {t.wallpaper !== "none" && !wallpaperDrawn(t) && (
         <p className="settings-note">The background shows behind your tools when glass is on.</p>
       )}
-      {(live || plugin?.colour) && (
-        <div className="settings-row">
-          <div><label>Colour</label><p>{live ? "In its own colours: the water, what lives in it, the light coming down." : "In its own colours."} Off, it is drawn in your theme's page and text colours.</p></div>
-          <Switch on={t.wallpaperColour} onChange={(v) => setTheme({ wallpaperColour: v })} label={`Draw ${current} in its own colours`} />
-        </div>
-      )}
       {(live || plugin) && (
         <div className="settings-row">
           <div>
-            <label>{live ? SCENES[live].creatures : "Its creatures"} behind your tools</label>
+            <label>{current} behind your tools</label>
             <p>
               {!t.glass
                 ? `Panels and tiles are solid over ${current}.`
                 : !t.contentGlass
-                  ? "They show through the frosted panels. Frost tool content to see them behind your agents too."
-                  : "They show through the frosted panels and tiles, softened behind the text."}
+                  ? "It shows through the frosted panels. Frost tool content to see it behind your tiles too."
+                  : "It shows through the frosted panels and tiles, softened behind the text."}
             </p>
           </div>
-          <Button variant="outline" title={`Thin frosted panels and tiles, so the ${live ? SCENES[live].creatures.toLowerCase() : "creatures"} show behind your agents`} onClick={() => setTheme(SEE_THROUGH)}>See-through</Button>
+          <Button variant="outline" title={`Thin frosted panels and tiles, so ${current} shows through them`} onClick={() => setTheme(SEE_THROUGH)}>See-through</Button>
         </div>
       )}
     </>

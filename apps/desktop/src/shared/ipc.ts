@@ -283,8 +283,6 @@ export interface WallpaperPackageInfo {
   id: string;
   name: string;
   description: string | null;
-  /** It draws in colours of its own when the person turns Colour on. */
-  colour: boolean;
   /** Its picture for the picker, as a data URL. */
   preview: string | null;
   package: { id: string; name: string; on: boolean };

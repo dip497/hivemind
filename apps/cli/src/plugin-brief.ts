@@ -21,7 +21,7 @@ const WHAT: Record<PluginKind, string> = {
   widget: "a box on the board (and in every view) that its own code draws and keeps state in",
   tool: "a kind of tile, drawn by its own React code inside the app, with the folder and programs of its frame",
   view: "a sandboxed web page that draws the whole workspace its own way",
-  wallpaper: "a sandboxed scene drawn behind the canvas whose creatures are the person's agents, one each",
+  wallpaper: "a sandboxed scene drawn behind the canvas, a world of its own that moves by itself and plays with the pointer",
 };
 
 /** The skills a live wallpaper's package carries for the person's coding agent, by their path in
@@ -111,18 +111,17 @@ function wallpaperChecks(id: string, at: string): string {
   return `## Check your own work
 
 \`hive plugins check ${at}\` loads the built wallpaper in headless Chromium, sandboxed and with no
-network as the app runs it, and plays the app: it hands it agents in each state, tiles, the colours
-and each mode, points at it and clicks the water. It must say \`ready\` and \`drawn\`, name only
-creatures it was sent, and throw nothing. A test of its own does the same with the SDK's
-\`fakeWallpaperHost\` (\`@hivemind/view-sdk/testing\`).
+network as the app runs it, and plays the app: it hands it each size, the light and the dark theme
+and each mode, points at it and clicks. It must say \`ready\` and \`drawn\`, say nothing else, and
+throw nothing. A test of its own does the same with the SDK's \`fakeWallpaperHost\`
+(\`@hivemind/view-sdk/testing\`).
 
-Then look at it in the app, behind the person's own agents:
+Then look at it in the app, behind the person's own tiles:
 
 \`\`\`bash
 ${commented([
   ["hive config get appearance.wallpaper.kind", "what they had: set it back when you are done"],
   [`hive config set appearance.wallpaper.kind '"${id}"'`, "this one"],
-  ["hive config set appearance.wallpaper.colour true", "in its own colours; false: the theme's page and text"],
   ["hive config set appearance.glass.animate false", "Animation off: one still frame"],
 ])}
 \`\`\`
@@ -131,8 +130,8 @@ ${commented([
 
 1. \`hive plugins check ${at}\` says ok: its types, its manifest, and it drawn against a fake app.
 2. \`hive plugins install ${at}\` installs it, and \`hive plugins list\` shows it with no problem.
-3. It reads behind the canvas in a light and a dark theme, with **Colour** on and off and with
-   Animation off. Each creature shows its agent's state, and none sits under a tile.
+3. It reads behind the canvas in a light and a dark theme, and with Animation off. Its life moves
+   by itself, calmly, and answers the pointer and a click.
 4. It draws at most 30 frames a second and nothing while held: \`animate\` does both.
 5. \`hivemind-wallpaper.json\` has a one-line description, and the package's README.md says what
    the wallpaper shows, for its page on HiveHub.`;

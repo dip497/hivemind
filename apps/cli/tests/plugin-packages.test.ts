@@ -120,9 +120,9 @@ describe("hive plugins, packages", () => {
     const harbour = path.join(tmp, "harbour");
     const files: Record<string, string> = {
       "hivemind-package.json": JSON.stringify({ apiVersion: 2, id: "@acme/harbour", name: "Harbour", version: "1.0.0", wallpapers: [{ path: "wallpapers/tide" }, { path: "wallpapers/fog" }], startup: { wallpaper: "@acme/harbour/tide" } }),
-      "wallpapers/tide/hivemind-wallpaper.json": JSON.stringify({ protocol: 1, name: "Tide", entry: "main.js" }),
+      "wallpapers/tide/hivemind-wallpaper.json": JSON.stringify({ protocol: 2, name: "Tide", entry: "main.js" }),
       "wallpapers/tide/main.js": "",
-      "wallpapers/fog/hivemind-wallpaper.json": JSON.stringify({ protocol: 1, name: "Fog", entry: "main.js" }),
+      "wallpapers/fog/hivemind-wallpaper.json": JSON.stringify({ protocol: 2, name: "Fog", entry: "main.js" }),
       "wallpapers/fog/main.js": "",
     };
     for (const [f, text] of Object.entries(files)) {

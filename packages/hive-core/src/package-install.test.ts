@@ -155,7 +155,7 @@ test("a theme on its own is no package: it is refused, saying it comes in one", 
 function hive(startup?: object): string {
   const root = folder("hive", { "hivemind-package.json": JSON.stringify({ apiVersion: 2, id: "@acme/hive", name: "Hive", version: "1.0.0", wallpapers: [{ path: "wallpapers/bees" }], ...(startup ? { startup } : {}) }) });
   fs.mkdirSync(path.join(root, "wallpapers", "bees", "dist"), { recursive: true });
-  fs.writeFileSync(path.join(root, "wallpapers", "bees", "hivemind-wallpaper.json"), JSON.stringify({ protocol: 1, name: "Bees", entry: "dist/main.js", colour: true }));
+  fs.writeFileSync(path.join(root, "wallpapers", "bees", "hivemind-wallpaper.json"), JSON.stringify({ protocol: 2, name: "Bees", entry: "dist/main.js" }));
   fs.writeFileSync(path.join(root, "wallpapers", "bees", "dist", "main.js"), "");
   return root;
 }
@@ -165,8 +165,15 @@ test("a live wallpaper installs as sandboxed code that asks for nothing: its id 
   expect(record.members).toEqual([expect.objectContaining({ kind: "wallpaper", id: "@acme/hive/bees", path: "wallpapers/bees", permissions: [] })]);
   expect(record.on).toBe(true);
   expect(await listInstalledWallpapers()).toEqual([expect.objectContaining({
-    id: "@acme/hive/bees", error: null, manifest: { protocol: 1, name: "Bees", entry: "dist/main.js", colour: true }, package: expect.objectContaining({ id: "@acme/hive", on: true }),
+    id: "@acme/hive/bees", error: null, manifest: { protocol: 2, name: "Bees", entry: "dist/main.js" }, package: expect.objectContaining({ id: "@acme/hive", on: true }),
   })]);
+});
+
+// Protocol 1's wallpaper waits for creatures and tiles this app no longer sends: it would never draw.
+test("a live wallpaper of protocol 1 is refused, saying to build it again", async () => {
+  const root = hive();
+  fs.writeFileSync(path.join(root, "wallpapers", "bees", "hivemind-wallpaper.json"), JSON.stringify({ protocol: 1, name: "Bees", entry: "dist/main.js" }));
+  await expect(installPackage(root, { dryRun: true })).rejects.toThrow(/it speaks live wallpaper protocol 1, which this Hivemind no longer does: build it again with the SDK this app serves, and set "protocol" to 2/);
 });
 
 test("a live wallpaper on its own is no package, and one whose entry is not built is refused saying so", async () => {
@@ -189,7 +196,7 @@ test.each([
 ] as const)("a live wallpaper whose preview is %s", async (_name, bytes, refused) => {
   const root = hive();
   const bees = path.join(root, "wallpapers", "bees");
-  fs.writeFileSync(path.join(bees, "hivemind-wallpaper.json"), JSON.stringify({ protocol: 1, name: "Bees", entry: "dist/main.js", preview: "preview.png" }));
+  fs.writeFileSync(path.join(bees, "hivemind-wallpaper.json"), JSON.stringify({ protocol: 2, name: "Bees", entry: "dist/main.js", preview: "preview.png" }));
   fs.writeFileSync(path.join(bees, "preview.png"), Buffer.from(bytes));
   const install = installPackage(root, { dryRun: true });
   if (refused) await expect(install).rejects.toThrow(refused);

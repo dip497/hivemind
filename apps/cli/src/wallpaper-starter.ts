@@ -21,7 +21,7 @@ function wallpaperFolder(name: string, inPackage: InPackage): Record<string, str
   return {
     [WALLPAPER_MANIFEST]: JSON.stringify({
       protocol: WALLPAPER_PROTOCOL, name: title(name), entry: "dist/main.js",
-      description: "One creature for each of your agents, drawn in characters.", colour: true,
+      description: "Fish drawn in characters, drifting in the water; they shy from the pointer.",
     }, null, 2) + "\n",
     "package.json": JSON.stringify({
       name, version: "0.1.0", private: true, type: "module",
@@ -46,8 +46,8 @@ await build({
     "src/main.ts": SCENE,
     "README.md": `# ${title(name)}
 
-A [Hivemind](https://hivemind.griiken.com) live wallpaper: one creature for each of your agents,
-drawn in characters behind the canvas.
+A [Hivemind](https://hivemind.griiken.com) live wallpaper: fish drawn in characters, drifting
+behind the canvas, that shy from the pointer.
 
 \`\`\`bash
 npm install
@@ -92,10 +92,10 @@ export function wallpaperPackage(owner: string, name: string): Record<string, st
 
 /** The scene a new wallpaper starts with. Written without template strings, so it sits in this
  *  file as it is. */
-const SCENE = `// A Hivemind live wallpaper: one creature for each of the person's agents, drawn in characters
-// behind the canvas. The app says who the agents are, where the tiles are, the colours and whether
-// to move; this answers which creature is under the pointer. The whole guide is in PROMPT.md.
-import { connectWallpaper, type AgentState, type WallpaperCreature } from "@hivemind/view-sdk";
+const SCENE = `// A Hivemind live wallpaper: a world of its own, drawn in characters behind the canvas, whose
+// life goes on by itself and plays with the pointer. The app says the size, the theme and whether
+// to move, and the pointer and clicks over empty canvas. The whole guide is in PROMPT.md.
+import { connectWallpaper } from "@hivemind/view-sdk";
 
 const wp = await connectWallpaper();
 
@@ -104,129 +104,86 @@ canvas.style.cssText = "position:fixed;inset:0;width:100%;height:100%";
 document.body.append(canvas);
 const ctx = canvas.getContext("2d")!;
 
-/** How each state moves: its top speed (pixels a second), how hard it heads for where it is
- *  going, and how bright it is. */
-const MOVE: Record<AgentState, { speed: number; pull: number; bright: number }> = {
-  working: { speed: 240, pull: 6, bright: 1 },
-  ready: { speed: 40, pull: 1.5, bright: 0.8 },
-  "needs-you": { speed: 180, pull: 5, bright: 1 },
-  resting: { speed: 24, pull: 1, bright: 0.35 },
-};
-/** A body for each kind of agent (every agent of one program is one kind), and the trail behind
- *  it, from the body back. */
+/** A body for each kind of fish, and the trail behind it, from the body back. */
 const BODIES = "@&%#$8O*";
 const TRAIL = "oo+::..";
-/** How long a finished turn's ring and a click's ripple last, in seconds. */
-const RING = 1.1;
+/** How fast a fish cruises (pixels a second), how near the pointer comes before it turns away,
+ *  and how long a click's ripple lasts (seconds). */
+const SPEED = 70;
+const SHY = 150;
 const RIPPLE = 1.8;
 
-/** An agent's creature: where it is and how fast it goes, where it was (the newest first), its
- *  own offset in time, so no two move together, and the seconds left of its ring. */
-interface Creature { c: WallpaperCreature; x: number; y: number; vx: number; vy: number; trail: Array<{ x: number; y: number }>; phase: number; ring: number }
+/** A fish: where it is and how fast it goes, its kind (0 to 1) and size, its own offset in time,
+ *  so no two wander together, and where it was (the newest first). */
+interface Fish { x: number; y: number; vx: number; vy: number; kind: number; size: number; phase: number; trail: Array<{ x: number; y: number }> }
 
-const creatures = new Map<string, Creature>();
+const fish: Fish[] = [];
 const ripples: Array<{ x: number; y: number; age: number }> = [];
 /** Specks in the water that glint and drift on a slow current, where they are as a share of the
  *  screen. */
 const specks = Array.from({ length: 220 }, () => ({
   x: Math.random(), y: Math.random(), ch: ".,'"[Math.floor(Math.random() * 3)]!, rate: 0.3 + Math.random(), phase: Math.random() * 7, drift: 0.002 + Math.random() * 0.006,
 }));
+let pointer: { x: number; y: number } | null = null;
 let t = 0;
 
-/** A number from 0 to 1 for a string, the same every time: an agent's id gives its own phase. */
-function hash(s: string): number {
-  let h = 2166136261;
-  for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619);
-  return (h >>> 0) / 2 ** 32;
-}
-
-/** From a to b by f (0 to 1), both #rrggbb: the tones between the theme's page and text. */
-function mix(a: string, b: string, f: number): string {
-  const n = (s: string, i: number) => parseInt(s.slice(1 + 2 * i, 3 + 2 * i), 16);
-  return "rgb(" + [0, 1, 2].map((i) => Math.round(n(a, i) + (n(b, i) - n(a, i)) * f)).join(",") + ")";
-}
-
-/** The water, its specks and the ink of ripples: the theme's own, or with Colour on, a sea. */
-function palette() {
-  const { page, text, colour, dark } = wp.look;
-  if (!colour) return { water: page, speck: mix(page, text, 0.25), ink: mix(page, text, 0.6) };
-  return dark ? { water: "#06202a", speck: "#2c6b78", ink: "#8fd3d0" } : { water: "#dcefee", speck: "#86b9ba", ink: "#2d6f78" };
-}
+/** The water, its specks and the ink of ripples: a sea, light or dark by the theme. */
+const palette = () => (wp.look.dark ? { water: "#06202a", speck: "#2c6b78", ink: "#8fd3d0" } : { water: "#dcefee", speck: "#86b9ba", ink: "#2d6f78" });
 let colours = palette();
 
-/** A creature's colour: the theme's text, or with Colour on, its kind's own. */
-const colourOf = (c: WallpaperCreature) =>
-  wp.look.colour ? "hsl(" + (Math.round(180 + c.kind * 300) % 360) + " 70% " + (wp.look.dark ? 66 : 36) + "%)" : wp.look.text;
+/** A fish's colour: its kind's own. */
+const colourOf = (f: Fish) => "hsl(" + (Math.round(180 + f.kind * 300) % 360) + " 70% " + (wp.look.dark ? 66 : 36) + "%)";
 
-/** Whether a point is under a tile, or within m pixels of one. */
-const under = (x: number, y: number, m = 0) => wp.tiles.some((b) => x > b.x0 - m && x < b.x1 + m && y > b.y0 - m && y < b.y1 + m);
-
-/** Beside its agent's tile, on the open side: the one with the most room and not under another
- *  tile. Null when that tile is not on the screen. */
-function beside(id: string): [number, number] | null {
-  const tile = wp.tiles.find((b) => b.id === id);
-  if (!tile) return null;
+/** As many fish as the screen holds without crowding, each kind among them, anywhere on it. */
+function stock() {
   const { w, h } = wp.viewport;
-  const gap = 28;
-  const cx = Math.min(w - gap, Math.max(gap, (tile.x0 + tile.x1) / 2));
-  const cy = Math.min(h - gap, Math.max(gap, (tile.y0 + tile.y1) / 2));
-  const sides: Array<[number, number, number]> = [
-    [tile.x0 - gap, cy, tile.x0], [tile.x1 + gap, cy, w - tile.x1], [cx, tile.y0 - gap, tile.y0], [cx, tile.y1 + gap, h - tile.y1],
-  ];
-  let best: [number, number, number] | null = null;
-  for (const s of sides) if (s[2] > gap * 1.5 && !under(s[0], s[1], 8) && (!best || s[2] > best[2])) best = s;
-  return best && [best[0], best[1]];
+  const n = Math.max(10, Math.min(40, Math.round((w * h) / 45000)));
+  while (fish.length < n) {
+    fish.push({ x: Math.random() * w, y: Math.random() * h, vx: 0, vy: 0, kind: (fish.length % BODIES.length) / BODIES.length, size: 0.7 + Math.random() * 0.5, phase: Math.random() * 100, trail: [] });
+  }
+  fish.length = n;
 }
 
-/** Where a creature is heading now. */
-function goal(me: Creature): [number, number] {
+/** Where a fish is heading: a place of its own, wandering the whole screen slowly. */
+function goal(f: Fish): [number, number] {
   const { w, h } = wp.viewport;
-  const p = me.phase;
-  // A place of its own, wandering the whole screen slowly.
-  const hx = w * (0.5 + 0.4 * Math.sin(t * 0.031 + p));
-  const hy = h * (0.5 + 0.36 * Math.sin(t * 0.023 + p * 1.7));
-  switch (me.c.state) {
-    case "working": return [hx + 90 * Math.cos(t * 2.4 + p), hy + 60 * Math.sin(t * 3.3 + p)];
-    case "ready": return [hx + 120 * Math.sin(t * 0.2 + p), hy + 70 * Math.cos(t * 0.15 + p)];
-    case "needs-you": return beside(me.c.id) ?? [hx, hy];
-    case "resting": return [hx, h - 24 - 30 * me.c.size];
-  }
-}
-
-/** Out from under a tile, by its nearest edge. */
-function keepOff(me: Creature, dt: number) {
-  const m = 16;
-  for (const b of wp.tiles) {
-    if (me.x < b.x0 - m || me.x > b.x1 + m || me.y < b.y0 - m || me.y > b.y1 + m) continue;
-    const out = [me.x - b.x0 + m, b.x1 + m - me.x, me.y - b.y0 + m, b.y1 + m - me.y];
-    const side = out.indexOf(Math.min(...out));
-    if (side < 2) me.vx += (side === 0 ? -1500 : 1500) * dt;
-    else me.vy += (side === 2 ? -1500 : 1500) * dt;
-  }
+  return [w * (0.5 + 0.45 * Math.sin(t * 0.031 + f.phase)), h * (0.5 + 0.4 * Math.sin(t * 0.023 + f.phase * 1.7))];
 }
 
 function step(dt: number) {
   t += dt;
   for (const s of specks) s.x = (s.x + s.drift * dt) % 1;
-  for (const me of creatures.values()) {
-    const move = MOVE[me.c.state];
-    const [gx, gy] = goal(me);
-    // Head for the goal, no faster than its state lets it.
-    let dx = (gx - me.x) * move.pull;
-    let dy = (gy - me.y) * move.pull;
-    const d = Math.hypot(dx, dy);
-    if (d > move.speed) { dx *= move.speed / d; dy *= move.speed / d; }
-    me.vx += (dx - me.vx) * Math.min(1, dt * 3);
-    me.vy += (dy - me.vy) * Math.min(1, dt * 3);
-    keepOff(me, dt);
-    me.x += me.vx * dt; me.y += me.vy * dt;
-    // A glyph of trail each few pixels it moves, so a slow one keeps its length.
-    const last = me.trail[0];
-    if (!last || Math.hypot(me.x - last.x, me.y - last.y) > 7) {
-      me.trail.unshift({ x: me.x, y: me.y });
-      if (me.trail.length > TRAIL.length) me.trail.pop();
+  for (const f of fish) {
+    const [gx, gy] = goal(f);
+    const dx = gx - f.x;
+    const dy = gy - f.y;
+    const d = Math.hypot(dx, dy) || 1;
+    const speed = Math.min(SPEED * f.size, d);
+    let vx = (dx / d) * speed;
+    let vy = (dy / d) * speed;
+    // Shy of the pointer: within reach, away from it, the nearer the faster.
+    if (pointer) {
+      const px = f.x - pointer.x;
+      const py = f.y - pointer.y;
+      const pd = Math.hypot(px, py);
+      if (pd > 0 && pd < SHY) {
+        const k = (1 - pd / SHY) * 260;
+        vx += (px / pd) * k;
+        vy += (py / pd) * k;
+      }
     }
-    me.ring = Math.max(0, me.ring - dt);
+    // It turns toward what it wants, not at once: a fish has weight.
+    const ease = Math.min(1, dt * 2);
+    f.vx += (vx - f.vx) * ease;
+    f.vy += (vy - f.vy) * ease;
+    f.x += f.vx * dt;
+    f.y += f.vy * dt;
+    // A glyph of trail each few pixels it moves, so a slow one keeps its length.
+    const last = f.trail[0];
+    if (!last || Math.hypot(f.x - last.x, f.y - last.y) > 7) {
+      f.trail.unshift({ x: f.x, y: f.y });
+      if (f.trail.length > TRAIL.length) f.trail.pop();
+    }
   }
   for (const r of ripples) r.age += dt;
   while (ripples.length && ripples[0]!.age > RIPPLE) ripples.shift();
@@ -239,42 +196,6 @@ function ring(x: number, y: number, radius: number, alpha: number, ch: string) {
   for (let i = 0; i < n; i++) {
     const a = (i / n) * Math.PI * 2;
     ctx.fillText(ch, x + Math.cos(a) * radius, y + Math.sin(a) * radius * 0.6);
-  }
-}
-
-function drawCreature(me: Creature, font: string) {
-  const { c } = me;
-  const bright = MOVE[c.state].bright;
-  const px = Math.round(20 * c.size);
-  const colour = colourOf(c);
-  // Waiting on the person, it pulses in the theme's colour for that.
-  const waiting = c.state === "needs-you";
-  const pulse = waiting ? 0.5 + 0.5 * Math.sin(t * 6) : 0;
-  const body = waiting ? wp.look.attention : colour;
-  // A soft glow round it.
-  const r = px * (1.8 + pulse);
-  const glow = ctx.createRadialGradient(me.x, me.y, 0, me.x, me.y, r);
-  glow.addColorStop(0, body);
-  glow.addColorStop(1, "transparent");
-  ctx.globalAlpha = bright * (0.16 + 0.2 * pulse);
-  ctx.fillStyle = glow;
-  ctx.fillRect(me.x - r, me.y - r, 2 * r, 2 * r);
-  // The trail, fading toward its end.
-  ctx.font = Math.round(px * 0.8) + "px " + font;
-  ctx.fillStyle = colour;
-  me.trail.forEach((at, i) => {
-    ctx.globalAlpha = bright * 0.75 * (1 - i / TRAIL.length);
-    ctx.fillText(TRAIL[i]!, at.x, at.y);
-  });
-  ctx.font = "bold " + Math.round(px * (1 + 0.35 * pulse)) + "px " + font;
-  ctx.fillStyle = body;
-  ctx.globalAlpha = bright;
-  ctx.fillText(BODIES[Math.floor(c.kind * BODIES.length) % BODIES.length]!, me.x, me.y);
-  if (waiting) ring(me.x, me.y, 18 + 8 * pulse, 0.6 * pulse, ".");
-  // A turn that ended well: a bright ring going out from it.
-  if (me.ring > 0) {
-    ctx.fillStyle = colour;
-    ring(me.x, me.y, 12 + (1 - me.ring / RING) * 50, me.ring / RING, "o");
   }
 }
 
@@ -296,44 +217,32 @@ function draw() {
   }
   ctx.fillStyle = colours.ink;
   for (const r of ripples) ring(r.x, r.y, 10 + r.age * 70, 0.8 * (1 - r.age / RIPPLE), "~");
-  for (const me of creatures.values()) drawCreature(me, font);
+  for (const f of fish) {
+    const px = Math.round(18 * f.size);
+    ctx.fillStyle = colourOf(f);
+    ctx.font = Math.round(px * 0.8) + "px " + font;
+    f.trail.forEach((at, i) => {
+      ctx.globalAlpha = 0.75 * (1 - i / TRAIL.length);
+      ctx.fillText(TRAIL[i]!, at.x, at.y);
+    });
+    ctx.font = "bold " + px + "px " + font;
+    ctx.globalAlpha = 1;
+    ctx.fillText(BODIES[Math.floor(f.kind * BODIES.length) % BODIES.length]!, f.x, f.y);
+  }
   ctx.globalAlpha = 1;
 }
 
-wp.on("viewport", ({ w, h, dpr }) => { canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr); });
+wp.on("viewport", ({ w, h, dpr }) => { canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr); stock(); });
 wp.on("look", () => { colours = palette(); });
-// One creature for each agent: a new one starts where its state would take it.
-wp.on("creatures", (list) => {
-  for (const id of creatures.keys()) if (!list.some((c) => c.id === id)) creatures.delete(id);
-  for (const c of list) {
-    const had = creatures.get(c.id);
-    if (had) { had.c = c; continue; }
-    const me: Creature = { c, x: 0, y: 0, vx: 0, vy: 0, trail: [], phase: hash(c.id) * 100, ring: 0 };
-    [me.x, me.y] = goal(me);
-    creatures.set(c.id, me);
-  }
-});
-wp.on("done", ({ id }) => { const me = creatures.get(id); if (me) me.ring = RING; });
-// A click on open water ripples it and pushes the creatures near it away. A click on a creature
-// is the app's: it went to that agent's tile.
-wp.on("click", ({ x, y, id }) => {
-  if (id !== null) return;
+wp.on("pointer", ({ x, y, over }) => { pointer = over ? { x, y } : null; });
+// A click ripples the water, and the fish near it dart away.
+wp.on("click", ({ x, y }) => {
   ripples.push({ x, y, age: 0 });
   if (ripples.length > 6) ripples.shift();
-  for (const me of creatures.values()) {
-    const d = Math.hypot(me.x - x, me.y - y);
-    if (d > 0 && d < 140) { me.vx += ((me.x - x) / d) * 160; me.vy += ((me.y - y) / d) * 160; }
+  for (const f of fish) {
+    const d = Math.hypot(f.x - x, f.y - y);
+    if (d > 0 && d < 160) { f.vx += ((f.x - x) / d) * 220; f.vy += ((f.y - y) / d) * 220; }
   }
-});
-// The creature under the pointer: the nearest body within reach. The app shows its agent's name.
-wp.hitTest((x, y) => {
-  let found: string | null = null;
-  let near = Infinity;
-  for (const me of creatures.values()) {
-    const d = Math.hypot(me.x - x, me.y - y);
-    if (d < 12 + 12 * me.c.size && d < near) { near = d; found = me.c.id; }
-  }
-  return found;
 });
 // At most 30 frames a second while it runs, nothing while it is held, one settled frame when
 // Animation is off: the app's clock, the same as its own scenes'.

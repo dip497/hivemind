@@ -32,9 +32,9 @@ export async function listWallpaperPackages(): Promise<WallpaperPackageInfo[]> {
   const served: Array<{ host: string; id: string; dir: string }> = [];
   const out = await Promise.all(all.map(async (w): Promise<WallpaperPackageInfo> => {
     const base = { id: w.id, name: w.manifest?.name ?? w.id.slice(w.id.lastIndexOf("/") + 1), package: { id: w.package.id, name: w.package.name, on: w.package.on } };
-    if (!w.manifest) return { ...base, description: null, colour: false, preview: null, url: null, error: w.error };
+    if (!w.manifest) return { ...base, description: null, preview: null, url: null, error: w.error };
     const m = w.manifest;
-    const info = { ...base, description: m.description ?? null, colour: m.colour === true, preview: null };
+    const info = { ...base, description: m.description ?? null, preview: null };
     if (!w.package.on) return { ...info, url: null, error: null };
     const preview = m.preview ? await readFile(path.join(w.dir, m.preview)).then((b) => {
       const type = previewType(b);

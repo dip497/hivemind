@@ -26,7 +26,7 @@ beforeAll(async () => {
   fs.writeFileSync(path.join(view, "hivemind-view.json"), JSON.stringify({ id: "board", name: "Board", version: "1.0.0", entry: "index.html" }));
   fs.mkdirSync(path.join(wallpapers, "wallpapers", "pond"), { recursive: true });
   fs.writeFileSync(path.join(wallpapers, "hivemind-package.json"), JSON.stringify({ apiVersion: 2, id: "@ada/pond", name: "Pond", version: "1.0.0", wallpapers: [{ path: "wallpapers/pond" }] }));
-  fs.writeFileSync(path.join(wallpapers, "wallpapers", "pond", "hivemind-wallpaper.json"), JSON.stringify({ protocol: 1, name: "Pond", entry: "main.js" }));
+  fs.writeFileSync(path.join(wallpapers, "wallpapers", "pond", "hivemind-wallpaper.json"), JSON.stringify({ protocol: 2, name: "Pond", entry: "main.js" }));
   fs.writeFileSync(path.join(wallpapers, "wallpapers", "pond", "main.js"), "");
   const refuse = () => { throw new Error("the views folder cannot be read"); };
   const server = new WorkspaceServer([{ answers: { "settings.reload": () => null, "tools.rescan": () => null, "widgets.rescan": () => null, "views.rescan": refuse }, effects: {} }], new Intents(new AuditLog({ file: path.join(dir, "audit.jsonl") })));

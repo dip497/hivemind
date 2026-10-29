@@ -1,9 +1,8 @@
 /** A live wallpaper drawn as the app draws it: its built entry served as the app serves it
  *  (`serveViewFile`: the SDK's import map, the CSP, no network) into a sandboxed frame in headless
  *  Chromium, handed a port with the views' handshake, and answered by a host that checks everything
- *  it sends as the app does (`fakeWallpaperHost`: `parseWallpaperMessage`, `wallpaperRefusal`, the
- *  protocol). The host plays the app for a moment: agents in every state, their tiles, each look and
- *  mode, the pointer and a click. The wallpaper's code runs in a sandboxed frame, as in the app, of
+ *  it sends as the app does (`fakeWallpaperHost`: `parseWallpaperMessage`, the protocol). The host
+ *  plays the app for a moment: each look, size and mode, the pointer and clicks. The wallpaper's code runs in a sandboxed frame, as in the app, of
  *  a Chromium started as Playwright starts it, without its own OS sandbox: `hive plugins check`
  *  runs a package's code on this computer, as its tools' and widgets' draws do, so check only a
  *  package you would install.
@@ -18,7 +17,7 @@ import path from "node:path";
 import { pageOf, serveViewFile } from "@hivemind/core/view-files";
 import { PORT_HANDSHAKE } from "@hivemind/view-sdk/protocol";
 import { fakeWallpaperHost, type FakeWallpaperHost } from "@hivemind/view-sdk/testing";
-import { validateWallpaperManifest, WALLPAPER_MANIFEST, type WallpaperCreature, type WallpaperTile } from "@hivemind/view-sdk/wallpaper";
+import { validateWallpaperManifest, WALLPAPER_MANIFEST } from "@hivemind/view-sdk/wallpaper";
 import { viewSdk } from "../view-sdk.js";
 import { placeIn, thrown, type Problem } from "./problem.js";
 
@@ -29,15 +28,6 @@ const DRAWN_MS = 3000;
 const APP = "https://hive-app.invalid";
 const WALLPAPER = "https://hive-wallpaper.invalid";
 const VIEWPORT = { w: 1280, h: 800, dpr: 1 };
-
-/** Agents in every state, two with their tiles on the screen. */
-const CREATURES: WallpaperCreature[] = [
-  { id: "agent-1", agent: "alpha", kind: 0.12, size: 0.9, state: "working" },
-  { id: "agent-2", agent: "beta", kind: 0.47, size: 0.82, state: "needs-you" },
-  { id: "agent-3", agent: null, kind: 0.81, size: 1, state: "ready" },
-  { id: "agent-4", agent: "alpha", kind: 0.12, size: 0.95, state: "resting" },
-];
-const TILES: WallpaperTile[] = [{ x0: 760, y0: 140, x1: 1180, y1: 520, id: "agent-2" }, { x0: 120, y0: 420, x1: 560, y1: 740, id: "agent-1" }];
 
 // The few parts of Playwright used here: this CLI does not depend on it.
 interface Route { request(): { url(): string }; fulfill(o: { status: number; headers?: Record<string, string>; body?: string | Buffer }): Promise<void>; abort(): Promise<void> }
@@ -103,7 +93,7 @@ export async function drawWallpaper(dir: string): Promise<Problem[] | { notRun: 
   } catch (e) {
     return { notRun: `not run: Chromium did not start: ${(e instanceof Error ? e.message : String(e)).split("\n")[0]}` };
   }
-  const fake = fakeWallpaperHost({ viewport: VIEWPORT, mode: "run", creatures: CREATURES, tiles: TILES });
+  const fake = fakeWallpaperHost({ viewport: VIEWPORT, mode: "run" });
   try {
     return await play(browser, fake, dir, entry);
   } finally {
@@ -165,23 +155,18 @@ async function play(browser: Browser, fake: FakeWallpaperHost, dir: string, entr
   } else {
     await pump(DRAWN_MS, () => fake.drawn || problems.length > 0);
     if (!fake.drawn && !problems.length) problems.push({ step: "draw", message: `it connected but drew nothing within ${DRAWN_MS / 1000} s: draw a first frame and say drawn (animate does both)` });
-    // The app for a moment: the pointer in the middle, then beside agent-2's tile on its open
-    // side, where it waits for the person, and a click there; the agents change, a turn ends
-    // well, the look and the size change, each mode; the pointer about, a click, and gone.
+    // The app for a moment: the pointer in the middle and a click there; the look and the size
+    // change, each mode; the pointer about, a click at the edge, and gone.
     fake.point(640, 400);
     await pump(250);
-    fake.point(TILES[0]!.x0 - 28, (TILES[0]!.y0 + TILES[0]!.y1) / 2);
+    fake.click(640, 400);
     await pump(250);
-    fake.click(TILES[0]!.x0 - 28, (TILES[0]!.y0 + TILES[0]!.y1) / 2);
-    fake.send({ type: "creatures", creatures: [{ ...CREATURES[0]!, state: "needs-you" }, { ...CREATURES[1]!, state: "ready" }, CREATURES[3]!, { id: "agent-5", agent: "gemini", kind: 0.66, size: 0.86, state: "working" }] });
-    fake.send({ type: "tiles", tiles: [{ ...TILES[1]!, x0: 640, x1: 1000 }], seeThrough: true });
-    fake.send({ type: "done", id: "agent-1" });
-    fake.send({ type: "look", look: { page: "#f6f4ee", text: "#1d2126", attention: "#b4690e", dark: false, colour: true, mono: "\"No Such Font\", monospace" } });
+    fake.send({ type: "look", look: { page: "#f6f4ee", text: "#1d2126", dark: false, mono: "\"No Such Font\", monospace" } });
     fake.send({ type: "viewport", viewport: { w: 1024, h: 700, dpr: 2 } });
     for (const mode of ["still", "hold", "run"] as const) fake.send({ type: "mode", mode });
     for (const [x, y] of [[200, 200], [900, 600], [320, 640], [700, 120]] as const) fake.point(x, y);
     await pump(600);
-    fake.click(700, 120);
+    fake.click(1023, 0);
     fake.point(0, 0, false);
     await pump(250);
     await passing;

@@ -17,8 +17,9 @@ export const SINCE = {
   "view.files": "2026.10.6",
   /** A package's `themes` member. */
   "package.themes": "2026.10.6",
-  /** A package's `wallpapers` member (live wallpaper protocol 1), and its `startup.wallpaper`. */
-  "package.wallpapers": "2026.10.8",
+  /** A package's `wallpapers` member and its `startup.wallpaper`. Live wallpaper protocol 2, which
+   *  2026.10.8's protocol 1 cannot run. */
+  "package.wallpapers": "2026.10.9",
 } as const satisfies Record<string, string>;
 
 export type SinceKey = keyof typeof SINCE;

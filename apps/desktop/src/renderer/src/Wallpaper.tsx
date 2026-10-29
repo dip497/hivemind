@@ -22,10 +22,14 @@ export function Wallpaper({ embedded = false, covering = false, live = true }: {
   const { glass, wallpaper, videoSrc, imageSrc, themeId, animate, palette, monoFont, mode } = useTheme();
   const { wallpapers } = useWallpapers();
   const cls = embedded ? " embedded" : "";
-  const [inactive, setInactive] = useState(false);
+  // Away: the window is hidden or not focused. Idle: no input for a while, which pauses a video and
+  // a photo's pan, but not a live scene, which someone resting their hands is there to watch.
+  const [away, setAway] = useState(false);
+  const [idle, setIdle] = useState(false);
   const occluded = useWorkspaceOccluded();
   // `covering`: this copy is what covers the workspace, so occlusion is not about it.
-  const paused = inactive || (occluded && !covering);
+  const hidden = away || (occluded && !covering);
+  const paused = hidden || idle;
   // A clip that can't decode (e.g. HEVC/H.265, which Chromium doesn't bundle)
   // fires <video> onError → we fall back to a gradient instead of a black void.
   const [videoFailed, setVideoFailed] = useState(false);
@@ -44,11 +48,11 @@ export function Wallpaper({ embedded = false, covering = false, live = true }: {
   }, [videoSrc]);
 
   // Pause the wallpaper (video decoder + bloom animations) when the window is
-  // hidden/blurred OR the user has been idle for a while — a live wallpaper
-  // composites every frame, so this reclaims continuous GPU + video-decode CPU
-  // whenever you're not actively interacting. Resumes within ~1s of any input.
-  // `bump` only writes a number (no React, no per-event timer churn); a 1Hz tick
-  // computes the paused state, and setInactive no-ops when unchanged.
+  // hidden/blurred, and a video or photo pan also when the user has been idle for a
+  // while: it composites every frame, so this reclaims continuous GPU + decode CPU.
+  // Resumes within ~1s of any input. `bump` only writes a number (no React, no
+  // per-event timer churn); a 1Hz tick computes the state, and each set no-ops
+  // when unchanged.
   useEffect(() => {
     let last = Date.now();
     const IDLE_MS = 30_000;
@@ -56,8 +60,8 @@ export function Wallpaper({ embedded = false, covering = false, live = true }: {
     const evs = ["mousemove", "keydown", "wheel", "pointerdown", "touchstart"] as const;
     for (const e of evs) window.addEventListener(e, bump, { passive: true });
     const tick = setInterval(() => {
-      const idle = Date.now() - last > IDLE_MS;
-      setInactive(document.hidden || !document.hasFocus() || idle);
+      setAway(document.hidden || !document.hasFocus());
+      setIdle(Date.now() - last > IDLE_MS);
     }, 1000);
     return () => {
       clearInterval(tick);
@@ -91,7 +95,7 @@ export function Wallpaper({ embedded = false, covering = false, live = true }: {
     // A live scene (Shoal, Koi Pond …): drawn on a canvas in its own colours, light or dark by the
     // theme's. Only the full-window copy behind the app's own views runs it; a copy behind a
     // fullscreen tile or a docked slot is covered by the tile, so it shows the water alone.
-    const shared = { paused, animate, page: palette.bg, text: palette.fg, dark: mode !== "light", monoFont };
+    const shared = { paused: hidden, animate, page: palette.bg, text: palette.fg, dark: mode !== "light", monoFont };
     if (isLiveScene(wallpaper)) {
       return (
         <div className={`hm-wallpaper${cls}`} data-scene={wallpaper} style={{ background: waterCss(wallpaper, lightOf(cssColorToHex(palette.bg), cssColorToHex(palette.fg))) }} aria-hidden="true">

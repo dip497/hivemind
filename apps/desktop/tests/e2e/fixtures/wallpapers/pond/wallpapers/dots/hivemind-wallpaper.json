@@ -1,1 +1,1 @@
-{ "protocol": 1, "name": "Dots", "entry": "main.js", "description": "One dot per agent, in a row along the bottom.", "colour": true }
+{ "protocol": 2, "name": "Dots", "entry": "main.js", "description": "Dots drifting on the page." }

@@ -1,8 +1,8 @@
 // `hive plugins new wallpaper` and `hive plugins check` of a live wallpaper. The starter is a package
 // of its own that offers it, which the check accepts once built; `--in` makes it one more member of
 // a package. The draw check loads a wallpaper's built entry in headless Chromium against a host
-// that checks what it sends as the app does, and refuses one that never connects or names a
-// creature it was never sent.
+// that checks what it sends as the app does, and refuses one that never connects or says what the
+// app does not take.
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
@@ -51,7 +51,7 @@ function build(dir: string) {
 function handWritten(main: string) {
   const files: Record<string, string> = {
     "kit/hivemind-package.json": JSON.stringify({ apiVersion: 2, id: "@ada/kit", name: "Kit", version: "0.1.0", wallpapers: [{ path: "wallpapers/tide" }] }),
-    "kit/wallpapers/tide/hivemind-wallpaper.json": JSON.stringify({ protocol: 1, name: "Tide", entry: "main.js" }),
+    "kit/wallpapers/tide/hivemind-wallpaper.json": JSON.stringify({ protocol: 2, name: "Tide", entry: "main.js" }),
     "kit/wallpapers/tide/main.js": main,
   };
   for (const [f, text] of Object.entries(files)) {
@@ -123,7 +123,7 @@ describe.skipIf(!drawable)("hive plugins check, a live wallpaper's draw", () => 
     })]]);
   }, 60_000);
 
-  test("a wallpaper that names a creature it was never sent is refused, as the app refuses it", () => {
+  test("a wallpaper that says more than ready and drawn is refused, as the app refuses it", () => {
     handWritten(`addEventListener("message", (e) => {
   const port = e.ports[0];
   if (!port) return;
@@ -131,12 +131,12 @@ describe.skipIf(!drawable)("hive plugins check, a live wallpaper's draw", () => 
     if (m.data.type === "hello") port.postMessage({ type: "drawn" });
     if (m.data.type === "pointer" && m.data.over) port.postMessage({ type: "hover", id: "ghost" });
   };
-  port.postMessage({ type: "ready", protocol: 1 });
+  port.postMessage({ type: "ready", protocol: 2 });
 });
 `);
     const r = run("check", "kit", "--json");
     expect([r.code, (r.json as Report).problems]).toEqual([1, [expect.objectContaining({
-      step: "draw", member: "wallpapers/tide", message: "the app would refuse what it sent: hover: \"ghost\" is not a creature the app sent",
+      step: "draw", member: "wallpapers/tide", message: "the app would refuse what it sent: unknown message type \"hover\"",
     })]]);
   }, 60_000);
 });
