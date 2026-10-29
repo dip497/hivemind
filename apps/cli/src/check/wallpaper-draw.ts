@@ -32,10 +32,10 @@ const VIEWPORT = { w: 1280, h: 800, dpr: 1 };
 
 /** Agents in every state, two with their tiles on the screen. */
 const CREATURES: WallpaperCreature[] = [
-  { id: "agent-1", agent: "claude", kind: 0.12, size: 0.9, state: "working" },
-  { id: "agent-2", agent: "codex", kind: 0.47, size: 0.82, state: "needs-you" },
+  { id: "agent-1", agent: "alpha", kind: 0.12, size: 0.9, state: "working" },
+  { id: "agent-2", agent: "beta", kind: 0.47, size: 0.82, state: "needs-you" },
   { id: "agent-3", agent: null, kind: 0.81, size: 1, state: "ready" },
-  { id: "agent-4", agent: "claude", kind: 0.12, size: 0.95, state: "resting" },
+  { id: "agent-4", agent: "alpha", kind: 0.12, size: 0.95, state: "resting" },
 ];
 const TILES: WallpaperTile[] = [{ x0: 760, y0: 140, x1: 1180, y1: 520, id: "agent-2" }, { x0: 120, y0: 420, x1: 560, y1: 740, id: "agent-1" }];
 
