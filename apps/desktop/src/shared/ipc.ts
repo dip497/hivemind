@@ -287,7 +287,7 @@ export interface WallpaperPackageInfo {
   colour: boolean;
   /** Its picture for the picker, as a data URL. */
   preview: string | null;
-  package: { id: string; name: string; on: boolean };
+  package: { id: string; name: string; version: string; on: boolean };
   /** Where its frame loads from: null when its package is off or it cannot be read. */
   url: string | null;
   /** Why it cannot be used, or null. */

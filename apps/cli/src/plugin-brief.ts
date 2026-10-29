@@ -21,7 +21,7 @@ const WHAT: Record<PluginKind, string> = {
   widget: "a box on the board (and in every view) that its own code draws and keeps state in",
   tool: "a kind of tile, drawn by its own React code inside the app, with the folder and programs of its frame",
   view: "a sandboxed web page that draws the whole workspace its own way",
-  wallpaper: "a sandboxed scene drawn behind the canvas whose creatures are the person's agents, one each",
+  wallpaper: "a sandboxed scene that moves behind the canvas, a world of its own or one whose creatures are the person's agents",
 };
 
 /** The skills a live wallpaper's package carries for the person's coding agent, by their path in

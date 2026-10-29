@@ -119,8 +119,6 @@ describe("settings schema", () => {
     expect(got.wallpaper).toEqual({ kind: DEFAULT_APPEARANCE.wallpaper.kind, brightness: 0.7, colour: false });
     expect(JSON.stringify(got)).not.toContain("host");
     expect(sharedAppearance({ ...host, wallpaper: { kind: "aurora", imageSrc: "file:///etc/passwd" } }).wallpaper).toEqual({ kind: "aurora", brightness: DEFAULT_APPEARANCE.wallpaper.brightness, colour: false });
-    // A live scene in its own colours is the host's look: the guest sees it so.
-    expect(sharedAppearance({ ...host, wallpaper: { kind: "shoal", colour: true } }).wallpaper).toEqual({ kind: "shoal", brightness: DEFAULT_APPEARANCE.wallpaper.brightness, colour: true });
     // A package's live wallpaper is the host's install, which a guest may not have: the default one.
     expect(sharedAppearance({ ...host, wallpaper: { kind: "@acme/hive/bees", colour: true } }).wallpaper).toEqual({ kind: DEFAULT_APPEARANCE.wallpaper.kind, brightness: DEFAULT_APPEARANCE.wallpaper.brightness, colour: true });
     expect(sharedAppearance({ accent: "<script>", radius: 9999, palette: { bg: "url(x)" } })).toMatchObject({ accent: DEFAULT_APPEARANCE.accent, radius: 24, palette: { bg: DEFAULT_APPEARANCE.palette.bg } });

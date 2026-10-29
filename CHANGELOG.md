@@ -9,6 +9,11 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Changed: **Shoal, Koi Pond, Jellyfish and Fireflies moved into the Live scenes package**, so they change without a release of the app. They are a world of their own now, moving on their own and playing with the pointer, in their own colours. Install **Live scenes** from Settings → Plugins (HiveHub), or `hive plugins install @dip497/live-scenes`, and pick a scene under Background. A scene you had chosen stays chosen (`appearance.wallpaper.kind` becomes `@dip497/live-scenes/<scene>`); until the package is installed the plain background shows, and Settings → Appearance names the package with an **Install** button. **Breaking:** `appearance.wallpaper.kind` no longer takes `shoal`, `koi`, `jellyfish` or `fireflies`.
+- Added: **Make your own** under Settings → Appearance → Background, and a **Wallpaper** choice in Make your own: say what you want and an agent builds a live wallpaper, installs it and makes it your background.
+- Fixed: a live wallpaper keeps moving while you rest your hands; it stops only while the window is hidden, not in front or covered. A video or a photo's pan still stops after 30 seconds without input.
+- Fixed: Settings → Plugins on HiveHub showed a package that holds only live wallpapers as not installed after it was installed.
+
 ## [2026.10.8] — 2026-10-30
 
 - Fixed: on light themes other than Clean Light, such as Tokyo Night Day, Gruvbox Light and Catppuccin Latte, an issue's state on its state picker and its assignee's initial were a little too faint to read; they are darker now.

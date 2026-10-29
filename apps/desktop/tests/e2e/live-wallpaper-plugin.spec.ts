@@ -1,8 +1,9 @@
 // A package's live wallpaper in the built app: installed while the app was closed, it is offered
 // once as the background and Use draws it, in its sandboxed frame, told each agent's creature and
 // where their tiles are, by handles that are not the tiles' ids; the pointer over a creature names
-// its agent and a click there goes to its tile, on the app's own scenes too. A wallpaper that names
-// creatures it was never sent is turned off for the session, the plain background showing instead;
+// its agent and a click there goes to its tile; it runs on while the person is idle; its Colour
+// switch reaches it, and See-through leaves the Layers panel clear glass over it. A wallpaper that
+// names creatures it was never sent is turned off for the session, the plain background showing instead;
 // one that says a creature is under the pointer while the pointer is over a tile is not heard; one
 // that takes the keyboard is turned off, what had the keyboard getting it back; a package switched
 // off stops its wallpaper in every window; and a view the repository ships named like a wallpaper's
@@ -233,31 +234,50 @@ test("a package switched off stops its wallpaper in every window, not only the o
   await page.evaluate(() => window.hive.switchPackage("@e2e/pond", true));
 });
 
-test("on the app's own scenes too: the pointer over a shark names its agent, and a click there goes to its tile", async () => {
-  // Motion off: one settled frame, so a shark stays where the pointer finds it.
-  await page.evaluate(() => Promise.all([window.hive.settingsSet("appearance.glass.animate", false), window.hive.settingsSet("appearance.wallpaper.kind", "shoal")]));
-  await expect(page.locator('.hm-wallpaper[data-scene="shoal"] canvas')).toHaveCount(1);
-  await page.locator(".react-flow__pane").click({ position: { x: 5, y: 5 } });
-  await zoomOut();
-  await page.waitForTimeout(1500);
-  await shot("5-shoal-before");
-  // Over the open water, a step at a time, until a shark is under the pointer.
-  const label = page.locator(".hm-live-label");
-  const found = await (async () => {
-    for (let y = 120; y < 860; y += 24) {
-      for (let x = 360; x < 1420; x += 24) {
-        const free = await page.evaluate(([px, py]) => document.elementFromPoint(px!, py!)?.classList.contains("react-flow__pane"), [x, y]);
-        if (!free) continue;
-        await page.mouse.move(x, y);
-        if (await label.count()) return { x, y };
-      }
-    }
-    return null;
-  })();
-  expect(found, "a shark somewhere on the open water").not.toBeNull();
-  const key = await label.getAttribute("data-creature");
-  expect(await tiles()).toContain(key);
-  await shot("5-shoal-hover");
-  await page.mouse.click(found!.x, found!.y);
-  await expect(page.locator(`.react-flow__node[data-id="${key}"].selected`)).toHaveCount(1);
+test("someone resting their hands does not stop it: with no input for over 30 seconds it still runs", async () => {
+  await page.evaluate(() => window.hive.settingsSet("appearance.wallpaper.kind", "@e2e/pond/dots"));
+  const frame = await wallpaperFrame("@e2e/pond/dots");
+  const mode = () => frame.evaluate(() => (window as unknown as { seen: { modes: string[] } }).seen.modes.at(-1));
+  await page.bringToFront();
+  await expect.poll(mode).toBe("run");
+  // The app counts a person idle after 30 seconds without input; a video or a photo's pan stops then.
+  await page.waitForTimeout(33_000);
+  expect(await mode()).toBe("run");
+});
+
+test("its Colour switch reaches it, and See-through frosts the panels and the tools in one click, the Layers panel clear glass over it", async () => {
+  const before = await page.evaluate(() => window.hive.settingsGet().then((s) => s.appearance));
+  const onDisk = () => JSON.parse(fs.readFileSync(env.HIVE_SETTINGS!, "utf8")).appearance;
+  try {
+    await page.evaluate(() => window.hive.settingsSet("appearance.wallpaper.kind", "@e2e/pond/dots"));
+    const frame = await wallpaperFrame("@e2e/pond/dots");
+    const colour = () => frame.evaluate(() => (window as unknown as { seen: { look: { colour: boolean } } }).seen.look.colour);
+    const was = await colour();
+    if (await page.locator("[data-settings-body]").count() === 0) await page.locator('[aria-label="settings"]').click();
+    await page.locator('[data-settings-page="appearance"]').click();
+    await page.getByRole("switch", { name: "Draw Dots in its own colours" }).click();
+    await expect.poll(colour).toBe(!was);
+    await page.getByRole("button", { name: "See-through" }).click();
+    await expect.poll(() => onDisk()?.glass).toMatchObject({ enabled: true, contentGlass: true, opacity: 0.5, blur: 14, contentOpacity: 0.45 });
+    await expect(page.locator("[data-settings-body]")).toContainText("It shows through the frosted panels and tiles");
+    await shot("5-see-through");
+    await page.getByRole("button", { name: "Close", exact: true }).click();
+    // Over another background the panel stops at 68% so its names stay legible; over a live
+    // wallpaper its blur does that, and it takes a third of the panel tint: clear glass.
+    const alpha = () => page.locator(".hm-layers").first().evaluate((el) => {
+      const m = /\/\s*([\d.]+)\)\s*$/.exec(getComputedStyle(el).backgroundColor);
+      return m ? Number(m[1]) : 1;
+    });
+    await expect.poll(alpha).toBeCloseTo(0.5 / 3, 2);
+    // Asked for less transparency, it is solid over it too.
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-transparency", value: "reduce" }] });
+    await expect.poll(alpha).toBe(1);
+    await cdp.send("Emulation.setEmulatedMedia", { features: [] });
+    await expect.poll(alpha).toBeCloseTo(0.5 / 3, 2);
+    await page.evaluate(() => window.hive.settingsSet("appearance.wallpaper.kind", "mono"));
+    await expect.poll(alpha).toBeCloseTo(0.68, 2);
+  } finally {
+    await page.evaluate((a) => window.hive.settingsSet("appearance", a), before);
+  }
 });

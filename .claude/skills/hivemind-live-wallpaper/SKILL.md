@@ -1,6 +1,6 @@
 ---
 name: hivemind-live-wallpaper
-description: Build, check, package and publish a Hivemind live wallpaper — a sandboxed scene drawn behind the canvas whose creatures are the person's agents (as Shoal's sharks are). Covers live wallpaper protocol 1 and its SDK (connectWallpaper, hitTest, animate, fakeWallpaperHost), the clock and its run/hold/still rule, sizing the canvas, keeping off tiles and the needs-you visit to the creature's own tile, hover and click, colours and readable panel text, cost, tests, the package it ships in, offering it with startup.wallpaper, shipping it beside a view and a theme, and HiveHub. Use when making, debugging or reviewing a live wallpaper.
+description: Build, check, package and publish a Hivemind live wallpaper — a sandboxed scene that moves behind the canvas, a world of its own (as the Live scenes package's Shoal, Koi Pond, Jellyfish and Fireflies are) or one whose creatures are the person's agents. Covers live wallpaper protocol 1 and its SDK (connectWallpaper, hitTest, animate, fakeWallpaperHost), the clock and its run/hold/still rule, sizing the canvas, keeping off tiles and the needs-you visit to the creature's own tile, hover and click, colours and readable panel text, cost, tests, the package it ships in, offering it with startup.wallpaper, shipping it beside a view and a theme, and HiveHub. Use when making, debugging or reviewing a live wallpaper.
 ---
 
 # Building a Hivemind live wallpaper
@@ -12,9 +12,12 @@ characters; read it before you design how anything looks.
 
 ## Why this exists
 
-A live wallpaper is drawn behind the person's canvas all day. Its creatures are their agents:
-one creature per agent, each program's agents one kind, and what a creature does says what its
-agent is doing. A glance at the water should tell the person which agent needs them.
+A live wallpaper is drawn behind the person's canvas all day. Most are a world of their own that
+moves on its own and plays with the pointer: the Live scenes package's reef, pond, deep sea and
+meadow ignore the agents entirely. A wallpaper may also draw the person's agents: one creature per
+agent, each program's agents one kind, and what a creature does says what its agent is doing, so
+a glance at the water tells the person which agent needs them. Ask the person which they want;
+everything below about creatures, `hitTest` and the needs-you visit applies only to the second.
 
 Two things make it hard, and neither is the protocol, which is small:
 
@@ -119,14 +122,14 @@ The mode decides what runs:
 
 | Mode | When | The clock |
 |---|---|---|
-| `run` | the window is in use | steps and draws |
-| `hold` | the window is hidden, unfocused, idle or covered | nothing on its own. It draws one frame again, without stepping, only when the size, the look, the creatures or the tiles change |
+| `run` | the window is in front, the person busy or resting their hands | steps and draws |
+| `hold` | the window is hidden, not in front, or covered | nothing on its own. It draws one frame again, without stepping, only when the size, the look, the creatures or the tiles change |
 | `still` | the person turned off **Animate the background**, or the system asks for reduced motion | `settle()` and one draw; the same again on each change |
 
 The first frame is drawn at once in every mode, so a held wallpaper still shows something.
 
 **Why held means you draw nothing of your own.** The app holds the scene because nobody is
-looking: the window is hidden, behind another, or idle. Every frame drawn then is battery spent
+looking: the window is hidden, behind another, or covered. Every frame drawn then is battery spent
 on a picture no one sees, on a laptop that thought it was resting. A `setInterval` that "keeps the
 water moving" while held is exactly that. The clock already redraws when something the person
 could see changes.
@@ -184,7 +187,7 @@ wp.on("creatures", (cs) => {
   from another program's. `kind` may be exactly 1, so clamp the index.
 - Seed a creature's own variety (a marking, a phase, a wobble) from `hash(id)`: it looks the same
   every frame and after a reload, and two agents of one program still differ a little.
-- Map each state to behaviour a glance can read. The built-in scenes: at work, it hunts or flies
+- Map each state to behaviour a glance can read. For instance: at work, it hunts or flies
   fast; ready, it cruises slowly; needs you, it goes to its agent's tile and calls (circles,
   holds and glows, flashes a call); resting, it sinks or settles low and goes dim. A turn done
   well (`done`) is a flash or a bite.
@@ -225,8 +228,8 @@ function openSpot(tiles: readonly WallpaperTile[], w: number, h: number, from: {
   corner.
 - **Draw nothing of a creature under a tile.** A cell whose centre is within half a cell of a
   tile is covered too, so nothing shows through the seams between two tiles. When `seeThrough`
-  is true the tiles are frosted, and a creature under one may be drawn soft and faint (the
-  built-in scenes draw one pixel a cell there, scaled up smoothly: shape, no characters).
+  is true the tiles are frosted, and a creature under one may be drawn soft and faint (one pixel
+  a cell there, scaled up smoothly, reads as shape with no characters).
 
 **The needs-you visit.** The tile whose `id` is the creature's is its agent's. The creature goes
 there and holds by the open side, where the person will look and where no other tile is:
@@ -288,10 +291,10 @@ wp.on("click", ({ x, y, id }) => { if (id === null && wp.mode === "run") splash(
   theme and one for a light one (pick by `dark`). Set it in OKLCH, mix in OKLab, map out-of-gamut
   colours by lowering chroma: the sister skill shows how.
 - **Panel text over it.** With glass on, the Layers panel and the toolbars are frosted glass over
-  the scene, and their names sit right over your water. Over the built-in live scenes the Layers
+  the scene, and their names sit right over your water. Over a live wallpaper the Layers
   panel is clearer still: a third of its usual tint, as little as a sixth with See-through. Design
   for that. Keep the ground dark enough on
-  a dark theme and light enough on a light one. Test it the way the built-in scenes do: composite
+  a dark theme and light enough on a light one. Test it the way the Live scenes do: composite
   the panel colour at a sixth over every point of your ground (each gradient stop, a glow at its
   brightest, a light shaft at its brightest) and check the panel's text at 7:1 or more and its
   secondary text at 4.5:1 or more, for a dark preset and a light one.
@@ -328,7 +331,7 @@ wp.animate({ step, settle, draw: (dt) => {
 } });
 ```
 
-For scale, the built-in scenes measure, median per frame in headless Chromium: Fireflies 1.1 ms
+For scale, the Live scenes measured, median per frame in headless Chromium: Fireflies 1.1 ms
 at 1× and 2.2 ms at 2×, Jellyfish 1.9 / 3.4, Koi Pond 3.3 / 4.7, Shoal 5.6 / 8.0. **A headless
 browser renders in software**, with no GPU: its numbers overstate what a real screen costs, and
 its frame rate means nothing. Compare like with like, and say how you measured.
@@ -413,7 +416,7 @@ hive config set appearance.wallpaper.kind '"@you/pond/pond"'   # switch to it (a
 hivehub publish <package>                     # after commit and push, with dist/ committed
 ```
 
-**Settings → Appearance → Background** lists installed live wallpapers after the built-in scenes.
+**Settings → Appearance → Background** lists installed live wallpapers after the app's own backgrounds.
 Install again after each change. Ask the person before switching their background; on a yes,
 use the command the install printed.
 

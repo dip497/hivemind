@@ -11,6 +11,7 @@ import { permissionWords } from "./library";
 import { PackageReview } from "./PackageReview";
 import { useWidgetPackages } from "../board-objects/widget-runtime";
 import { useToolPackages } from "../tiles/tool-plugins";
+import { useWallpapers } from "../live/wallpaper-store";
 
 export type CatalogEntry = Awaited<ReturnType<typeof window.hive.pluginCatalog>>[number];
 export type CatalogReview = Awaited<ReturnType<typeof window.hive.reviewCatalogPlugin>>;
@@ -26,9 +27,10 @@ export function useInstalledVersion(): (e: CatalogEntry) => string | null {
   const agents = useAgentEntries();
   const widgets = useWidgetPackages();
   const tools = useToolPackages().packages;
+  const wallpapers = useWallpapers().wallpapers;
   // A package is installed when one of its members is, under it.
   const packageVersion = (id: string): string | null =>
-    [...views.map((v) => v.package), ...widgets.map((w) => w.package), ...tools.map((t) => t.package)].find((p) => p?.id === id)?.version ?? null;
+    [...views.map((v) => v.package), ...widgets.map((w) => w.package), ...tools.map((t) => t.package), ...wallpapers.map((w) => w.package)].find((p) => p?.id === id)?.version ?? null;
   return (e) =>
     e.type === "package" ? packageVersion(e.id)
     : e.type === "view" ? views.find((v) => v.id === e.id)?.manifest?.version ?? null

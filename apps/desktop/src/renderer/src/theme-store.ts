@@ -15,7 +15,7 @@
  */
 import { useSyncExternalStore } from "react";
 import {
-  ACCENTS, ANCHORS, PALETTE_KEYS, WALLPAPERS, flattenAppearance, getPath, guestTheme, isLiveScene, isPluginWallpaper, nestAppearance,
+  ACCENTS, ANCHORS, PALETTE_KEYS, WALLPAPERS, flattenAppearance, getPath, guestTheme, isPluginWallpaper, nestAppearance,
   type AccentId, type Appearance, type FlatTheme, type MediaAnchor, type MediaFit, type MediaLayer, type ThemePreset, type WallpaperId,
 } from "@hivemind/core/settings-schema";
 import { accentOf, presetPaths, withPreset, type AccentColors, type FontFaces } from "@hivemind/core/appearance-extra";
@@ -86,7 +86,7 @@ export function isWallpaperActive(): boolean { return fullWallpaper; }
 export function wallpaperDrawn(t: Pick<ThemeState, "glass" | "wallpaper" | "themeId"> = state): boolean {
   // A live scene, the app's or a package's, shows without glass too: it pictures the agents between
   // the tools. With glass, its creatures show through the frosted panels (live/LiveWallpaper.tsx).
-  return t.wallpaper !== "none" && (t.glass || !!t.themeId || isLiveScene(t.wallpaper) || isPluginWallpaper(t.wallpaper));
+  return t.wallpaper !== "none" && (t.glass || !!t.themeId || isPluginWallpaper(t.wallpaper));
 }
 /** Glass as it applies right now. */
 export function effectiveGlass(t: ThemeState = state): boolean {
@@ -209,7 +209,7 @@ function paintTheme(t: ThemeState): void {
   root.style.setProperty("--content-opacity", `${Math.round(t.contentOpacity * 100)}%`);
   root.dataset.wallpaper = t.wallpaper;
   // A live scene, whose side panel is clear glass (styles.css).
-  root.classList.toggle("live-wallpaper", isLiveScene(t.wallpaper) || isPluginWallpaper(t.wallpaper));
+  root.classList.toggle("live-wallpaper", isPluginWallpaper(t.wallpaper));
   // Palette tokens. The CSS carries the signal values as its fallbacks, so the
   // default preset is a no-op; another preset recolours every surface at once.
   // bg2/3/4 are NOT written here: they derive from --surface-* in CSS, so glass mode can

@@ -1037,12 +1037,11 @@ html.glass-on:not([data-wallpaper="none"]) .hm-layers {
   border-right-color: transparent;
   box-shadow: var(--hm-edge-glass);
 }
-/* Over a live scene (Shoal, Koi Pond …) the side panel is clear frosted glass, the scene running on
-   under it, as in the demos they are modelled on: a third of the panel tint (24% at the usual 72%),
-   and the blur, which is what keeps the names legible over a passing creature. Each scene's colours
-   are kept dark enough on a dark theme, light enough on a light one, for that (live/palette.ts).
-   Asked for less transparency or more contrast, the blocks at the end of this file have it solid,
-   as everywhere. */
+/* Over a live wallpaper the side panel is clear frosted glass, the scene running on under it: a
+   third of the panel tint (24% at the usual 72%), and the blur, which is what keeps the names
+   legible over a passing creature. A wallpaper keeps its colours dark enough on a dark theme, light
+   enough on a light one, for that (the live wallpaper skill says how). Asked for less transparency
+   or more contrast, the blocks at the end of this file have it solid, as everywhere. */
 @media (not (prefers-reduced-transparency: reduce)) and (not (prefers-contrast: more)) {
   html.glass-on.live-wallpaper .hm-layers {
     background: color-mix(in srgb, var(--surface-2) calc(var(--glass-opacity) / 3), transparent);

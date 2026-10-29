@@ -9,7 +9,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
 import { mergeSettings } from "../settings-schema.js";
-import { files, TestRoot } from "./fixtures/runs.js";
+import { ALL, files, TestRoot } from "./fixtures/runs.js";
 import { restoreMigration } from "./manage.js";
 
 const FIXTURE = path.join(import.meta.dir, "fixtures", "0006", "before");
@@ -70,7 +70,8 @@ describe("notifications move into the one settings.json", () => {
     expect(fs.existsSync(path.join(t.root, "migrations", "backups", ID))).toBe(false);
     const file = path.join(t.root, "settings.json");
     fs.writeFileSync(file, JSON.stringify({ ...t.read("settings.json"), appearance: { preset: "dracula" } }));
-    expect((await restoreMigration(ID, { config: t.root, data: t.root })).restored).toEqual([ID]);
+    // 0006 and every migration after it on this root, newest first.
+    expect((await restoreMigration(ID, { config: t.root, data: t.root })).restored).toEqual(ALL.slice(ALL.indexOf(ID)).reverse());
     expect(t.read("settings.json").appearance.preset).toBe("dracula");
   });
 

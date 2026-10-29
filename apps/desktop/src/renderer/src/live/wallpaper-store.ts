@@ -60,8 +60,13 @@ export function usableWallpaper(list: readonly WallpaperPackageInfo[], id: strin
   return w && w.url && !w.error && !off.has(id) ? (w as WallpaperPackageInfo & { url: string }) : null;
 }
 
-/** A wallpaper's name, as its manifest says it; its id's last part when it is not listed. */
-export const wallpaperName = (id: string): string => wallpapers.find((w) => w.id === id)?.name ?? id.slice(id.lastIndexOf("/") + 1);
+/** A wallpaper's name, as its manifest says it; when it is not listed, its id's last part, as a
+ *  name is written (`@dip497/live-scenes/koi` is Koi). */
+export const wallpaperName = (id: string): string => wallpapers.find((w) => w.id === id)?.name ?? nameFromId(id);
+const nameFromId = (id: string): string => {
+  const last = id.slice(id.lastIndexOf("/") + 1).replace(/-/g, " ");
+  return last.charAt(0).toUpperCase() + last.slice(1);
+};
 
 /** Turn a misbehaving wallpaper off until the app starts again. */
 export function turnWallpaperOff(id: string, reason: string): void {

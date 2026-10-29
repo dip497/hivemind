@@ -2,8 +2,18 @@
  *  the bell, the tile and Layers still say an agent needs you, so turning the wallpaper off loses
  *  nothing. */
 import type { StatusEvent, TileStatusKind } from "../agent-status-bus";
-import { hash3 } from "./math";
 import type { CreatureSpec, Mood } from "./scene";
+
+/** Cheap integer hash → [0, 1). Deterministic, so the same program is the same kind every time. */
+function hash3(x: number, y: number, z: number) {
+  let h =
+    Math.imul(x | 0, 374761393) ^
+    Math.imul(y | 0, 668265263) ^
+    Math.imul(z | 0, 1442695041);
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  h ^= h >>> 16;
+  return (h >>> 0) / 4294967296;
+}
 
 /** At most this many creatures, so the water never fills up: the agents that need you come first,
  *  then those at work. */

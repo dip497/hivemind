@@ -13,7 +13,7 @@ console.log("started");
 const r = await runMigrations({ by: "cli", app: "2026.10.4", say: (line) => console.error(line) });
 console.log(JSON.stringify(r));`;
 
-export const ALL = ["0001-adopt-plugins-as-packages", "0002-plugin-state-from-old-keys", "0003-remove-old-one-off-backups", "0004-remove-machines-marker", "0006-notifications-into-settings"];
+export const ALL = ["0001-adopt-plugins-as-packages", "0002-plugin-state-from-old-keys", "0003-remove-old-one-off-backups", "0004-remove-machines-marker", "0006-notifications-into-settings", "0007-live-scenes-into-a-package"];
 
 export interface Applied { id: string; result: Record<string, unknown> & { adopted?: number; skipped?: { path: string; why: string }[] } }
 

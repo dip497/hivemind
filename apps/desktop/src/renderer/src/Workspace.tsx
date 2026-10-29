@@ -1271,8 +1271,8 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
     [selectedTileId, selectedFrameId, board.selectedId],
   );
 
-  // A live wallpaper's creatures (Shoal's sharks): the agents here. The same array until one comes, goes or falls
-  // asleep, so the wallpaper does no work when other tile changes go by.
+  // A live wallpaper's creatures, for one that draws the agents: the agents here. The same array until one comes,
+  // goes or falls asleep, so the wallpaper does no work when other tile changes go by.
   const sceneKey = useMemo(() => tiles.filter((t) => t.kind === AGENT_TILE_KIND).map((t) => `${t.id}\t${agentOfTile(t) ?? ""}\t${t.sleeping ? 1 : 0}`).join("\n"), [tiles]);
   const sceneAgents = useMemo((): SceneAgent[] => (sceneKey ? sceneKey.split("\n").map((line) => {
     const [tileId, agent, sleeping] = line.split("\t");

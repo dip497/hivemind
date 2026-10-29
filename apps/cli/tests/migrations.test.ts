@@ -12,7 +12,7 @@ import { hive } from "./helpers.js";
 
 const BEFORE = path.join(import.meta.dir, "..", "..", "..", "packages", "hive-core", "src", "migrations", "fixtures", "0001", "before");
 const ADOPT = "0001-adopt-plugins-as-packages";
-const ALL = [ADOPT, "0002-plugin-state-from-old-keys", "0003-remove-old-one-off-backups", "0004-remove-machines-marker", "0006-notifications-into-settings"];
+const ALL = [ADOPT, "0002-plugin-state-from-old-keys", "0003-remove-old-one-off-backups", "0004-remove-machines-marker", "0006-notifications-into-settings", "0007-live-scenes-into-a-package"];
 
 let home: string;
 const root = () => path.join(home, "hivemind");

@@ -21,7 +21,7 @@ import { DEFAULT_NOTIFICATION_SETTINGS, normalizeNotificationSettings, type Noti
 
 export type WallpaperId =
   | "none" | "aurora" | "ember" | "ice" | "mesh" | "sunset" | "forest" | "nebula" | "mono"
-  | "shoal" | "koi" | "jellyfish" | "fireflies" | "image" | "video";
+  | "image" | "video";
 export type AccentId =
   | "graphite" | "indigo" | "volt" | "ember" | "ice" | "pulse" | "rose" | "emerald" | "amber" | "violet";
 export type MediaFit = "cover" | "contain" | "tile";
@@ -72,19 +72,9 @@ export const WALLPAPERS: { id: WallpaperId; label: string }[] = [
   { id: "forest", label: "Forest" },
   { id: "nebula", label: "Nebula" },
   { id: "mono",   label: "Mono" },
-  { id: "shoal",  label: "Shoal" },
-  { id: "koi",    label: "Koi Pond" },
-  { id: "jellyfish", label: "Jellyfish" },
-  { id: "fireflies", label: "Fireflies" },
   { id: "image",  label: "Photo" },
   { id: "video",  label: "Video" },
 ];
-
-/** The live wallpapers: scenes drawn in characters behind the canvas whose creatures are the agents
- *  (apps/desktop live/). A theme cannot name one yet: an app without it would refuse the theme. */
-export const LIVE_SCENES = ["shoal", "koi", "jellyfish", "fireflies"] as const satisfies readonly WallpaperId[];
-export type LiveSceneId = (typeof LIVE_SCENES)[number];
-export const isLiveScene = (id: WallpaperKind): id is LiveSceneId => (LIVE_SCENES as readonly WallpaperKind[]).includes(id);
 
 /** A live wallpaper a package holds (its `wallpapers`, `hivemind-wallpaper.json`), by its id:
  *  `@owner/package/<folder>`, as a theme's is. */
@@ -140,7 +130,8 @@ export interface Appearance {
     imageSrc?: string;
     /** Video brightness 0.4–1.1. */
     brightness: number;
-    /** A live scene in its own colours (water, coral, koi), not the theme's page and text. */
+    /** A live wallpaper that offers it (manifest `colour`) in its own colours, not the theme's
+     *  page and text. */
     colour: boolean;
   };
   terminal: TerminalPalette;

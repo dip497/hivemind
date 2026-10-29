@@ -1,21 +1,22 @@
 ---
 title: "Make a live wallpaper"
-description: "A scene behind your canvas whose creatures are your agents: build one, ship it in a package, publish it."
+description: "A scene that moves behind your canvas, drawing your agents if you like: build one, ship it in a package, publish it."
 ---
 
-Make a scene of your own that runs behind your canvas, with one creature for each of your agents,
-as Shoal's sharks are. You or your coding agent can take it from an idea to HiveHub with the
-`hive` command.
+Make a scene of your own that moves behind your canvas: a reef, a meadow at night, rain on a
+window. It can also draw your agents, one creature for each. You or your coding agent can take it
+from an idea to HiveHub with the `hive` command, or press **Make your own** under **Settings →
+Appearance → Background** and say what you want.
 
 <AgentPrompt description="Paste this into your coding agent to build a live wallpaper, use it as your background and publish it." page="live-wallpapers">{`
-Build a Hivemind live wallpaper (a scene drawn behind the canvas in a sandboxed frame, one creature for each of my agents) and, if I want, publish it on HiveHub.
+Build a Hivemind live wallpaper (a scene that moves behind the canvas, in a sandboxed frame) and, if I want, publish it on HiveHub.
 
-1. Ask me what the scene is: its world, what an agent's creature is, and what a creature does while its agent works, is ready, needs me, and rests. Ask its name (lowercase letters, digits and dashes).
+1. Ask me what the scene is: its world, what moves in it, and what the pointer does to it. Ask whether it should also draw my agents, one creature for each; if so, what a creature does while its agent works, is ready, needs me, and rests. Ask its name (lowercase letters, digits and dashes).
 2. Start it: \`hive plugins new wallpaper <name>\`. It writes a package of that name holding the wallpaper in \`wallpapers/<name>\`, with \`startup.wallpaper\` set. It takes the owner from the GitHub account \`gh\` is signed in as. If \`gh\` is not signed in, ask me for my GitHub login and pass \`--owner <login>\`. To add the wallpaper to a package I already have, pass \`--in <package>\` instead.
-3. Read \`PROMPT.md\` in full, and the two skills it copied into the package's \`.claude/skills/\`: hivemind-live-wallpaper (the contract) and ascii-character-animation (the craft). Write the scene in \`src/main.ts\` from them. The wallpaper has no network and no permissions. It is told each agent's creature (never a name), where the tiles are, the colours, whether to run, and the pointer and clicks over empty canvas.
+3. Read \`PROMPT.md\` in full, and the two skills it copied into the package's \`.claude/skills/\`: hivemind-live-wallpaper (the contract) and ascii-character-animation (the craft). Write the scene in \`src/main.ts\` from them. The wallpaper has no network and no permissions. It is told the colours, whether to run, the pointer and clicks over empty canvas, where the tiles are, and each agent's creature (never a name), which it may ignore.
 4. Where the starter's \`package.json\` is, run \`npm install\` once, then \`npm run build\` after each change, then \`hive plugins check <package>\`. It must say ok. It names the file and line of each problem, and loads the wallpaper in a headless browser to check it says ready and drawn and names only creatures it was sent.
 5. Install it: \`hive plugins install <package>\`. Ask me before changing my background. On a yes, run the command the install prints for it (\`--json\` gives it as startWallpaper), or \`hive config set appearance.wallpaper.kind '"<the wallpaper's id>"'\`. Its id is \`@owner/package/<folder>\`.
-6. Done means: it draws in my theme's two colours, light and dark; its creatures keep off my tiles; the creature of an agent that needs me goes to the open side of that agent's tile; it draws nothing on its own while held and one settled frame while still; and \`README.md\` says what it is.
+6. Done means: it moves on its own and answers the pointer; it reads well on a light theme and a dark one; my tiles' text stays readable over it; it draws nothing on its own while held and one settled frame while still; and \`README.md\` says what it is. If it draws my agents: their creatures keep off my tiles, and the creature of an agent that needs me goes to the open side of that agent's tile.
 7. Publish only if I say so. Commit the package with the wallpaper's \`dist/\`, push it to GitHub, and run \`hivehub publish <package>\`, as https://hivemind.griiken.com/guide/publish-to-hivehub.md says. If I must sign in, ask me to open the link and type the code myself.
 
 At the end, tell me the wallpaper's id, the command others use to install it (\`hive plugins install @owner/package\`), and anything you could not check.
@@ -24,8 +25,8 @@ At the end, tell me the wallpaper's id, the command others use to install it (\`
 ## What a live wallpaper is
 
 A live wallpaper is a small web page that the app runs behind the canvas, in a sandboxed frame,
-as it runs a [view](/extension-authoring). Shoal, Koi Pond, Jellyfish and Fireflies are the ones
-that come with the app ([how to pick one](/appearance)). Yours ships in a
+as it runs a [view](/extension-authoring). The **Live scenes** package holds four: Shoal, Koi
+Pond, Jellyfish and Fireflies ([how to pick one](/appearance)). Yours ships in a
 [package](/packages), and its id is `@owner/package/<folder>`.
 
 What it is told is less than a view is:
@@ -36,6 +37,10 @@ What it is told is less than a view is:
 - Where the tiles are on the screen, and whether they are see-through.
 - The colours to draw in, and whether to run, keep its last frame or show one settled frame.
 - The pointer and clicks over empty canvas, and a turn an agent finished well.
+
+A wallpaper uses as much of this as it wants. One that draws a world of its own, as the Live
+scenes do, ignores the creatures and the tiles: it answers the pointer and clicks in its own
+scene, and never says a creature is under the pointer.
 
 It is never told an agent's name, a folder, a command, a tile's own id or anything a terminal
 shows. It loads and fetches nothing from the network, has no permissions, never has the keyboard,
@@ -162,10 +167,11 @@ It is not drawn behind a view you installed, which lays its tiles out itself, no
     hive config set appearance.wallpaper.kind '"@<your login>/pond/pond"'
     ```
 
-    Or open **Settings → Appearance** and pick it under **Background**, after the built-in
-    scenes. Install again after each change.
+    Or open **Settings → Appearance** and pick it under **Background**, after the app's own
+    backgrounds. Install again after each change.
 
-    Check: your agents swim behind the canvas. Point at one and its agent's name shows.
+    Check: the scene moves behind the canvas. If it draws your agents, point at one and its
+    agent's name shows.
   </Step>
   <Step title="Publish it">
     Commit the package with the wallpaper's `dist/`, push it to GitHub, and run
@@ -204,7 +210,7 @@ creature it is from `kind`, so all of one program's agents look alike.
 
 ## The clock
 
-`wp.animate({ step, draw, settle })` runs your scene on the clock the built-in scenes use:
+`wp.animate({ step, draw, settle })` runs your scene on the app's clock:
 
 - `step(dt)` moves the scene on by 1/60 of a second, as many times as the time that passed needs
   (at most four a frame; a busy computer drops the rest). The scene moves at the same speed
@@ -218,8 +224,8 @@ The mode decides what runs:
 
 | Mode | When | What the clock does |
 |---|---|---|
-| `run` | the window is in use | steps and draws |
-| `hold` | the window is hidden, unfocused, idle or covered | nothing. It draws one frame again only when something it shows changes: the size, the look, the creatures or the tiles |
+| `run` | the window is in front, the person busy or resting their hands | steps and draws |
+| `hold` | the window is hidden, not in front, or covered | nothing. It draws one frame again only when something it shows changes: the size, the look, the creatures or the tiles |
 | `still` | the person turned off **Animate the background**, or the computer asks for reduced motion | one settled frame: `settle()` and one draw. Again only when something it shows changes |
 
 Its first frame is drawn at once, whatever the mode. Never start a timer or a
@@ -228,7 +234,9 @@ battery on a window nobody sees.
 
 ## Keep off the tiles
 
-Your agents' tiles sit over the scene, and their text must stay readable. Use `tiles`:
+Your tiles sit over the scene, and their text must stay readable: keep the scene quiet enough to
+read through, or keep its busy, bright parts out from under them. A wallpaper that draws your
+agents uses `tiles`:
 
 - Pick where a creature goes in the open water between the tiles, and a way there that does not
   pass under one.
@@ -252,23 +260,23 @@ takes `hover` only for a creature it sent.
 Every click on empty canvas comes as `click`. Its `id` is the creature the app opened, or `null`
 for open water: answer a click on open water in your scene, with a ripple or a scatter.
 
-The built-in scenes answer the pointer the same way.
+A wallpaper that draws no agents gives no `hitTest`: the app shows no name, and every click comes
+with `id` `null`.
 
 ## Colours
 
-- **Your theme's colours.** By default draw in `page` and `text` and the steps between them, so
-  the scene follows every theme. `dark` says which way round: light creatures on a dark page, or
-  ink on paper on a light one. Keep `attention`, the theme's colour for an agent that needs you,
-  for that alone.
-- **Its own colours.** With `"colour": true` in its manifest, Settings shows the **Colour** switch
-  for it, and `look.colour` says when the person turned it on. Then draw in your scene's own
-  colours: one set for a dark theme and one for a light one.
+- **Your theme's colours.** Draw in `page` and `text` and the steps between them, and the scene
+  follows every theme. `dark` says which way round: light on a dark page, or ink on paper on a
+  light one. Keep `attention`, the theme's colour for an agent that needs you, for that alone.
+- **Its own colours.** Or draw in colours of your own, one set for a dark theme and one for a
+  light one, as the Live scenes do. To let the person choose, put `"colour": true` in its
+  manifest: Settings then shows a **Colour** switch for it, and `look.colour` says when it is on.
 - **Characters.** `mono` is the terminals' font, as a CSS font list. It is the person's choice and
   may not be on this computer, so end it with a fallback: `` `${mono}, monospace` ``.
 - **Panel text over it.** With glass on, the Layers panel and the toolbars are frosted glass, and
   their text sits over your scene. Keep the scene dark enough on a dark theme, and light enough on
-  a light one, that the text reads over every part of it. Test it: the built-in scenes keep the
-  Layers panel's text at 7:1 and its secondary text at 4.5:1 over every point of their water.
+  a light one, that the text reads over every part of it. Test it: the Live scenes keep the
+  Layers panel's text at 7:1 and its secondary text at 4.5:1 over every point of their scenes.
 
 ## hivemind-wallpaper.json
 
