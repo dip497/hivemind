@@ -6,6 +6,7 @@ import type { ViewManifest } from "@hivemind/view-sdk/manifest";
 import type { ServiceState } from "@hivemind/host/services";
 import type { ActivityLevel, HostMessage, PluginMessage, ShareOutcome, SurfaceRect, ViewHistoryDay, ViewSession, ViewPresence, ViewStatus } from "@hivemind/view-sdk/protocol";
 import type { ViewScreen } from "@hivemind/workspace-api/views";
+import type { StartImage } from "@hivemind/workspace-api/agents";
 import type { NotificationSettings } from "./notification-settings.js";
 import type { RecentSound, SoundMoment, SoundResult } from "@hivemind/workspace-api/notifications";
 import type { ReviewComment } from "@hivemind/core/review";
@@ -803,6 +804,8 @@ export interface HiveIpc {
   installAgentic(dir: string): Promise<{ ok: boolean }>;
   /** `paste`: a message handed to the TUI as one block, not keystrokes. */
   ptyWrite(tileId: string, data: string, paste?: boolean): void;
+  /** A photo pasted into the terminal, kept on the machine its session runs on: its path. */
+  ptyPhoto(tileId: string, image: StartImage): Promise<{ path: string }>;
   /** Whether any view shows this terminal: bytes reach the renderer only while one does. */
   ptyInterest(tileId: string, shown: boolean): void;
   /** Send this terminal's screen again with `lines` of its scrollback. */
@@ -1023,6 +1026,8 @@ export interface ThemesInfo {
 export type HiveApi = HiveIpc & {
   /** Host OS, exposed synchronously so the first canvas can pick a shell. */
   platform: NodeJS.Platform;
+  /** This window is a browser tab the app serves: its clipboard is the viewer's, not the host's. */
+  inABrowserTab?: true;
   /** Main asks the renderer to run a control-plane canvas verb (HCP). */
   onHcpCommand: (cb: (cmd: HcpCommand) => void) => () => void;
   /** An agent pipe was created or removed. */

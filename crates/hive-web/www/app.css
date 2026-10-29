@@ -163,6 +163,7 @@ button { cursor: pointer; }
 .composer .attach .icon { width: 20px; height: 20px; }
 .photo-problem { margin: 0; padding: 0 8px; font: 400 13px/18px var(--sans); color: var(--err); }
 .pending .photos { justify-content: flex-end; }
+.said-person > .photos { margin: 3px -6px 8px; justify-content: flex-end; }
 .composer textarea::placeholder { color: var(--text3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .send {
   flex: none; width: 36px; height: 36px; border-radius: 50%; border: 0; padding: 0;
@@ -562,10 +563,13 @@ button { cursor: pointer; }
   border: 1px solid var(--line); border-radius: 16px; background: var(--card);
 }
 .dock .slash-command {
-  display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-height: 44px; padding: 10px 14px;
+  flex: none; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-height: 44px; padding: 10px 14px;
   border: 0; border-bottom: 1px solid var(--line); background: none; color: var(--text); text-align: left;
 }
 .dock .slash-command:last-child { border-bottom: 0; }
 .dock .slash-command:active { background: var(--raised); }
 .dock .slash-command .label { font: 500 15px/20px var(--mono); }
-.dock .slash-command .description { font: 13px/18px var(--sans); color: var(--text2); }
+.dock .slash-command .description {
+  font: 13px/18px var(--sans); color: var(--text2);
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden;
+}

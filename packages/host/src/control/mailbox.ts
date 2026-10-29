@@ -51,6 +51,11 @@ const IDLE_SETTLE_MS = 250;
  *  held message is typed: typed sooner, it lands in the turn that is starting. */
 const SUBMIT_SETTLE_MS = 2000;
 
+/** How long after a message's Enter its turn has to begin, else the Enter is pressed again, at
+ *  most this many times: an agent still attaching a pasted photo drops the Enter. */
+const ENTER_CHECK_MS = 600;
+const ENTER_TRIES = 4;
+
 /** After the person's last key, how long before a held message looks at the prompt again. */
 const TYPING_SETTLE_MS = 1000;
 
@@ -115,6 +120,8 @@ export class Mailbox {
   private reading = new Map<string, boolean>();
   /** Tiles whose last message's Enter is still to come, and the messages typed after it. */
   private submitting = new Map<string, string[][]>();
+  /** Tiles whose message's Enter was pressed and whose turn has not been seen to begin. */
+  private entered = new Set<string>();
 
   constructor(
     /** Raw write into a tile's pty. `paste` = a message handed over as one block, not
@@ -147,6 +154,7 @@ export class Mailbox {
     this.busy.add(ptyId);
     this.draft.delete(ptyId); // a turn began: whatever was in the composer was sent
     this.typedSinceTurn.delete(ptyId);
+    this.entered.delete(ptyId);
     // A release waiting on the person's Enter would outlast this turn's end.
     const t = this.releaseTimer.get(ptyId);
     if (t) clearTimeout(t);
@@ -163,6 +171,7 @@ export class Mailbox {
    */
   typed(ptyId: string, data: string, paste = false, answers = false): void {
     this.typedAt.set(ptyId, Date.now());
+    this.entered.delete(ptyId);
     if (answers) return;
     if (data[0] !== "\x1b") this.typedSinceTurn.add(ptyId);
     // A line and the key that sends it can come in one write (a pasted line, a phone's): only
@@ -266,6 +275,7 @@ export class Mailbox {
     this.waking.delete(ptyId);
     this.reading.delete(ptyId);
     this.submitting.delete(ptyId);
+    this.entered.delete(ptyId);
     this.cancelRelease(ptyId);
   }
 
@@ -355,6 +365,7 @@ export class Mailbox {
     this.submitting.set(ptyId, []);
     const t = setTimeout(() => {
       this.write(ptyId, "\r");
+      this.checkEntered(ptyId, ENTER_TRIES);
       const waiting = this.submitting.get(ptyId) ?? [];
       this.submitting.delete(ptyId);
       let next: string[] | undefined;
@@ -363,5 +374,24 @@ export class Mailbox {
     }, this.submitDelayMs);
     t.unref?.();
     return true;
+  }
+
+  /** The Enter of the message last typed sent it, as its turn beginning says; while its words
+   *  still wait at the prompt instead, it is pressed again. */
+  private checkEntered(ptyId: string, tries: number): void {
+    if (!this.signalsTurns(ptyId)) return;
+    this.entered.add(ptyId);
+    const t = setTimeout(async () => {
+      if (!this.entered.has(ptyId) || this.submitting.has(ptyId)) return;
+      const empty = await this.promptEmpty(ptyId);
+      if (!this.entered.has(ptyId) || this.submitting.has(ptyId)) return;
+      if (empty !== false || tries <= 1) {
+        this.entered.delete(ptyId);
+        return;
+      }
+      this.write(ptyId, "\r");
+      this.checkEntered(ptyId, tries - 1);
+    }, ENTER_CHECK_MS);
+    t.unref?.();
   }
 }

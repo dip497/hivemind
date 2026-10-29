@@ -250,6 +250,30 @@ test("typing / offers the agent's commands, those that start as typed first, eac
   expect(asked).toEqual([["commands", "t1"]]);
 });
 
+test("commands with long descriptions, more than the list has room for: each row holds its own words, two lines of what it does at most, and the list scrolls", async () => {
+  test.skip(!built(), "no page build: run crates/hive-web/build.sh");
+  const page = await screen();
+  const long = "Add a new coding agent end to end, from research on the real binary to one manifest published to the registry, with its hooks, its sessions and its tests";
+  await page.evaluate((d) => { (window as unknown as { commands: unknown }).commands = Array.from({ length: 8 }, (_, i) => ({ name: `step-${i}`, description: d, from: "yours" })); }, long);
+  await show(page, overview(agent("t1", "Phone test")));
+  await open(page, "t1");
+  await page.locator("[data-message] textarea").fill("/");
+  const offered = page.locator("[data-commands] [data-command]");
+  await expect(offered).toHaveCount(8);
+  const rows = await offered.evaluateAll((els) => els.map((el) => {
+    const r = el.getBoundingClientRect();
+    const d = el.querySelector(".description")!.getBoundingClientRect();
+    return { top: r.top, bottom: r.bottom, words: d.bottom, lines: Math.round(d.height / 18) };
+  }));
+  for (const [i, r] of rows.entries()) {
+    expect(r.words).toBeLessThanOrEqual(r.bottom);
+    expect(r.lines).toBe(2);
+    if (i > 0) expect(r.top).toBeGreaterThanOrEqual(rows[i - 1]!.bottom - 1);
+  }
+  const list = await page.locator("[data-commands]").evaluate((el) => ({ scrolls: el.scrollHeight > el.clientHeight }));
+  expect(list.scrolls).toBe(true);
+});
+
 test("in its terminal, which shows the chooser itself, a waiting agent's card is put away and its header still says it waits; back in its chat the card is as it was", async () => {
   test.skip(!built(), "no page build: run crates/hive-web/build.sh");
   const page = await screen();

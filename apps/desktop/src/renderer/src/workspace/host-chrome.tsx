@@ -27,7 +27,9 @@ import type { BoardChoice } from "../board-objects/board-model";
 export interface HostChromeProps {
   chrome: ViewChrome;
   toolbar?: ToolbarPreferences;
-  repoPath: string | null;
+  /** Whether a tool that works in a folder has one where it would open: in that frame, or else
+   *  where a tile from the toolbar goes. */
+  hasFolder: (frameId?: string) => boolean;
   agentSel: string | undefined;
   onAgentChange: (id: string) => void;
   onSpawnAgent: (agent: { id: string; cmd: string; defaultArgs?: string[]; label: string }) => void;
@@ -74,7 +76,7 @@ export function HostChrome({ chrome, toolbar, ...island }: HostChromeProps) {
     <>
       {/* Wherever it is asked for, with or without a toolbar. */}
       <ViewMenuAt />
-      {island.onBoard && <AddDialog repoPath={island.repoPath} onBoard={island.onBoard} onTile={island.onTile} boardItems={!!island.boardItems} />}
+      {island.onBoard && <AddDialog hasFolder={island.hasFolder} onBoard={island.onBoard} onTile={island.onTile} boardItems={!!island.boardItems} />}
       {showIsland && (
         <div
           className={`pointer-events-none absolute left-1/2 z-(--layer-panels) w-max max-w-[calc(100vw-24px)] -translate-x-1/2 ${placement}`}

@@ -58,6 +58,7 @@ const LEAST: Record<string, Role> = {
   "terminal.write": "terminals",
   "terminal.resize": "terminals",
   "terminal.fit": "terminals",
+  "terminal.photo": "terminals",
   "terminal.keyboard.ask": "terminals",
   "terminal.keyboard.give": "terminals",
   // Answering what an agent waits on (a plan, a supervised tool use, its screen), and sending one

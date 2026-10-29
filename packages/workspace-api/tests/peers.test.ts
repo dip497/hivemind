@@ -45,7 +45,7 @@ const domain = {
     "agent.answer": (from: Connection, tile: unknown) => { ran.push({ what: "agent.answer", by: from.actor, args: [tile] }); return { answered: true }; },
     "agent.send": (from: Connection, tile: unknown) => { ran.push({ what: "agent.send", by: from.actor, args: [tile] }); return { sent: true }; },
     ...Object.fromEntries(["agent.startable", "agent.start", "agent.interrupt", "agent.close", "agent.diff", "agent.commands", "agent.conversation", "agent.tool", "agent.places", "agent.folders",
-      "agent.rename", "agent.keys", "agent.read", "agent.output", "agent.sessions", "agent.sleep", "agent.wake", "terminal.saved", "tool.open", "link.connect", "link.disconnect", "plugin.call", "host.join", "tools.rescan", "tile.focus", "tile.look", "tile.watchLines", "tile.readLines", "notifications.play", "notifications.recentSounds"].map((what) => [
+      "agent.rename", "agent.keys", "agent.read", "agent.output", "agent.sessions", "terminal.photo", "agent.sleep", "agent.wake", "terminal.saved", "tool.open", "link.connect", "link.disconnect", "plugin.call", "host.join", "tools.rescan", "tile.focus", "tile.look", "tile.watchLines", "tile.readLines", "notifications.play", "notifications.recentSounds"].map((what) => [
       what, (from: Connection, at: unknown) => { ran.push({ what, by: from.actor, args: [at] }); return {}; },
     ])),
     // A view opened for the caller: what it is let do there is what the caller may call.
@@ -119,6 +119,9 @@ test("what may be started in its workspace, what an agent changed and a tool it 
   await driver.client.call("agent.start", workspaceUrl(W), { program: "claude" });
   await driver.client.call("agent.interrupt", "in-1");
   await driver.client.call("agent.close", "in-1");
+  await driver.client.call("terminal.photo", "in-1", { type: "image/png", data: "" });
+  expect(await code(driver.client.call("terminal.photo", "out-1", { type: "image/png", data: "" }))).toBe("NOT_FOUND");
+  expect(await code(viewer.client.call("terminal.photo", "in-1", { type: "image/png", data: "" }))).toBe("FORBIDDEN");
   expect(await code(driver.client.call("agent.start", "/work/other", { program: "claude" }))).toBe("FORBIDDEN");
   expect(await code(driver.client.call("agent.startable", "/work/other"))).toBe("FORBIDDEN");
   await driver.client.call("agent.places", workspaceUrl(W));
@@ -131,6 +134,7 @@ test("what may be started in its workspace, what an agent changed and a tool it 
     { what: "agent.start", by: driver.actor, args: [REPO] },
     { what: "agent.interrupt", by: driver.actor, args: ["in-1"] },
     { what: "agent.close", by: driver.actor, args: ["in-1"] },
+    { what: "terminal.photo", by: driver.actor, args: ["in-1"] },
     { what: "agent.places", by: driver.actor, args: [REPO] },
     { what: "agent.folders", by: driver.actor, args: [REPO] },
   ]);

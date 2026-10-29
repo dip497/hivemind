@@ -900,6 +900,12 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
     const f = framesRef.current.find((x) => x.id === frameId);
     return f?.worktreePath ?? f?.workspacePath ?? repoPathRef.current ?? null;
   }, []);
+  // Where spawnInto puts a tile: the frame in use, else one asked for among them all.
+  const hasFolder = useCallback((frameId?: string): boolean => {
+    const at = frameId ?? userFrame;
+    if (at && frames.some((f) => f.id === at)) return !!repoOfFrame(at);
+    return !!repoPath || frames.some((f) => !!(f.worktreePath ?? f.workspacePath));
+  }, [userFrame, frames, repoPath, repoOfFrame]);
   const frameActions = useMemo(() => ({
     onOpenInFrame: (frameId: string, kind: string, launch?: Record<string, string>) => frameOpen(frameId, kind, launch),
     onCreateWorktree,
@@ -1376,7 +1382,7 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
         key={`${activeViewId}:${chrome.island}`}
         chrome={chrome}
         toolbar={activeViewId ? settings.views.toolbars[activeViewId] : undefined}
-        repoPath={repoPath}
+        hasFolder={hasFolder}
         agentSel={agentSel}
         onAgentChange={setAgentSel}
         onSpawnAgent={spawnAgent}
@@ -1416,6 +1422,7 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
           rows={frames
             .filter((f) => !f.parentFrameId)
             .flatMap((p) => [p, ...frames.filter((c) => c.parentFrameId === p.id)])
+            .filter((f) => !tileKind(spawnPick.kind).needsRepo || !!repoOfFrame(f.id))
             .map((f) => ({
               id: f.id, label: f.title, indent: !!f.parentFrameId,
               icon: <span aria-hidden className="size-2 rounded-full" style={{ background: f.color }} />,

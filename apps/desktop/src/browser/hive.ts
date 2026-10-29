@@ -95,6 +95,7 @@ export async function connectHive(url: string, token: string, onClose: (code: nu
   return {
     ...hive,
     platform: platform as NodeJS.Platform,
+    inABrowserTab: true,
     resourceUrl: (url) => tabUrl(url, viewsKey),
     ptySpawn: (opts) => {
       taken.set(opts.tileId, 0);

@@ -10,7 +10,8 @@ import { installCrispDpr } from "./terminal-dpr";
 import { drawnSize, nextPtySize, resizeBurst, scaleToFit, type PtySize } from "./pty-size-sync";
 import { oscColorReply } from "./osc-color";
 import { answerThemeNotify, colorFgBg, isDarkBackground, ThemeNotify } from "./theme-notify";
-import { takeClipboardWrites } from "./terminal-clipboard";
+import { COPY_AFTER_INPUT_MS, pastedPhoto, takeClipboardWrites } from "./terminal-clipboard";
+import { toast } from "sonner";
 import { patchTerminalMouseWithRetry } from "./terminal-mouse-patch";
 import { wantsDomRenderer } from "./terminal-renderer-policy";
 import { registerWebglSlotClient, unregisterWebglSlotClient, reconcileWebglSlots } from "./webgl-slots";
@@ -835,6 +836,8 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
       const detail = signal !== undefined && signal !== null ? `killed by signal ${signal}` : undefined;
       setStatus("exited", { exitCode: code, ...(signal != null ? { signal } : {}), detail });
     });
+    /** When this window last gave the session a key, a click or a paste. */
+    let inputAt = 0;
     term.onData((d) => {
       // Someone else has the keyboard: this window's keys (and its terminal's replies) are not the
       // session's. The pill says who has it.
@@ -850,6 +853,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
         return;
       }
       starting.touch(); // the person is driving now: nothing is sent for them
+      inputAt = Date.now();
       window.hive.ptyWrite(ptyId, d);
     });
     term.onResize(() => syncPtySize());
@@ -865,8 +869,26 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
     // Mode 2031: the program asks to hear when the background goes light or dark, or asks now. One
     // for this mount, the restarts in it too; a later mount learns the mode from the replay.
     answerThemeNotify(term.parser, notify, (reply) => { if (kbRef.current.mayType) window.hive.ptyWrite(ptyId, reply); });
-    // What the program copies (Claude Code's mouse selection): only while the person is at this terminal.
-    takeClipboardWrites(term.parser, () => !!selectedRef.current && !!kbRef.current.mayType, (text) => { void navigator.clipboard.writeText(text).catch(() => {}); });
+    // What the program copies (Claude Code's mouse selection): only while the person is at this
+    // terminal, and on the screen whose input made it: another showing the session is left alone.
+    takeClipboardWrites(term.parser, () => !!selectedRef.current && !!kbRef.current.mayType && Date.now() - inputAt < COPY_AFTER_INPUT_MS,
+      (text) => { void navigator.clipboard.writeText(text).catch(() => {}); });
+    // A photo pasted is kept where the session runs and its path pasted, which an agent attaches:
+    // a browser tab's clipboard is not on that machine, and a terminal pastes no pictures itself.
+    const pastePhoto = (e: ClipboardEvent): void => {
+      if (!e.clipboardData?.files.length || e.clipboardData.getData("text/plain")) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (!kbRef.current.mayType) return;
+      void pastedPhoto(e.clipboardData)
+        .then((photo) => photo && window.hive.ptyPhoto(ptyId, photo))
+        .then((kept) => {
+          if (!kept) return;
+          inputAt = Date.now();
+          window.hive.ptyWrite(ptyId, kept.path, true);
+        }, (err: unknown) => toast.error("The photo was not pasted", { description: err instanceof Error ? err.message : String(err) }));
+    };
+    host.addEventListener("paste", pastePhoto, true);
     // Clipboard COPY only. xterm doesn't copy on its own (Ctrl+C just sends
     // SIGINT): Cmd/Ctrl(+Shift)+C copies the selection (and clears it, so a
     // second press still sends SIGINT); plain Ctrl+C with NOTHING selected falls
@@ -885,6 +907,9 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
         e.preventDefault();
         return false;
       }
+      // In a browser tab, Ctrl+V is the browser's own paste, of the viewer's clipboard: the program's
+      // own Ctrl+V would read the clipboard of the machine it runs on.
+      if (window.hive.inABrowserTab && e.ctrlKey && !e.shiftKey && !e.altKey && !e.metaKey && e.key.toLowerCase() === "v") return false;
       for (const action of actionsFor(e, "terminal", IS_MAC)) {
         if (!runTerminalKey(action)) continue;
         e.preventDefault();
@@ -1176,6 +1201,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
       // tile is still open. Closing one drops it (Workspace.closeTile).
       ro.disconnect();
       io.disconnect();
+      host.removeEventListener("paste", pastePhoto, true);
       burst.cancel();
       window.removeEventListener("focus", recover);
       document.removeEventListener("visibilitychange", onVisible);

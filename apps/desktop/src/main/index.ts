@@ -1202,6 +1202,11 @@ const terminals = new Terminals({
   machineOf: terminalMachine,
   folderOf: (bare) => sessionFolder(heldBoards(workspaceStore()), bare),
   conversationAsleep: (opts) => control.conversationAsleep(opts.tileId, opts.args ?? []),
+  keepPhoto: async (bare, photo) => {
+    const folder = runsIn(heldBoards(workspaceStore()), bare);
+    if (folder === null) throw new ApiError("NOT_FOUND", `no tile ${bare} is open`);
+    return (await placesHere.keep(folder, [photo], bare))[0]!;
+  },
   onError: (m) => console.warn(`[terminals] ${m}`),
   backend: {
     start: startSession,
