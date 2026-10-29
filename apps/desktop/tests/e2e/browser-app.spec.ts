@@ -1,6 +1,6 @@
 // Settings → Advanced → In a browser: the app serves itself to a browser tab on 127.0.0.1, and
 // the tab is the app — its canvas, a shell typed into and its echo, a board's note and a plugin's
-// widget pressed, a view plugin shown — over the link the page shows. Without that link's key the
+// widget pressed, a view plugin shown, a package's live wallpaper drawn — over the link the page shows. Without that link's key the
 // port gives nothing, and a view in the tab reaches neither the tab's cookie nor its socket.
 import { test, expect, chromium, type Browser, type Frame, type Page } from "@playwright/test";
 import { execFileSync } from "node:child_process";
@@ -45,6 +45,7 @@ test.beforeAll(async () => {
   fs.writeFileSync(path.join(counter, "widget.js"), COUNTER);
   installPlugin(xdg, counter);
   installPlugin(xdg, path.join(process.cwd(), "tests/e2e/fixtures/views/widget-viewer"));
+  installPlugin(xdg, path.join(process.cwd(), "tests/e2e/fixtures/wallpapers/pond"));
   const env: Record<string, string | undefined> = { ...process.env, XDG_CONFIG_HOME: xdg };
   delete env.ELECTRON_RUN_AS_NODE;
   app = await launchWindow({ cwd: repo, env, args: [`--user-data-dir=${path.join(root, "ud")}`] });
@@ -206,6 +207,16 @@ test("a view in the tab reaches neither the tab's cookie nor its socket, and its
   }), `ws://127.0.0.1:${port}/socket`)).not.toBe("open");
   expect(await frame.evaluate(() => fetch("/").then((r) => `fetched ${r.status}`, () => "blocked"))).toBe("blocked");
   await tab.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:set-view-mode", { detail: { mode: "canvas" } })));
+});
+
+test("a package's live wallpaper draws in the tab, from its own path, and reaches neither the tab's cookie nor its socket", async () => {
+  await tab.evaluate(() => window.hive.settingsSet("appearance.wallpaper.kind", "@e2e/pond/dots"));
+  await expect(tab.locator('.hm-live-frame[data-drawn][data-wallpaper="@e2e/pond/dots"]')).toBeVisible({ timeout: 15_000 });
+  const frame = tab.frame({ name: "hm-wallpaper:@e2e/pond/dots" })!;
+  expect(new URL(frame.url()).pathname).toMatch(/^\/hm-view\/[\w-]{43}\/wp-[0-9a-f]{32}\//);
+  expect(await frame.evaluate(() => { try { return `read: ${document.cookie}`; } catch (e) { return (e as Error).name; } })).toBe("SecurityError");
+  expect(await frame.evaluate(() => fetch("/").then((r) => `fetched ${r.status}`, () => "blocked"))).toBe("blocked");
+  await tab.evaluate(() => window.hive.settingsSet("appearance.wallpaper.kind", "mono"));
 });
 
 test("a browser tile's page in the tab is the app window's own: it shows there, and a click and typing in the tab reach it", async () => {
