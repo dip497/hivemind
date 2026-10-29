@@ -1,17 +1,17 @@
 ---
 title: "Packages"
-description: "Put your tools, widgets, views and themes in one package, check it, install it and publish it on HiveHub, all from the hive command."
+description: "Put your tools, widgets, views, themes and live wallpapers in one package, check it, install it and publish it on HiveHub, all from the hive command."
 ---
 
-A package puts your own tools, widgets, views and themes in one box that installs, switches on, updates
-and rolls back as one. You or your agent can write one from the `hive` command alone, from the
-first folder to its page on HiveHub.
+A package puts your own tools, widgets, views, themes and live wallpapers in one box that installs,
+switches on, updates and rolls back as one. You or your agent can write one from the `hive`
+command alone, from the first folder to its page on HiveHub.
 
 <AgentPrompt description="Paste this into your coding agent to build a package of your own Hivemind tools, widgets and views." page="packages">{`
 Build a Hivemind package that does what I describe, using the hive command.
 
 1. Run \`hive plugins new package <name>\`. If it asks for an owner, ask me for my GitHub login and pass \`--owner <login>\`. Read the PROMPT.md it writes in the new folder: it holds the whole guide.
-2. Add each member I asked for: \`hive plugins new tool <name> --in <package>\`, \`hive plugins new widget <name> --in <package>\`, \`hive plugins new view <name> --in <package>\` or \`hive plugins new theme <name> --in <package>\`. Read each member's PROMPT.md before writing its code. For a view, run \`npm install\` in its folder once. A theme is one theme.json, described at https://hivemind.griiken.com/guide/packages.md#themes.
+2. Add each member I asked for: \`hive plugins new tool <name> --in <package>\`, \`hive plugins new widget <name> --in <package>\`, \`hive plugins new view <name> --in <package>\`, \`hive plugins new theme <name> --in <package>\` or \`hive plugins new wallpaper <name> --in <package>\` (a live wallpaper, described at https://hivemind.griiken.com/guide/live-wallpapers.md). Read each member's PROMPT.md before writing its code. For a view or a live wallpaper, run \`npm install\` once where its \`package.json\` is. A theme is one theme.json, described at https://hivemind.griiken.com/guide/packages.md#themes.
 3. Run \`hive plugins check <package>\` after each change, and fix every problem it reports at its file and line until it says ok.
 4. Run \`hive plugins install <package>\`. If it says the package is off, tell me and ask me to switch it on with \`hive plugins enable <package id>\`: only I decide to trust code.
 5. Open each member with \`hive ctl plugin open <kind>:<id>\`, and look at a tool's tile with \`hive ctl tile look <tile>\`. To show me a theme, ask me first, then run \`hive theme use <package id>/<theme>\`; \`hive theme revert\` puts my look back.
@@ -29,6 +29,10 @@ At the end, tell me what the package holds and what each member asks for. Do not
   version and a rollback.
 - Package → **HiveHub**: `hivehub publish` lists the whole box, with every member and what it
   asks for.
+
+A package can also hold **live wallpapers**, scenes behind the canvas whose creatures are your
+agents. Each is a folder with a `hivemind-wallpaper.json`, named under `wallpapers`, and its id is
+`@you/kit/<folder>`, as a theme's is. How to make one: [Make a live wallpaper](/live-wallpapers).
 
 Which packages arrive switched off, and which updates need your trust again, are in
 [Plugins](/plugins#packages).
@@ -48,16 +52,18 @@ Which packages arrive switched off, and which updates need your trust again, are
     the package's owner:
 
     ```bash
-    hive plugins new tool prs --in kit      # kit/tools/prs
-    hive plugins new widget dog --in kit    # kit/widgets/dog
-    hive plugins new view board --in kit    # kit/views/board, named by its dist/
-    hive plugins add ../counter --to kit    # copied to kit/widgets/counter
+    hive plugins new tool prs --in kit        # kit/tools/prs
+    hive plugins new widget dog --in kit      # kit/widgets/dog
+    hive plugins new view board --in kit      # kit/views/board, named by its dist/
+    hive plugins new wallpaper pond --in kit  # kit/wallpapers/pond
+    hive plugins add ../counter --to kit      # copied to kit/widgets/counter
     ```
 
     `add` takes one you already wrote. It refuses a plugin whose id is not yours (`@you/<name>`), and changes nothing. Each new
     member has its own `PROMPT.md` with the guide of its kind: [tools](/tool-plugins),
-    [widgets](/widgets) or [views](/extension-authoring). For a view, run `npm install` in its
-    folder once.
+    [widgets](/widgets), [views](/extension-authoring) or
+    [live wallpapers](/live-wallpapers). For a view or a live wallpaper, run `npm install` once
+    where its `package.json` is.
   </Step>
   <Step title="Check it">
     ```bash
@@ -118,6 +124,11 @@ Which packages arrive switched off, and which updates need your trust again, are
     you arranged it.
     So the install's `next` does not list them: `hive ctl plugin open widget:…` adds another copy,
     over every view.
+
+    To offer one of its live wallpapers as the background, name it the same way:
+    `"startup": { "wallpaper": "@you/kit/pond" }`. It must be one of the package's own. The app
+    offers it once, and never switches without you; `--json` gives the command as
+    `startWallpaper`. See [Make a live wallpaper](/live-wallpapers#ship-it-in-a-package).
   </Step>
   <Step title="Update it">
     Change a member, raise `version` in `hivemind-package.json`, check, and install again. When a
@@ -146,8 +157,9 @@ Which packages arrive switched off, and which updates need your trust again, are
 ## Themes
 
 A theme is a member that changes how the app looks: colours, an accent, and if you like terminal
-colours, corners, fonts and a wallpaper. It holds no code, so a package of only themes, views and
-widgets arrives switched on. How people apply one is in [Change how Hivemind looks](/appearance#themes).
+colours, corners, fonts and a wallpaper. It holds no code, so a package of only themes, views,
+widgets and live wallpapers arrives switched on. How people apply one is in
+[Change how Hivemind looks](/appearance#themes).
 
 A theme is a folder in the package holding `theme.json`, named in `hivemind-package.json` (at most
 8 in a package):
