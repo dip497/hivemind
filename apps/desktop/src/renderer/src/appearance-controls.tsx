@@ -258,6 +258,7 @@ const SCENES: Record<LiveSceneId, { mark: string; creatures: string }> = {
   shoal: { mark: "   .;%.\n-:t%S8@8%>\n   ';t'", creatures: "Sharks" },
   koi: { mark: "   .%%.\n><%S@S%o)\n   '%%'", creatures: "Koi" },
   jellyfish: { mark: " .-~~-.\n(:o@o:)\n )|(|( ", creatures: "Jellies" },
+  fireflies: { mark: "  .   \\/   *\n     .@#   .\n'v|/'|l'Y'v|", creatures: "Fireflies" },
 };
 
 /** Filename of a picked media URL, for the "currently using" line. */

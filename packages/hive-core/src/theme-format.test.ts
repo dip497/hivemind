@@ -83,6 +83,7 @@ describe("checkTheme", () => {
     ["Shoal, which a theme cannot name yet", { wallpaper: { kind: "shoal" } }, /wallpaper.kind is one of/],
     ["Koi Pond, which a theme cannot name yet", { wallpaper: { kind: "koi" } }, /wallpaper.kind is one of/],
     ["Jellyfish, which a theme cannot name yet", { wallpaper: { kind: "jellyfish" } }, /wallpaper.kind is one of/],
+    ["Fireflies, which a theme cannot name yet", { wallpaper: { kind: "fireflies" } }, /wallpaper.kind is one of/],
     ["brightness out of range", { wallpaper: { kind: "mono", brightness: 2 } }, /brightness is from 0.4 to 1.1/],
     ["a sound of the wrong type", { sounds: { error: "wallpaper.webp" } }, /is not a sound/],
     ["a moment it does not have", { sounds: { hello: "sounds/needs.ogg" } }, /no moment hello/],

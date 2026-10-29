@@ -10,7 +10,7 @@
  */
 import { angleDiff, clamp, rand } from "../math";
 import type { Box, Mood } from "../scene";
-import { openPoint } from "../steer";
+import { covered, openPoint } from "../steer";
 import { JELLY_SHAPES, type JellyKind, type JellyShape } from "./kinds";
 
 /** One agent's jelly: `key` is its tile, `size` is relative to the biggest. */
@@ -247,18 +247,29 @@ export class Swarm {
   }
 
   /** Where a jelly whose agent needs you holds: over its agent's tile, its tentacles just above
-   *  the tile's top edge, or beside it when there is no room above. Null when the tile is not in
-   *  sight. */
+   *  the tile's top edge; or, where that is out of the window or under another tile, beside it on
+   *  one side or the other, or under it. Null when the tile is not in sight. */
   private holdBy(j: Jelly) {
     const tile = this.tileBox.get(j.key);
     if (!tile) return null;
     const L = j.length;
+    const w = j.shape.w * L;
+    const h = j.shape.h * L;
     const hang = Math.max(j.shape.reach, j.shape.armReach) * L;
-    const above = tile.y0 - hang - L * 0.15;
-    const top = j.shape.h * L + 8;
-    if (above > top) return { x: clamp((tile.x0 + tile.x1) / 2, j.shape.w * L, this.width - j.shape.w * L), y: above };
-    const side = tile.x0 > this.width - tile.x1 ? tile.x0 - j.shape.w * L * 1.6 : tile.x1 + j.shape.w * L * 1.6;
-    return { x: clamp(side, j.shape.w * L, this.width - j.shape.w * L), y: clamp((tile.y0 + tile.y1) / 2, top, this.height - hang) };
+    const { width: W, height: H } = this;
+    const mid = (tile.x0 + tile.x1) / 2;
+    const middle = (tile.y0 + tile.y1) / 2;
+    const roomy = tile.x0 > W - tile.x1;
+    const spots = [
+      { x: mid, y: tile.y0 - hang - L * 0.15 },
+      { x: roomy ? tile.x0 - w * 1.6 : tile.x1 + w * 1.6, y: middle },
+      { x: roomy ? tile.x1 + w * 1.6 : tile.x0 - w * 1.6, y: middle },
+      { x: mid, y: tile.y1 + h + L * 0.2 },
+    ];
+    const others = this.boxes.filter((b) => b !== tile && b.key !== j.key);
+    const fits = (p: { x: number; y: number }) => p.x > w && p.x < W - w && p.y > h + 8 && p.y < H - hang && !covered(others, p.x, p.y - h / 2, w * 0.8);
+    const spot = spots.find(fits) ?? spots[1]!;
+    return { x: clamp(spot.x, w, W - w), y: clamp(spot.y, h + 8, H - hang) };
   }
 
   step(dt: number) {

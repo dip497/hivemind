@@ -54,7 +54,7 @@ export class Seabed {
       at.set(r * cols + c, { c, r, glyph, colour, block });
     };
     /** Where the bed's top is in each column: what stands on it stands here. */
-    const ground = new Array<number>(cols).fill(bottom);
+    const ground = Array.from({ length: cols }, () => bottom);
     const stand = (c: number) => ground[Math.max(0, Math.min(cols - 1, c))]! - 1;
 
     // The sand: the bottom row whole, low dunes over it.

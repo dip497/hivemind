@@ -7,6 +7,7 @@
 import type { LiveSceneId } from "@hivemind/core/settings-schema";
 import type { WaterLook } from "./backdrop";
 import { css, rgbOf } from "./colour";
+import { FIREFLY_PALETTE } from "./fireflies/palette";
 import { JELLY_PALETTE } from "./jelly/palette";
 import { KOI_PALETTE } from "./koi/palette";
 import { SHOAL_PALETTE } from "./shoal/palette";
@@ -21,6 +22,7 @@ export const WATERS: Record<LiveSceneId, { dark: WaterLook; light: WaterLook }> 
   shoal: SHOAL_PALETTE,
   koi: KOI_PALETTE,
   jellyfish: JELLY_PALETTE,
+  fireflies: FIREFLY_PALETTE,
 };
 
 /** The characters of a scene's swatch in Settings over its water: pale on dark water, deep on

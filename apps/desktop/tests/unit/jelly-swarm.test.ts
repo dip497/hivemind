@@ -59,6 +59,20 @@ test("a jelly whose agent needs you comes up over its tile and holds there, its 
   }
 });
 
+test("with no room over its tile, and another tile on one side, a jelly holds on the open side", () => {
+  // Its tile along the top, another just left of it: it holds to the right.
+  const tile: Box = { x0: 700, y0: 0, x1: 1000, y1: 220, key: "t" };
+  const other: Box = { x0: 380, y0: 0, x1: 690, y1: 220 };
+  const s = sea([spec("t", "cruise")], [tile, other], 5);
+  run(s, 2);
+  s.setRoster([spec("t", "surface")]);
+  run(s, 16);
+  const j = s.jellies[0]!;
+  let right = 0;
+  run(s, 6, () => { if (j.x > tile.x1 && j.x < tile.x1 + j.length * 2 && j.y < tile.y1 + j.length) right++; });
+  assert.ok(right / 360 > 0.9, `beside its tile, on the right, ${((right / 360) * 100).toFixed(0)}% of the time (at ${j.x.toFixed(0)}, ${j.y.toFixed(0)})`);
+});
+
 test("a jelly whose agent rests stays low; one at work roams the water", () => {
   for (const seed of [1, 2, 3, 4]) {
     const s = sea([spec("r", "rest")], [], seed);
