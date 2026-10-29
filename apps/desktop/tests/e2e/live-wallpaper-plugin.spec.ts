@@ -4,7 +4,7 @@
 // its agent and a click there goes to its tile, on the app's own scenes too. A wallpaper that names
 // creatures it was never sent is turned off for the session, the plain background showing instead;
 // one that says a creature is under the pointer while the pointer is over a tile is not heard; one
-// that takes the keyboard is turned off, the terminal that had it getting it back; a package switched
+// that takes the keyboard is turned off, what had the keyboard getting it back; a package switched
 // off stops its wallpaper in every window; and a view the repository ships named like a wallpaper's
 // origin is never served there.
 import { test, expect, _electron as electron, type ElectronApplication, type Frame, type Page } from "@playwright/test";
@@ -118,6 +118,9 @@ test("offered once as the background, Use draws it, told each agent's creature a
   const offer = page.locator('[data-start-view-offer="@e2e/pond"]');
   await expect(offer).toContainText("Pond is installed. Use Dots as your background?");
   await shot("1-offer");
+  // The repository's views are listed before the wallpaper's frame loads, the impostor among them.
+  const views = await page.evaluate((r) => window.hive.listViews(r), repo);
+  expect(views.filter((v) => v.id.startsWith("wp-") && !v.error).map((v) => v.manifest?.name)).toEqual(["Impostor"]);
   await offer.locator('[data-use-start-wallpaper="@e2e/pond/dots"]').click();
   await expect(offer).toHaveCount(0);
   await expect(page.locator('.hm-live-frame[data-drawn][data-wallpaper="@e2e/pond/dots"]')).toBeVisible();
@@ -205,19 +208,18 @@ test("what a wallpaper says is under the pointer counts only over open water, an
   await expect(label).toHaveCount(0);
 });
 
-test("a wallpaper that takes the keyboard is turned off, and the terminal that had it gets it back", async () => {
+test("a wallpaper that takes the keyboard is turned off, and what had the keyboard gets it back", async () => {
   await page.evaluate(() => window.hive.settingsSet("appearance.wallpaper.kind", "@e2e/rogue/liar"));
   const frame = await wallpaperFrame("@e2e/rogue/liar");
-  const focusedTile = () => page.evaluate(() => document.activeElement?.closest(".react-flow__node")?.getAttribute("data-id") ?? null);
-  // Gone to from the Tiles list (one not selected, so going to it moves the keyboard there): its
-  // terminal has the keyboard.
-  const tile = await page.locator(".react-flow__node-terminal:not(.selected)").first().getAttribute("data-id");
-  await page.locator(`[data-layer-tile="${tile}"]`).click();
-  await expect.poll(focusedTile).toBe(tile);
+  // The keyboard on a row of the Tiles list: nothing but the guard would give it back there.
+  const [tile] = await tiles();
+  const focusedRow = () => page.evaluate(() => document.activeElement?.getAttribute("data-layer-tile") ?? null);
+  await page.locator(`[data-layer-tile="${tile}"]`).focus();
+  await expect.poll(focusedRow).toBe(tile);
   await frame.evaluate(() => (window as unknown as Liar).steal());
   await expect(page.getByText(/The Liar live wallpaper was turned off: it took the keyboard/)).toBeVisible();
   await expect(page.locator(".hm-live-frame")).toHaveCount(0);
-  await expect.poll(focusedTile).toBe(tile);
+  await expect.poll(focusedRow).toBe(tile);
   await shot("4b-took-the-keyboard");
 });
 
