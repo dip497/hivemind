@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Fixed: an update installed while Hivemind is open waits for a restart. Opening Hivemind again no longer swaps the files under the open window, and an app whose files were already swapped offers "Restart to finish" instead of the same update again.
 - Fixed: in a workspace opened on no folder, Add offers Code again for a project frame it holds, and opens it in that project. A frame without a folder is no longer offered for it.
 - Fixed: a terminal shown on two screens, your window and a browser tab, no longer jumps between their sizes as the mouse moves or a window gets focus over a program that hears them, such as Claude Code. Only typing or pasting takes the size.
 - Fixed: what a program copies, such as Claude Code's mouse selection, goes to the clipboard of the screen that made the selection. A selection made in a browser tab no longer replaces the host's clipboard.

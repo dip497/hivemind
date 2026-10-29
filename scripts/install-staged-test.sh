@@ -126,6 +126,12 @@ run_installer > "$TMP/out3"
 check "it is not downloaded twice" "yes" "$([ "$(stat -c %Y "$APP/hivemind-extracted.staged")" = "$before" ] && echo yes || echo no)"
 check "it says it is already waiting" "yes" "$(grep -qi "downloaded already" "$TMP/out3" && echo yes || echo no)"
 
+# ── 3b. started again while the app is open: it hands over, and the swap waits ──
+"$HIVEMIND_BIN_DIR/hivemind" > "$TMP/out3b" 2>&1 || true
+check "an open app keeps its files" "yes" "$(grep -q "AppRun v9.9.9" "$APP/hivemind-extracted/AppRun" && echo yes || echo no)"
+check "the download still waits" "v9.9.10" "$(stamp .staged-version)"
+check "and what runs is still recorded" "v9.9.9" "$(stamp .installed-version)"
+
 # ── 4. the launcher starts: the staged build becomes the one that runs ────
 echo 0 > "$TMP_RUNNING"
 "$HIVEMIND_BIN_DIR/hivemind" > "$TMP/out4" 2>&1 || true
