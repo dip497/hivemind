@@ -37,7 +37,7 @@ test.afterEach(async () => {
 /** Claude Code's stand-in on the person's computer, its phone page paired and showing its chat.
  *  `steers`: it takes a line typed mid-turn into that turn, as its manifest says; else its manifest
  *  says nothing of it, as an agent's that reads one only at its prompt. */
-async function chatWith(steers: boolean) {
+async function chatWith(steers: boolean, marks = false) {
   const net = await ownNetwork(root, procs, "closed", WWW);
   const repo = path.join(root, "api");
   fs.mkdirSync(repo);
@@ -45,7 +45,7 @@ async function chatWith(steers: boolean) {
   const home = path.join(root, "home");
   const bin = path.join(root, "bin");
   for (const d of [home, bin]) fs.mkdirSync(d);
-  fs.writeFileSync(path.join(bin, "claude"), `#!/usr/bin/env bash\nexport FAKE_PROMPT="❯ "\n${steers ? "FAKE_STEER=1 " : ""}exec ${JSON.stringify(process.execPath)} ${JSON.stringify(FIXTURE)} claude "$@"\n`, { mode: 0o755 });
+  fs.writeFileSync(path.join(bin, "claude"), `#!/usr/bin/env bash\nexport FAKE_PROMPT="❯ "\n${steers ? "FAKE_STEER=1 " : ""}${marks ? "FAKE_PHOTO_MARKS=1 " : ""}exec ${JSON.stringify(process.execPath)} ${JSON.stringify(FIXTURE)} claude "$@"\n`, { mode: 0o755 });
   seedAgents(path.join(root, "desktop"), ["claude"]);
   if (!steers) {
     const manifest = path.join(root, "desktop", "hivemind", "agents", "claude", "agent.yaml");
@@ -182,4 +182,23 @@ test("photos picked on the phone go with a message: shown before it is sent, one
   await expect(page.locator('[data-chat] [data-who="person"]')).toHaveText([given!], { timeout: 30_000 });
   await expect(page.locator("[data-chat] [data-pending]")).toHaveCount(0);
   await page.screenshot({ path: testInfo.outputPath("attach-delivered.png") });
+});
+
+test("a photo the agent attaches is shown with the message it went with, once: the agent's mark for it is not shown as words", async ({}, testInfo) => {
+  test.skip(!hiveNetBuilt() || !hiveWebBuilt(), "build hive-net (cargo build in crates/hive-net) and the page (crates/hive-web/build.sh) first");
+  test.setTimeout(240_000);
+  const { page, box, person } = await chatWith(false, true);
+  const png = Buffer.from(await page.evaluate(async () => {
+    const canvas = Object.assign(document.createElement("canvas"), { width: 120, height: 80 });
+    canvas.getContext("2d")!.fillRect(0, 0, 120, 80);
+    const blob = await new Promise<Blob>((done) => canvas.toBlob((b) => done(b!), "image/png"));
+    return [...new Uint8Array(await blob.arrayBuffer())];
+  }));
+  await page.locator("[data-photo-picker]").setInputFiles([{ name: "shot.png", mimeType: "image/png", buffer: png }]);
+  await box.fill("echo fix this");
+  await page.locator("[data-message] button[type=submit]").click();
+  await expect(page.locator("[data-chat] [data-pending]")).toHaveCount(0, { timeout: 30_000 });
+  await expect(person).toHaveText(["echo fix this"]);
+  await expect(person.locator(".photos img")).toHaveCount(1);
+  await page.screenshot({ path: testInfo.outputPath("photo-delivered.png") });
 });

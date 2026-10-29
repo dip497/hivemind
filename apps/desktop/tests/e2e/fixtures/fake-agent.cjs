@@ -25,6 +25,9 @@
  * is typed; once the snippet is done, a remove "absorbed_mid_turn" and a queued_command attachment),
  * and its reply says it heard it.
  *
+ * With FAKE_PHOTO_MARKS set, a prompt's photo paths are attached as claude attaches them: recorded
+ * as a mark each, "[Image #1]", before the words, and the photo itself.
+ *
  * Invoked through thin shims named `claude` / `droid` on PATH:
  *   exec node fake-agent.cjs claude "$@"
  */
@@ -98,6 +101,15 @@ let said = 0;
 const record = (type, content) => fs.appendFileSync(transcriptPath, JSON.stringify({
   type, uuid: `${sessionId}-${++said}`, timestamp: new Date().toISOString(), cwd: process.cwd(), message: { role: type, content },
 }) + "\n");
+/** A prompt as recorded: with FAKE_PHOTO_MARKS, its photo paths are marks and photos. */
+let photos = 0;
+function asSaid(prompt) {
+  const paths = prompt.match(/\/\S+\.(?:png|jpe?g|webp|gif)\b/g) || [];
+  if (!process.env.FAKE_PHOTO_MARKS || !paths.length) return prompt;
+  const words = paths.reduce((t, p) => t.replace(p, ""), prompt).trim();
+  const marks = paths.map(() => `[Image #${++photos}]`).join("");
+  return [{ type: "text", text: marks + words }, ...paths.map(() => ({ type: "image", source: { type: "base64", media_type: "image/png", data: "" } }))];
+}
 /** A record of claude's own kind, as it is: `queue-operation`, `attachment`. */
 const recordAs = (fields) => fs.appendFileSync(transcriptPath, JSON.stringify({ ...fields, timestamp: new Date().toISOString(), sessionId }) + "\n");
 
@@ -146,7 +158,7 @@ function turn(prompt) {
   if (process.env.FAKE_STEER) return steerable(prompt);
   const r = spawnSync("bash", ["-c", prompt], { encoding: "utf8", env: process.env, timeout: 60_000 });
   const text = ((r.stdout || "") + (r.status ? `\n[exit ${r.status}] ${r.stderr || ""}` : "")).trim() || "(no output)";
-  record("user", prompt);
+  record("user", asSaid(prompt));
   reply(text);
 }
 
@@ -154,7 +166,7 @@ function turn(prompt) {
 let absorbing = null;
 /** A turn that reads while it runs: what is typed meanwhile is taken in at its next step. */
 function steerable(prompt) {
-  record("user", prompt);
+  record("user", asSaid(prompt));
   absorbing = [];
   const child = spawn("bash", ["-c", prompt], { env: process.env, stdio: ["ignore", "pipe", "pipe"] });
   let out = "";

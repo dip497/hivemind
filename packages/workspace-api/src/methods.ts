@@ -128,6 +128,9 @@ export interface WorkspaceMethods {
   /** `held` (0.33): it waits for the agent's turn to end; `photos` (0.33): where the photos given
    *  with it were kept. */
   "agent.send": (tile: string, text: string, given?: { images?: StartImage[] }) => { sent: boolean; held?: true; photos?: string[] };
+  /** A photo pasted into a terminal, kept on the machine its session runs on (0.37): its path, for
+   *  the client to type. */
+  "terminal.photo": (tile: string, image: StartImage) => { path: string };
   /** What may be started in the workspace at `repo` (M5, spec/agents.md "Starting"): the agents
    *  this device starts, with their model and mode choices, and the workspace's frames. */
   "agent.startable": (repo: string) => Startable;

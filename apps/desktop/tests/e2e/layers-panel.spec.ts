@@ -154,6 +154,22 @@ test("frames are grouped by the folder they run in; with one folder, there is no
   await expect(projects.locator("[data-layers-frame]")).toHaveCount(1);
 });
 
+test("two folders are set apart, and a frame that bears its folder's name is not named twice", async () => {
+  const other = path.join(root, "other");
+  fs.mkdirSync(other);
+  await app.evaluate(({ dialog }, picked) => { dialog.showOpenDialog = (async () => ({ canceled: false, filePaths: [picked] })) as typeof dialog.showOpenDialog; }, other);
+  await panel().locator('[data-layers-action="project"]').click();
+  const projects = panel().locator("[data-layers-project]");
+  await expect(projects).toHaveCount(2);
+  await expect(panel().locator('[data-layers-project="other"] [data-layers-frame]')).toContainText("other");
+  await expect(panel().locator("[data-layers-project-name]")).toHaveCount(0);
+  const added = panel().locator('[data-layers-project="other"] [data-layers-frame]');
+  await added.hover();
+  await added.locator("[data-layers-frame-menu]").click();
+  await page.locator("[data-frame-menu-delete]").click();
+  await expect(projects).toHaveCount(1);
+});
+
 test("snoozed, a tile leaves the list for Snoozed until its time; Wake now brings it back", async () => {
   const row = rows().last(); // in its frame: the pinned one is listed first
   const id = (await row.getAttribute("data-layer-tile"))!;

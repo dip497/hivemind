@@ -245,6 +245,11 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     machineOf: (opts) => participantAt(opts, { self: keys.deviceId, mine, lists, nameOf, shown: (device, tile) => peers.shownFrom(device, tile) }),
     folderOf: (bare) => sessionFolder(heldBoards(store), bare),
     conversationAsleep: (opts) => control.conversationAsleep(opts.tileId, opts.args ?? []),
+    keepPhoto: async (bare, photo) => {
+      const folder = runsIn(heldBoards(store), bare);
+      if (folder === null) throw new ApiError("NOT_FOUND", `no tile ${bare} is open`);
+      return (await places.keep(folder, [photo], bare))[0]!;
+    },
     onError: o.onWarn,
     backend,
   });

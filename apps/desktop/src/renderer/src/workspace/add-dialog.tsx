@@ -26,8 +26,8 @@ interface AddChoice { id: string; name: string; type: "tool" | "widget"; categor
 const ADD_TABS = [["all", "All"], ["tool", "Tools"], ["widget", "Widgets"]] as const;
 const HEADING = "px-2 pb-0.5 pt-2 text-label font-medium text-[var(--color-fg2)]";
 
-export function AddDialog({ repoPath, onBoard, onTile, boardItems }: {
-  repoPath: string | null;
+export function AddDialog({ hasFolder, onBoard, onTile, boardItems }: {
+  hasFolder: (frameId?: string) => boolean;
   onBoard: (kind: BoardChoice) => void;
   onTile?: (kind: string, frameId?: string) => void;
   /** The board is drawn here (the canvas): the arrow is offered too. */
@@ -54,7 +54,7 @@ export function AddDialog({ repoPath, onBoard, onTile, boardItems }: {
     ...(onTile ? toolKinds().map(([kind, spec]): AddChoice => ({
       id: `tile:${kind}`, name: spec.title!, type: "tool", category: spec.category ?? "other",
       icon: spec.icon ? <spec.icon size={14} /> : null,
-      disabled: !!spec.needsRepo && !repoPath, pick: () => onTile(kind, into ?? undefined),
+      disabled: !!spec.needsRepo && !hasFolder(into ?? undefined), pick: () => onTile(kind, into ?? undefined),
     })) : []),
     ...widgets.map((w): AddChoice => ({ id: `widget:${w.id}`, name: w.name, type: "widget", category: w.category ?? "other", icon: <WidgetIcon pkg={w} size={14} />, pick: () => onBoard(`widget:${w.id}`) })),
   ];
@@ -74,7 +74,7 @@ export function AddDialog({ repoPath, onBoard, onTile, boardItems }: {
   const item = (c: AddChoice) => {
     const i = order.indexOf(c);
     return <MenuItem key={c.id} variant="muted" selected={i === active} disabled={c.disabled} data-board-choice={c.id}
-      title={c.disabled ? `${c.name} needs a repository` : undefined}
+      title={c.disabled ? `${c.name} needs a project folder` : undefined}
       onMouseEnter={() => setActive(i)} onClick={() => choose(c)}>
       <span className="grid size-4 shrink-0 place-items-center [&>svg]:size-3.5">{c.icon}</span>
       <span className="flex-1 truncate">{c.name}</span>

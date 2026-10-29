@@ -25,6 +25,7 @@ function host(opts: { hidden?: () => boolean; screen?: string } = {}) {
   const terminals = new Terminals({
     intents: new Intents(new AuditLog({ file })),
     relay: { record: () => {}, screenPrefix: "", hidden: opts.hidden },
+    keepPhoto: async (t, photo) => { calls.push(`photo ${t} ${photo.type}`); return `/kept/${t}.png`; },
     backend: {
       start: async (o, out) => { calls.push(`start ${o.tileId}`); outputs.set(o.tileId, out); return { pid: 7 }; },
       write: (t, d) => calls.push(`write ${t} ${d}`),
@@ -55,7 +56,8 @@ function host(opts: { hidden?: () => boolean; screen?: string } = {}) {
     return answer.result as { pid: number; joined: boolean };
   };
   const notice = (from: Connection, method: string, ...params: unknown[]) => server.notice(method, params, from);
-  return { terminals, calls, outputs, client, audited, open, notice };
+  const call = (from: Connection, method: string, ...params: unknown[]) => server.answer(method, params, from);
+  return { terminals, calls, outputs, client, audited, open, notice, call };
 }
 /** What a client was sent of its sessions' output and exits (the session's size aside). */
 const output = (c: { received: EventMessage[] }) => c.received.filter((m) => m.event === "terminal.data" || m.event === "terminal.exit");
@@ -126,6 +128,41 @@ test("while several clients show a session only the one that typed last sizes it
   assert.ok(!h.calls.includes("detach hm:t1"), "b still shows it");
   h.notice(a, "terminal.resize", "hm:t1", 70, 10); // a no longer shows it, but b is alone: any size goes
   assert.deepEqual(h.calls.filter((c) => c.startsWith("resize")), ["resize hm:t1 100x30", "resize hm:t1 120x40", "resize hm:t1 90x20", "resize hm:t1 70x10"]);
+});
+
+test("a mouse moved, a click or a window focused over a program that hears them reaches it but keeps the size whose it is; a key typed takes it", async () => {
+  const h = host();
+  const [a, b] = [h.client(), h.client()];
+  await h.open(a, "hm:t1");
+  await h.open(b, "hm:t1");
+  h.notice(a, "terminal.resize", "hm:t1", 120, 40);
+  h.notice(b, "terminal.resize", "hm:t1", 90, 20);
+  h.notice(a, "terminal.write", "hm:t1", "ls\r");
+  for (const report of ["\x1b[I", "\x1b[O", "\x1b[<35;6;2M\x1b[<35;7;2M", "\x1b[<0;3;4M\x1b[<0;3;4m", "\x1b[M #!", "\x1b[12;40R", "\x1b[?62;22c", "\x1b]11;rgb:1e1e/1e1e/1e1e\x1b\\"]) {
+    h.notice(b, "terminal.write", "hm:t1", report);
+  }
+  assert.equal(h.calls.filter((c) => c.startsWith("write")).length, 9, "every report reaches the program");
+  assert.deepEqual(h.calls.filter((c) => c.startsWith("resize")), ["resize hm:t1 120x40"]);
+  h.notice(b, "terminal.write", "hm:t1", "x");
+  h.notice(b, "terminal.write", "hm:t1", "\x1b[Ix");
+  assert.deepEqual(h.calls.filter((c) => c.startsWith("resize")), ["resize hm:t1 120x40", "resize hm:t1 90x20"]);
+});
+
+// A one-pixel PNG.
+const PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
+
+test("a photo pasted is kept only for whoever may type there, as typing is; each kept is the caller's in the audit log", async () => {
+  const h = host();
+  const person = h.client();
+  const guest = h.client({ kind: "peer", person: "g".repeat(64), device: "e".repeat(64), access: "terminals" });
+  await h.open(person, "hm:t1");
+  assert.deepEqual(await h.call(person, "terminal.photo", "hm:t1", { type: "image/png", data: PNG }), { result: { path: "/kept/t1.png" } });
+  const refused = await h.call(guest, "terminal.photo", "hm:t1", { type: "image/png", data: PNG }) as { error?: { code: string } };
+  assert.equal(refused.error?.code, "FORBIDDEN");
+  const notPhoto = await h.call(person, "terminal.photo", "hm:t1", { type: "image/png", data: Buffer.from("not a png").toString("base64") }) as { error?: { code: string } };
+  assert.equal(notPhoto.error?.code, "BAD_REQUEST");
+  assert.deepEqual(h.calls.filter((c) => c.startsWith("photo")), ["photo t1 image/png"]);
+  assert.ok(h.audited().some((a) => a.startsWith("terminal.photo t1")), h.audited().join("\n"));
 });
 
 test("a pause lasts a moment unless it is asked for again; a resume ends it at once", async () => {
