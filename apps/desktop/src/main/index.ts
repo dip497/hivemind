@@ -658,8 +658,10 @@ function isNewerVersion(latest: string, current: string): boolean {
 function stagedVersion(current: string): string | null {
   const dir = installedAppDir();
   const installed = installedReleaseTag();
-  // Swapped in under this app already: it waits for a restart all the same.
-  if (installed && !installed.startsWith("nightly-") && !existsSync(path.join(dir, ".staged-version"))) {
+  // Swapped in under this app already: it waits for a restart all the same. A build run from
+  // source is not that install unless its folder is named.
+  const ours = app.isPackaged || !!process.env.HIVEMIND_APP_DIR?.trim();
+  if (ours && installed && !installed.startsWith("nightly-") && !existsSync(path.join(dir, ".staged-version"))) {
     const numeric = installed.replace(/^v/, "");
     return isNewerVersion(numeric, current) ? numeric : null;
   }
