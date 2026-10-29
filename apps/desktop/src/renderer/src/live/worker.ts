@@ -7,6 +7,7 @@
  */
 import type { LiveSceneId } from "@hivemind/core/settings-schema";
 import type { Box, CreatureSpec, LiveScene, Look, SceneMode } from "./scene";
+import { jellyScene } from "./jelly/scene";
 import { koiScene } from "./koi/scene";
 import { shoalScene } from "./shoal/scene";
 
@@ -14,6 +15,7 @@ import { shoalScene } from "./shoal/scene";
 const SCENES: Record<LiveSceneId, (canvas: OffscreenCanvas) => LiveScene> = {
   shoal: shoalScene,
   koi: koiScene,
+  jellyfish: jellyScene,
 };
 export type SceneId = LiveSceneId;
 

@@ -20,12 +20,10 @@
  * the page and the text: its water with light coming down through it, fish in their colours and
  * each kind of creature in its own.
  */
-import { paintWater, Shafts, waterOf, type Water, type WaterLook } from "./backdrop";
-import { CellRenderer, paintGrid } from "./cells";
+import type { WaterLook } from "./backdrop";
 import { ramp as rampOf, RAMP, rgbOf, type Oklch } from "./colour";
+import { LookRenderer, themeRamp } from "./look";
 import { clamp, hash3 } from "./math";
-import { lightOf } from "./palette";
-import type { Look } from "./scene";
 import { FLAG_BODY, FLAG_EDGE, FLAG_EYE, FLAG_FIN, FLAG_MARK, FLAG_RIDGE, SPINE_NODES, SpineRaster, type SpineShape } from "./spine";
 import type { World } from "./world";
 
@@ -79,7 +77,7 @@ const WAKE_REACH = 0.5;
 const INK = {
   base: 0.02, span: 0.88, glyph: 0.24, glint: 0.18,
   edge: 0.05, edgeSpan: 0.12, edgeGlyph: 0.14,
-  fish: 0.36, wake: 0.32, grid: 0.015,
+  fish: 0.36, wake: 0.32,
 };
 /** Dark water in the scene's own colours is lighter than black, and a shark drawn at the plain
  *  levels sank into it: its skin is lifted to `base + span` of its levels, its eyes and markings
@@ -102,21 +100,17 @@ const EDGE_LIGHT = ".',`";
 
 const MARK_GLYPHS = "#%@";
 
-export abstract class SwimRenderer extends CellRenderer {
+export abstract class SwimRenderer extends LookRenderer<SwimPalette> {
   private energy = new Float32Array(0);
   private energyTmp = new Float32Array(0);
   private heat = new Float32Array(0);
   private bucketOf = new Uint8Array(0);
   private bucketOrder = new Int32Array(0);
   private bucketCounts = new Int32Array(ALPHA_LEVELS + 1);
-  /** RAMP + 1 opaque colours, the page colour to the text colour (setColours). */
-  private ramp: string[] = [];
-  /** The same for each kind of shark (KIND_LIST), leaning toward its cast. */
+  /** The page colour to the text colour for each kind of creature, leaning toward its cast. */
   private kindRamps: string[][] = [];
   /** And as pixels (ImageData's RGBA, little-endian), for what is drawn under a see-through tile. */
   private kindPixels: Uint32Array[] = [];
-  /** The page is lighter than the text. */
-  protected light = false;
   /** Creatures are ink on paper: darker the more of them, on light water. */
   private ink = false;
   private wakeStyles: string[] = [];
@@ -134,33 +128,22 @@ export abstract class SwimRenderer extends CellRenderer {
   private fishBuckets: number[][] = FISH_LEVELS.map(() => []);
   private fishStyles: string[] = [];
 
-  /** Drawn in the scene's own colours (`setLook`): its palette, and the water it makes. */
-  protected colour: SwimPalette | null = null;
-  private water: Water | null = null;
-  private shafts = new Shafts();
-
   constructor(canvas: OffscreenCanvas, private book: SwimBook) {
-    super(canvas);
+    super(canvas, book.palette);
     this.raster = new SpineRaster(book.shapes, Object.fromEntries(book.kinds.map((k, i) => [k, i])));
-    this.setColours(0x000000, 0xffffff);
+    this.setLook({ page: 0x000000, text: 0xffffff, colour: false });
   }
 
-  /** The theme's page and text colours, and whether the scene is drawn in its own instead. */
-  setLook(look: Look) {
-    if (!look.colour) {
-      this.colour = null;
-      this.water = null;
-      this.shafts.setLook(null);
-      this.setColours(look.page, look.text);
-      this.ink = this.light;
-      this.looked(null);
-      return;
-    }
-    this.light = lightOf(look.page, look.text);
-    const p = (this.colour = this.book.palette[this.light ? "light" : "dark"]);
+  protected styled() {
+    const p = this.colour;
+    if (p) this.colourStyles(p);
+    else this.themeStyles();
+    this.looked(p);
+  }
+
+  /** In the scene's own colours: every creature, fish, dot and flash a step of its palette. */
+  private colourStyles(p: SwimPalette) {
     this.ink = this.light && !p.bright;
-    this.water = waterOf(p);
-    this.shafts.setLook(this.water.shafts);
     // The middle of the water: what a fish, the wake and a flash fade into.
     const mid = rgbOf(p.water[1]!);
     const shadow = rgbOf(p.shadow);
@@ -178,8 +161,6 @@ export abstract class SwimRenderer extends CellRenderer {
       return FISH_LEVELS.map((a) => this.tone(0.3 + 0.7 * a, r));
     });
     this.fishBuckets = this.fishStyles.map(() => []);
-    this.looked(p);
-    if (this.cols) this.repaintBackground();
   }
 
   /** The look changed: `palette` is the scene's own colours, or null for the theme's. A scene's
@@ -193,28 +174,13 @@ export abstract class SwimRenderer extends CellRenderer {
   /** Drawn over the creatures (lily pads, ripples), in CSS pixels. */
   protected drawOver(_t: number) {}
 
-  /** The theme's page and text colours, as 0xRRGGBB. Every colour the scene draws is a step
-   *  between them, so a theme change is one call and a frame never builds a colour string. */
-  private setColours(page: number, text: number) {
-    const ch = (c: number, k: number) => (c >> k) & 255;
-    const hex = (n: number) => `#${n.toString(16).padStart(6, "0")}`;
-    const luma = (c: number) => 0.2126 * ch(c, 16) + 0.7152 * ch(c, 8) + 0.0722 * ch(c, 0);
-    this.light = luma(page) > luma(text);
+  /** In the theme's colours: every colour the scene draws is a step from its page to its text, so
+   *  a theme change is one call and a frame never builds a colour string. */
+  private themeStyles() {
+    this.ink = this.light;
     // A channel's weight is how fast it goes from the page toward the text: on light water more
     // red ink leaves a shark bluer, so a light theme takes the inverse of the original's tint.
-    const ramp = ([wr, wg, wb]: readonly number[]) => {
-      const styles: string[] = [];
-      const pixels = new Uint32Array(RAMP + 1);
-      for (let i = 0; i <= RAMP; i++) {
-        const t = i / RAMP;
-        const mix = (k: number, w: number) => clamp(Math.round(ch(page, k) + (ch(text, k) - ch(page, k)) * t * w), 0, 255);
-        const [r, g, b] = [mix(16, wr!), mix(8, wg!), mix(0, wb!)];
-        styles.push(hex((r << 16) | (g << 8) | b));
-        pixels[i] = ((255 << 24) | (b << 16) | (g << 8) | r) >>> 0;
-      }
-      return { styles, pixels };
-    };
-    this.ramp = ramp([1, 1, 1]).styles;
+    const ramp = (weights: readonly number[]) => themeRamp(this.page, this.text, weights);
     const kinds = this.book.kinds.map((k) => ramp(this.book.tints[k]!.map((c) => 1 + ((this.light ? 1 / c : c) - 1) * CAST)));
     this.kindRamps = kinds.map((k) => k.styles);
     this.kindPixels = kinds.map((k) => k.pixels);
@@ -225,12 +191,6 @@ export abstract class SwimRenderer extends CellRenderer {
     this.wakeStyles = Array.from({ length: ALPHA_LEVELS }, (_, l) => this.tone((wake * (l + 1)) / ALPHA_LEVELS));
     this.fishStyles = FISH_LEVELS.map((a) => this.tone(a * (this.light ? INK.fish : 0.9)));
     this.fishBuckets = FISH_LEVELS.map(() => []);
-    if (this.cols) this.repaintBackground();
-  }
-
-  /** The step `t` (0 page … 1 text) of a ramp, the plain one by default. */
-  protected tone(t: number, ramp = this.ramp) {
-    return ramp[clamp(Math.round(t * RAMP), 0, RAMP)]!;
   }
 
   protected allocate(n: number) {
@@ -241,25 +201,6 @@ export abstract class SwimRenderer extends CellRenderer {
     this.bucketOrder = new Int32Array(n);
     this.raster.allocate(n);
     this.fishStamp = new Uint32Array(n);
-  }
-
-  resize(width: number, height: number, dpr: number) {
-    super.resize(width, height, dpr);
-    this.shafts.resize(width, height);
-  }
-
-  protected paintBackground() {
-    const g = this.bg.getContext("2d");
-    if (!g) return;
-    const { width: W, height: H, dpr, cw, ch } = this;
-    if (this.water) {
-      paintWater(g, W, H, cw, ch, dpr, this.water);
-      return;
-    }
-    g.setTransform(dpr, 0, 0, dpr, 0, 0);
-    g.fillStyle = this.tone(0);
-    g.fillRect(0, 0, W, H);
-    paintGrid(g, W, H, cw, ch, dpr, this.tone(this.light ? INK.grid : 0.055));
   }
 
   render(world: World, dt: number) {
@@ -273,7 +214,7 @@ export abstract class SwimRenderer extends CellRenderer {
     this.diffuse(dt);
 
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.drawImage(this.colour ? this.shafts.backdrop(this.bg, this.bgVersion, t, dpr) : this.bg, 0, 0);
+    ctx.drawImage(this.backdrop(t), 0, 0);
     this.drawUnder(t);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
