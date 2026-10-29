@@ -114,10 +114,11 @@ the app, and what it asks for.
 
 ### Updates and rollback
 
-Views and widgets run in a sandbox that holds them to the permissions they ask for. A theme is
-data, with no code. Tools run in the app, and an agent preset is instructions an agent follows. So
-a new package that holds a tool or an agent preset arrives switched off, and one of only views,
-widgets and themes arrives on.
+Views, widgets and [live wallpapers](/live-wallpapers) run in a sandbox that holds them to the
+permissions they ask for (a live wallpaper asks for none). A theme is data, with no code. Tools run
+in the app, and an agent preset is instructions an agent follows. So a new package that holds a
+tool or an agent preset arrives switched off, and one of only views, widgets, themes and live
+wallpapers arrives on.
 
 Installing a newer version of a package keeps its switch, unless something in it needs you to
 trust it again: a view or widget that asks for a permission it did not have, or a tool or agent
