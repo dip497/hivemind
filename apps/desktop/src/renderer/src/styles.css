@@ -525,18 +525,18 @@ html.glass-on:not([data-wallpaper="none"]) .hm-popover {
   --color-grid-dot: oklch(0.35 0.012 260 / 0.16);
   --color-scrim: oklch(0.2 0.01 260 / 0.35);
   /* Issue states, labels and people's initials, drawn dark on the light page: 4.5:1 on Clean
-     Light's bg, bg2 and bg3, and a label's text on its chip in every hue. */
-  --color-state-backlog:   oklch(0.52 0.013 231.77);
-  --color-state-todo:      oklch(0.52 0.18 265);
-  --color-state-progress:  oklch(0.5 0.08 200);
-  --color-state-review:    oklch(0.52 0.2 303);
-  --color-state-done:      oklch(0.5 0.12 152);
-  --color-state-cancelled: oklch(0.52 0.01 230);
+     Light's bg, bg2 and bg3 and every light preset's, and a label's text on its chip in every hue. */
+  --color-state-backlog:   oklch(0.47 0.013 231.77);
+  --color-state-todo:      oklch(0.47 0.18 265);
+  --color-state-progress:  oklch(0.46 0.08 200);
+  --color-state-review:    oklch(0.47 0.2 303);
+  --color-state-done:      oklch(0.45 0.12 152);
+  --color-state-cancelled: oklch(0.47 0.01 230);
   --color-label-text: oklch(0.45 0.10 0);
   --color-label-fill: oklch(0.93 0.04 0 / 0.6);
   --color-label-edge: oklch(0.80 0.04 0 / 0.5);
   --color-label-dot:  oklch(0.60 0.15 0);
-  --color-person:     oklch(0.48 0.13 0);
+  --color-person:     oklch(0.44 0.13 0);
 }
 :focus-visible {
   outline: 2px solid var(--color-focus);

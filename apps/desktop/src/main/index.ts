@@ -657,9 +657,16 @@ function isNewerVersion(latest: string, current: string): boolean {
  *  it applies it (`install.sh`). Absent, unreadable or not newer: nothing is waiting. */
 function stagedVersion(current: string): string | null {
   const dir = installedAppDir();
+  const installed = installedReleaseTag();
+  // Swapped in under this app already: it waits for a restart all the same. A build run from
+  // source is not that install unless its folder is named.
+  const ours = app.isPackaged || !!process.env.HIVEMIND_APP_DIR?.trim();
+  if (ours && installed && !installed.startsWith("nightly-") && !existsSync(path.join(dir, ".staged-version"))) {
+    const numeric = installed.replace(/^v/, "");
+    return isNewerVersion(numeric, current) ? numeric : null;
+  }
   try {
     const v = readFileSync(path.join(dir, ".staged-version"), "utf8").trim();
-    const installed = installedReleaseTag();
     if (v.startsWith("nightly-")) return newerNightlyTag(v, installed) ? v : null;
     const numeric = v.replace(/^v/, "");
     if (installed?.startsWith("nightly-")) return numeric || null;
@@ -693,7 +700,7 @@ handle("checkForUpdate", async () => {
       return {
         current, latest, ok: true,
         updateAvailable: !!latest && isNewerVersion(latest, current),
-        staged: t.staged && isNewerVersion(t.staged, current) ? t.staged : null,
+        staged: t.staged ? (isNewerVersion(t.staged, current) ? t.staged : null) : staged,
       };
     } catch { /* not JSON: fall through to the real check */ }
   }
