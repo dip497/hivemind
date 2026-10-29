@@ -241,7 +241,7 @@ test("an accent of your own that is hard to see on the panels says so, by the ru
   expect(hive("theme", "use", "signal").rescanned).toBe(true);
 });
 
-test("over Shoal, See-through frosts the panels and the tools in one click, and the Layers panel goes as thin as the slider says", async () => {
+test("over Shoal, See-through frosts the panels and the tools in one click, and the Layers panel is clear glass", async () => {
   const before = onDisk().appearance;
   try {
     await page.evaluate(() => window.hive.settingsSet("appearance.wallpaper.kind", "shoal"));
@@ -251,12 +251,18 @@ test("over Shoal, See-through frosts the panels and the tools in one click, and 
     await expect(page.locator("[data-settings-body]")).toContainText("They show through the frosted panels and tiles");
     await closeSettings();
     // Over another background the panel stops at 68% so its names stay legible; over Shoal its blur
-    // does that, and it follows the slider to 50%.
+    // does that, and it takes a third of the panel tint: clear glass, the sharks running on under it.
     const alpha = () => page.locator(".hm-layers").first().evaluate((el) => {
       const m = /\/\s*([\d.]+)\)\s*$/.exec(getComputedStyle(el).backgroundColor);
       return m ? Number(m[1]) : 1;
     });
-    await expect.poll(alpha).toBeCloseTo(0.5, 2);
+    await expect.poll(alpha).toBeCloseTo(0.5 / 3, 2);
+    // Asked for less transparency, it is solid over Shoal too.
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-transparency", value: "reduce" }] });
+    await expect.poll(alpha).toBe(1);
+    await cdp.send("Emulation.setEmulatedMedia", { features: [] });
+    await expect.poll(alpha).toBeCloseTo(0.5 / 3, 2);
     await page.evaluate(() => window.hive.settingsSet("appearance.wallpaper.kind", "mono"));
     await expect.poll(alpha).toBeCloseTo(0.68, 2);
   } finally {

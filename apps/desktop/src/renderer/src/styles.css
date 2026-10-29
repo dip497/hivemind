@@ -1037,10 +1037,14 @@ html.glass-on:not([data-wallpaper="none"]) .hm-layers {
   border-right-color: transparent;
   box-shadow: var(--hm-edge-glass);
 }
-/* Over Shoal what passes under the panel is a shark, and the blur alone keeps the names over it
-   legible: the panel follows the opacity slider down, not only to 68%, so the sharks can show. */
-html.glass-on[data-wallpaper="shoal"] .hm-layers {
-  background: color-mix(in srgb, var(--surface-2) clamp(35%, var(--glass-opacity), 92%), transparent);
+/* Over Shoal the side panel is clear frosted glass, the scene running on under it, as in the demos
+   Shoal is modelled on: a third of the panel tint (24% at the usual 72%), and the blur, which is what
+   keeps the names legible over a passing shark. Asked for less transparency or more contrast, the
+   blocks at the end of this file have it solid, as everywhere. */
+@media (not (prefers-reduced-transparency: reduce)) and (not (prefers-contrast: more)) {
+  html.glass-on[data-wallpaper="shoal"] .hm-layers {
+    background: color-mix(in srgb, var(--surface-2) calc(var(--glass-opacity) / 3), transparent);
+  }
 }
 /* (The glass-mode selection outline was removed — the top-clip indicator above
    works in both opaque + glass themes.) */
@@ -1474,8 +1478,9 @@ html.glass-on .react-flow__node-browser {
   }
   html.glass-on body { background: var(--color-bg); }
   /* The layers panel is the one surface with a hand-tuned alpha, so the
-     --glass-opacity override above can't reach it. Solidify it explicitly. */
-  html.glass-on .hm-layers { background: var(--surface-2); }
+     --glass-opacity override above can't reach it. Solidify it explicitly, by the
+     same selector as the alpha's, which a plainer one lost to (it stayed 92%). */
+  html.glass-on:not([data-wallpaper="none"]) .hm-layers { background: var(--surface-2); }
   /* A full-viewport moving video behind opaque chrome is pure cost. */
   .hm-wallpaper { display: none !important; }
 }
