@@ -200,14 +200,17 @@ hive ctl plugin call windows unsplit
 
 ## Plugins
 
-To write, check, install, list and remove agents, views, widgets, tools, themes and packages, and change their settings. Guide: [Packages](/packages).
+To write, check, install, list and remove agents, views, widgets, tools, themes, live wallpapers and packages, and change their settings. Guide: [Packages](/packages), [Make a live wallpaper](/live-wallpapers).
 
 ```text
 hive plugins new tool|widget|view <name> [--dir folder] [--owner login]
                                         # a starter that works, with PROMPT.md; prints the next steps
 hive plugins new package <name> [--dir folder] [--owner login]
                                         # a package that holds nothing yet, with PROMPT.md
-hive plugins new tool|widget|view <name> --in <package folder>
+hive plugins new wallpaper <name> [--dir folder] [--owner login]
+                                        # a live wallpaper that draws, in a package of its own that offers it once installed,
+                                        # with PROMPT.md and two skills for your coding agent
+hive plugins new tool|widget|view|wallpaper <name> --in <package folder>
                                         # a starter inside the package, named in its hivemind-package.json
 hive plugins new theme <name> --in <package folder> [--dir folder]
                                         # a theme.json of the look in use, in <package>/themes/<name>
@@ -215,10 +218,12 @@ hive plugins add <folder> --to <package folder>
                                         # one already written, copied in when outside; another owner's id is refused
 hive plugins check <folder> [--json]    # its types, its manifest and its code drawn once; file:line for each problem
                                         # of a package: hivemind-package.json and every member with its own check
+                                        # a live wallpaper, once built: drawn in headless Chromium (Playwright's) against a fake app
 hive plugins install <folder>|<id>      # a folder holding a plugin, or one from HiveHub by its id: installed as a package
                                         # owner/name and @owner/name are always HiveHub's: a folder is ./x, ../x, /x or ~/x
                                         # a tool arrives off: hive plugins enable @owner/name
                                         # a package that opens with a view prints it and its command (--json: startView {id, name, open})
+                                        # one that offers a live wallpaper prints it and the command that uses it (--json: startWallpaper {id, name, use})
 hive plugins install <folder>|<id> --dry-run   # what an update would change, member by member; installs nothing
 hive plugins rollback <package>         # back to the version in use before its last update, switched as it was
 hive plugins remove <plugin>|<package>  # one you added on its own, or a whole package
@@ -226,7 +231,7 @@ hive plugins remove <plugin>|<package>  # one you added on its own, or a whole p
 hive plugins reload                     # the running app loads every plugin again
 hive plugins api --kind tool|widget|view   # what its code is given, as the type declarations of this version
 hive plugins search [words…] [--kind <kind>] [--limit N]   # HiveHub's plugins: every word starts a word of it, best match first (20 by default, at most 100)
-hive plugins list [--kind agent|view|widget|tool]   # every plugin on this machine, on or off, and why any fails to load
+hive plugins list [--kind agent|view|widget|tool|wallpaper]   # every plugin on this machine, on or off, and why any fails to load
 hive plugins show claude                # its settings: each one's value and what it takes
 hive plugins enable @hivemind/web        # or disable; a package by its id switches all it holds
                                         # one plugin of a package can be switched off alone, on only while its package is on
