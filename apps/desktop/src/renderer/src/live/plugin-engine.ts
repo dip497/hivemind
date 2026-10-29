@@ -27,11 +27,10 @@ export class PluginEngine extends PageScene {
   private link: WallpaperLink;
   private look: PageLook | null = null;
   private offRunaway: () => void;
-  /** Each agent tile's handle, and back: what the wallpaper calls it instead of its id. */
+  /** Each agent tile's handle, and back: what the wallpaper calls it instead of its id. Only a
+   *  creature's tile has one, so no other tile is named. */
   private handles = new Map<string, string>();
   private keys = new Map<string, string>();
-  /** The handles of the creatures there now. */
-  private named = new Set<string>();
   private boxes: { list: Box[]; seeThrough: boolean } | null = null;
   /** What it last said is under the pointer, taken at most once a frame. */
   private saidHover: string | null = null;
@@ -102,10 +101,8 @@ export class PluginEngine extends PageScene {
   }
 
   setRoster(creatures: CreatureSpec[]) {
-    const told = creatures.map((c) => ({ id: this.handleOf(c.key), agent: c.agent ?? null, kind: c.variant, size: c.size, state: STATE[c.mood] }));
-    this.named = new Set(told.map((c) => c.id));
-    this.link.setCreatures(told);
-    // A tile is named only while it has a creature.
+    this.link.setCreatures(creatures.map((c) => ({ id: this.handleOf(c.key), agent: c.agent ?? null, kind: c.variant, size: c.size, state: STATE[c.mood] })));
+    // A new creature's tile, told before it had a handle, is named now.
     if (this.boxes) this.setBoxes(this.boxes.list, this.boxes.seeThrough);
   }
 
@@ -113,7 +110,7 @@ export class PluginEngine extends PageScene {
     this.boxes = { list: boxes, seeThrough };
     this.link.setTiles(boxes.map((b) => {
       const id = b.key ? this.handles.get(b.key) : undefined;
-      return { x0: b.x0, y0: b.y0, x1: b.x1, y1: b.y1, ...(id && this.named.has(id) ? { id } : {}) };
+      return { x0: b.x0, y0: b.y0, x1: b.x1, y1: b.y1, ...(id ? { id } : {}) };
     }), seeThrough);
   }
 
