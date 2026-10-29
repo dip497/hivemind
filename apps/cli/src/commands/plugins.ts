@@ -6,7 +6,8 @@
  *
  *   hive plugins new <tool|widget|view> <name> [--dir <folder>] [--owner <login>]   a starter that works, with PROMPT.md
  *   hive plugins new package <name> [--dir <folder>]  a package to hold several, with PROMPT.md
- *   hive plugins new <tool|widget|view|theme> <name> --in <package folder>   a starter, as a member of that package (a theme: the look in use)
+ *   hive plugins new wallpaper <name> [--dir <folder>] [--owner <login>]   a live wallpaper, in a package of its own that offers it
+ *   hive plugins new <tool|widget|view|theme|wallpaper> <name> --in <package folder>   a starter, as a member of that package (a theme: the look in use)
  *   hive plugins add <folder> --to <package folder>  one already written, as a member of that package
  *   hive plugins install <folder|id>               a folder holding a plugin, or one from HiveHub
  *                                                  (@owner/name is HiveHub's: write a folder as ./x);
@@ -17,7 +18,7 @@
  *                                                  of a package, its manifest and every member
  *   hive plugins api --kind <tool|widget|view>     what its code is given, as type declarations
  *   hive plugins search [words…] [--kind <kind>] [--limit N] [--json]   HiveHub's plugins, best match first
- *   hive plugins list [--kind agent|view|widget|tool] [--json]
+ *   hive plugins list [--kind agent|view|widget|tool|wallpaper] [--json]
  *   hive plugins show <plugin> [--json]            its settings: each field, its value and what it takes
  *
  * A plugin is named by its id, or as <kind>:<id> when two kinds have that id. A package is named
@@ -48,12 +49,13 @@ import { BUNDLED_TOOL_PLUGINS } from "@hivemind/core/tool-plugins";
 import { viewSettingFields } from "@hivemind/view-sdk/manifest";
 import { listWidgets } from "@hivemind/core/widgets";
 import { listToolPackages } from "@hivemind/core/tool-packages";
+import { listInstalledWallpapers } from "@hivemind/core/wallpaper-folder";
 import { err, ok } from "../format.js";
 import { driveCall, reloadApp } from "../drive.js";
 import { HcpCliError } from "../hcp.js";
 import { EXIT } from "../exit-codes.js";
 import { personOnly } from "../person-only.js";
-import { KINDS, kindNamed, type AuthoredKind } from "../plugin-kinds.js";
+import { KINDS, kindNamed, PACKAGE_ONLY, packageOnly, rescanOf } from "../plugin-kinds.js";
 import { stageFromRegistry } from "../registry.js";
 import { searchPlugins } from "@hivemind/core/plugin-search";
 import { checkPlugin, DRAW_ALONE } from "../check/check.js";
@@ -61,6 +63,8 @@ import { checkPackage } from "../check/package.js";
 import { where } from "../check/problem.js";
 import { PACKAGE_MANIFEST, memberFormat } from "@hivemind/hub";
 import { addEntry, arrivesOff, memberId, memberPath, packageStarter, readPackageFolder, themeStarter, type PackageFolder } from "../package-authoring.js";
+import { WALLPAPER_SKILLS } from "../plugin-brief.js";
+import { wallpaperPackage, wallpaperStarter } from "../wallpaper-starter.js";
 
 interface Plugin {
   key: string;
@@ -149,20 +153,32 @@ const fail = (ctx: { json: boolean }, e: unknown, code: string): never =>
   err(ctx, e instanceof HiveError ? e.code : code, e instanceof Error ? e.message : String(e), e instanceof HiveError && e.code === "part_of_a_package" ? 7 : 1);
 const show = (v: unknown) => (typeof v === "string" || Array.isArray(v) ? JSON.stringify(v) : String(v));
 
+/** The live wallpapers the installed packages hold, as `list` shows them: each is on while its
+ *  package is, and has nothing to set. */
+async function wallpaperRows() {
+  return (await listInstalledWallpapers()).map((w) => ({
+    key: `wallpaper:${w.id}`, kind: "wallpaper", id: w.id, name: w.manifest?.name ?? w.id, enabled: w.package.on,
+    settings: {}, problem: w.error, dir: w.dir, package: w.package,
+  }));
+}
+const LIST_KINDS = [...PLUGIN_KINDS, "wallpaper"];
+
 const listCmd = defineCommand({
-  meta: { name: "list", description: "Every plugin on this machine, on or off" },
-  args: { kind: { type: "string", description: "agent, view, widget or tool" }, json: { type: "boolean" } },
+  meta: { name: "list", description: "Every plugin on this machine, on or off, and the live wallpapers its packages hold" },
+  args: { kind: { type: "string", description: LIST_KINDS.join(", ") }, json: { type: "boolean" } },
   async run({ args }) {
     const ctx = { json: !!args.json };
-    if (args.kind && !PLUGIN_KINDS.includes(args.kind as PluginKind)) return err(ctx, "usage", `--kind is one of: ${PLUGIN_KINDS.join(", ")}`);
+    if (args.kind && !LIST_KINDS.includes(args.kind)) return err(ctx, "usage", `--kind is one of: ${LIST_KINDS.join(", ")}`);
     try {
       const states = (await readSettings()).plugins.state;
-      const rows = (await inventory()).filter((p) => !args.kind || p.kind === args.kind).map((p) => ({
-        key: p.key, kind: p.kind, id: p.id, name: p.name,
+      const plugins = (await inventory()).map((p) => ({
+        key: p.key, kind: p.kind as string, id: p.id, name: p.name,
         enabled: isPluginOn(states, p.kind, p, p.enabledByDefault),
         settings: resolveSettings(p.fields, pluginOptions(states, p.kind, p.id)), problem: p.problem,
         ...(p.opens ? { opens: p.opens } : {}), ...(p.dir ? { dir: p.dir } : {}), ...(p.package ? { package: p.package } : {}),
       }));
+      const all: typeof plugins = [...plugins, ...await wallpaperRows()];
+      const rows = all.filter((r) => !args.kind || r.kind === args.kind);
       return ok(ctx, { plugins: rows }, () => rows.map((r) => [`${r.enabled ? "on " : "off"}  ${r.key.padEnd(30)} ${r.name}${r.package && r.package.members > 1 ? `  [${r.package.id} ${r.package.version}${r.package.on ? "" : ", off"}]` : ""}${r.problem ? `  (${r.problem})` : ""}`,
         ...(r.opens ?? []).map((t) => `       open-tool ${t}`)].join("\n")).join("\n") || "no plugins");
     } catch (e) { return fail(ctx, e, "list_failed"); }
@@ -324,7 +340,7 @@ type AppAnswer = { rescanned: true; appError: null } | { rescanned: false; appEr
 
 /** Ask a running app to load plugins of these kinds again. */
 async function rescanApp(kinds: readonly string[]): Promise<AppAnswer> {
-  const methods = [...new Set(kinds.flatMap((k) => kindNamed(k)?.rescan ?? []))];
+  const methods = [...new Set(kinds.flatMap(rescanOf))];
   try {
     for (const m of methods) await driveCall(m, [], 5000);
     return { rescanned: true, appError: null };
@@ -344,8 +360,10 @@ const HUB_ID = /^@[a-z0-9][a-z0-9-]{0,38}\/[a-z0-9][a-z0-9-]{0,63}$/;
 /** The kind `hive plugins new` starts that holds the others. */
 const PACKAGE = { kind: "package", noun: "package", guide: "https://hivemind.griiken.com/guide/packages/" } as const;
 /** A theme: data, not code, written from the look in use into a package (`--in`). */
-const THEME = { kind: "theme", noun: "theme", guide: "https://hivemind.griiken.com/guide/packages/#themes" } as const;
-const NEW_KINDS = `${KIND_NAMES}, ${THEME.kind}, ${PACKAGE.kind}`;
+const THEME = packageOnly("theme")!;
+/** A live wallpaper: in a package (`--in`), or in a package of its own that offers it. */
+const WALLPAPER = packageOnly("wallpaper")!;
+const NEW_KINDS = `${KIND_NAMES}, ${PACKAGE_ONLY.map((k) => k.kind).join(", ")}, ${PACKAGE.kind}`;
 /** A folder as printed, so `install` never reads it as an id on HiveHub. */
 const shownPath = (given: string) => (given === "." || /^(\.{1,2}\/|\/|~)/.test(given) ? given : `./${given}`);
 /** `to` as written from the current folder. */
@@ -374,7 +392,7 @@ const newCmd = defineCommand({
   args: {
     kind: { type: "positional", required: true, description: NEW_KINDS },
     name: { type: "positional", required: true, description: "lowercase letters, digits and single dashes" },
-    dir: { type: "string", description: "the folder to start it in (default: ./<name>, or <package>/<tools|widgets|views>/<name> with --in); it must be empty or not there" },
+    dir: { type: "string", description: "the folder to start it in (default: ./<name>, or <package>/<tools|widgets|views|wallpapers>/<name> with --in); it must be empty or not there" },
     in: { type: "string", description: "a package's folder: start it there, as one of the package's members" },
     owner: { type: "string", description: "your GitHub login (default: the account `gh` is signed in as; with --in, the package's owner)" },
     json: { type: "boolean" },
@@ -383,9 +401,10 @@ const newCmd = defineCommand({
     const ctx = { json: !!args.json };
     if (String(args.kind) === THEME.kind) return newTheme(ctx, { name: String(args.name), in: args.in ? String(args.in) : undefined, dir: args.dir ? String(args.dir) : undefined });
     const isPackage = String(args.kind) === PACKAGE.kind;
-    const k = isPackage ? null : kindNamed(String(args.kind));
-    if (!isPackage && !k) return err(ctx, "usage", `the kind is one of: ${NEW_KINDS}`, 2);
-    if (isPackage && args.in) return err(ctx, "usage", "a package holds tools, widgets, views and themes, not another package", 2);
+    const isWallpaper = String(args.kind) === WALLPAPER.kind;
+    const k = isPackage || isWallpaper ? null : kindNamed(String(args.kind));
+    if (!isPackage && !isWallpaper && !k) return err(ctx, "usage", `the kind is one of: ${NEW_KINDS}`, 2);
+    if (isPackage && args.in) return err(ctx, "usage", "a package holds tools, widgets, views, themes and live wallpapers, not another package", 2);
     const name = String(args.name);
     if (!/^[a-z0-9][a-z0-9-]{1,39}$/.test(name) || name.includes("--")) return err(ctx, "bad_name", `"${name}" is not a name: lowercase letters, digits and single dashes`);
     let pkg: PackageFolder | null = null;
@@ -395,16 +414,18 @@ const newCmd = defineCommand({
     const given = args.owner ? String(args.owner).replace(/^@/, "").toLowerCase() : null;
     if (pkg && given && given !== pkg.owner) return err(ctx, "not_the_owner", `${pkg.id} is ${pkg.owner}'s: every member of it is @${pkg.owner}/<name>`);
     const owner = pkg?.owner ?? given ?? githubLogin()?.toLowerCase() ?? null;
-    if (!owner) return err(ctx, "no_owner", `pass --owner <your GitHub login>: a ${k?.noun ?? PACKAGE.noun} is published under its owner's login`);
-    const dir = args.dir ? path.resolve(String(args.dir)) : pkg && k ? path.join(pkg.dir, memberFormat(k.kind)!.list, name) : path.resolve(name);
+    if (!owner) return err(ctx, "no_owner", `pass --owner <your GitHub login>: a ${(k ?? (isWallpaper ? WALLPAPER : PACKAGE)).noun} is published under its owner's login`);
+    const member = k ?? (isWallpaper ? WALLPAPER : null);
+    const dir = args.dir ? path.resolve(String(args.dir)) : pkg && member ? path.join(pkg.dir, memberFormat(member.kind)!.list, name) : path.resolve(name);
     const shown = args.dir ? shownPath(String(args.dir)) : shownFrom(dir);
     if (pkg && !dir.startsWith(pkg.dir + path.sep)) return err(ctx, "usage", `--dir must be inside the package, ${pkg.dir}`, 2);
     if (await notEmpty(dir)) return err(ctx, "exists", `${dir} is already there and not an empty folder`);
+    if (isWallpaper) return newWallpaper(ctx, { name, owner, dir, pkg });
 
     if (!k) {
       const id = `@${owner}/${name}`;
       try { await writeStarter(dir, packageStarter(owner, name)); } catch (e) { return fail(ctx, e, "new_failed"); }
-      const next = [...[...KINDS, THEME].map((x) => `hive plugins new ${x.kind} <name> --in ${shown}`), `hive plugins add <folder> --to ${shown}`];
+      const next = [...[...KINDS, ...PACKAGE_ONLY].map((x) => `hive plugins new ${x.kind} <name> --in ${shown}`), `hive plugins add <folder> --to ${shown}`];
       return ok(ctx, { kind: PACKAGE.kind, id, dir, next, prompt: path.join(dir, "PROMPT.md"), guide: PACKAGE.guide }, () => [
         `started package ${id} in ${dir}; it holds nothing yet`, "Add its members:", steps(next),
         `Want an agent to build it? Write your idea into ${shown}/PROMPT.md and hand it that file.`,
@@ -453,6 +474,48 @@ async function newTheme(ctx: { json: boolean }, a: { name: string; in?: string; 
     `started theme ${id} in ${dir}, a member of ${pkg.id}, from the look in use`, "Next:", steps(next),
     "Add fonts (.woff2), a wallpaper picture and sounds (.ogg or .mp3) beside theme.json and name them in it.",
     `Guide: ${THEME.guide}`,
+  ].join("\n"));
+}
+
+/** `hive plugins new wallpaper <name>`: a live wallpaper that draws as written, with the brief and
+ *  the skills for a coding agent. A wallpaper is never installed alone: `--in` makes it one more
+ *  member of that package; without, it starts a package of its own (`dir`) that offers it as the
+ *  background once installed. */
+async function newWallpaper(ctx: { json: boolean }, a: { name: string; owner: string; dir: string; pkg: PackageFolder | null }) {
+  const { name, owner, pkg } = a;
+  if (pkg && path.basename(a.dir) !== name) return err(ctx, "usage", `a live wallpaper's folder is its name: --dir must end in /${name}`, 2);
+  const packageId = pkg?.id ?? `@${owner}/${name}`;
+  const id = `${packageId}/${name}`;
+  const root = pkg?.dir ?? a.dir;
+  const dir = pkg ? a.dir : path.join(root, memberFormat(WALLPAPER.kind)!.list, name);
+  const rel = (from: string, to: string) => path.relative(from, to).split(path.sep).join("/");
+  try {
+    if (!pkg) await writeStarter(root, wallpaperPackage(owner, name));
+    else {
+      await writeStarter(dir, wallpaperStarter(name, { root: rel(dir, root), id: packageId }));
+      await addEntry(pkg, WALLPAPER, rel(root, dir));
+      // The skills at the package's root, where a coding agent working on it finds them; one
+      // already there is kept.
+      for (const [file, text] of Object.entries(WALLPAPER_SKILLS)) {
+        if (fs.existsSync(path.join(root, file))) continue;
+        await mkdir(path.dirname(path.join(root, file)), { recursive: true });
+        await writeFile(path.join(root, file), text);
+      }
+    }
+  } catch (e) { return fail(ctx, e, "new_failed"); }
+  const at = shownFrom(root);
+  const folder = shownFrom(dir);
+  const prompt = path.join(pkg ? dir : root, "PROMPT.md");
+  const next = [`npm --prefix ${folder} install`, `npm --prefix ${folder} run build`, `hive plugins check ${at}`, `hive plugins install ${at}`,
+    ...(pkg && arrivesOff(pkg) ? [`hive plugins enable ${pkg.id}`] : []), `hive config set appearance.wallpaper.kind '"${id}"'`];
+  return ok(ctx, { kind: WALLPAPER.kind, id, dir, package: packageId, next, prompt, guide: WALLPAPER.guide }, () => [
+    pkg ? `started live wallpaper ${id} in ${dir}, a member of ${pkg.id}`
+      : `started live wallpaper ${id} in ${dir}, in a package of its own, ${packageId}, which offers it as the background once installed`,
+    ...(pkg ? [] : ["A live wallpaper is never installed alone: it ships in a package, which can hold a view and more beside it."]),
+    "Next:", steps(next),
+    ...(pkg ? [`To offer it as the background when ${pkg.id} is installed, name it in ${PACKAGE_MANIFEST}: "startup": {"wallpaper": "${id}"}`] : []),
+    `Want an agent to build it? Write your idea into ${shownFrom(prompt)} and hand it that file.`,
+    `Guide: ${WALLPAPER.guide}`,
   ].join("\n"));
 }
 
@@ -552,7 +615,8 @@ const installCmd = defineCommand({
         dryRun ? (record.on ? "It would be on." : "It would be off until you switch it on.")
           : record.on ? "It is on." : installed.changes.some((c) => c.switchesOff) && installed.replaced ? `It is off: a change above needs you to trust it again. \`hive plugins rollback ${record.id}\` puts back ${installed.replaced.version}.` : "It is off until you switch it on, if you trust who wrote it.",
         ...(report.startView && !dryRun ? [startViewLine(report.startView, record.on, installed.members.filter((m) => m.kind === "widget").length)] : []),
-        ...(dryRun ? [] : ["Next:", steps(report.next)]),
+        ...(report.startWallpaper && !dryRun ? [startWallpaperLine(report.startWallpaper, record.on)] : []),
+        ...(dryRun || !report.next.length ? [] : ["Next:", steps(report.next)]),
       ].join("\n"));
     } catch (e) { await discard(); return fail(ctx, e, "install_failed"); }
   },
@@ -563,6 +627,9 @@ function installReport(installed: InstalledPackage, app: AppAnswer) {
   const { record } = installed;
   const opens = installed.members.find((m) => m.kind === "view" && m.id === installed.startView);
   const startView = opens ? { id: opens.id, name: opens.name, open: `hive ctl plugin open view:${opens.id}` } : null;
+  // Offered, not used: the app asks the person, so it is in no step of `next`.
+  const offers = installed.members.find((m) => m.kind === WALLPAPER.kind && m.id === installed.startWallpaper);
+  const startWallpaper = offers ? { id: offers.id, name: offers.name, use: `hive config set appearance.wallpaper.kind '"${offers.id}"'` } : null;
   // The view it opens with comes first: switching to it is what installing it was for. It brings
   // the package's widgets, so they are not opened again on their own, which would be a second copy.
   const sees = installed.members.flatMap((m) => (startView && m.kind === "widget" ? []
@@ -572,8 +639,16 @@ function installReport(installed: InstalledPackage, app: AppAnswer) {
   return {
     id: record.id, name: record.name, version: record.version, digest: record.digest, on: record.on,
     members: installed.members.map((m) => ({ kind: m.kind, id: m.id, name: m.name, dir: m.dir, permissions: m.permissions })),
-    replaced: installed.replaced?.version ?? null, tookOver: installed.tookOver, changes: installed.changes, startView, ...app, next,
+    replaced: installed.replaced?.version ?? null, tookOver: installed.tookOver, changes: installed.changes, startView, startWallpaper, ...app, next,
   };
+}
+
+/** The live wallpaper a package offers as the background, and the command that uses it. As with
+ *  its view, the CLI never switches it: the app asks the person. */
+function startWallpaperLine(wallpaper: { name: string; use: string }, on: boolean): string {
+  return on
+    ? `It offers its live wallpaper ${wallpaper.name} as the background: the app asks whether to use it. \`${wallpaper.use}\` uses it now.`
+    : `It offers its live wallpaper ${wallpaper.name} as the background once it is on: the app asks then. \`${wallpaper.use}\` uses it.`;
 }
 
 /** The view a package opens with, and how to get there. The CLI never switches the person's view
@@ -613,7 +688,7 @@ const reloadCmd = defineCommand({
   args: { json: { type: "boolean" } },
   async run({ args }) {
     const ctx = { json: !!args.json };
-    const app = await rescanApp(KINDS.map((k) => k.kind));
+    const app = await rescanApp([...KINDS, ...PACKAGE_ONLY].map((k) => k.kind));
     if (app.rescanned) return ok(ctx, app, () => "app reloaded every plugin");
     if (app.appError === null) return err(ctx, "app_not_running", "the app is not running: it loads every plugin when it starts", EXIT.unavailable);
     return err(ctx, "reload_failed", app.appError);
@@ -651,6 +726,8 @@ const checkCmd = defineCommand({
     if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) return err(ctx, "not_found", `there is no folder ${dir}`);
     const isPackage = fs.existsSync(path.join(dir, PACKAGE_MANIFEST));
     const k = isPackage ? null : KINDS.find((x) => fs.existsSync(path.join(dir, x.manifest)));
+    const member = isPackage || k ? null : PACKAGE_ONLY.find((x) => fs.existsSync(path.join(dir, x.manifest)));
+    if (member) return err(ctx, "usage", `a ${member.noun} is checked with its package: \`hive plugins check <the package's folder>\``, 2);
     if (!isPackage && !k) return err(ctx, "not_a_plugin", `${dir} holds no ${[PACKAGE_MANIFEST, ...KINDS.map((x) => x.manifest)].join(", ")}`);
     if (k && process.env[DRAW_ALONE] === "1") {
       const problems = await k.draw(dir).catch((e: unknown) => [{ step: "draw", message: `drawing it failed: ${e instanceof Error ? e.message : String(e)}` }]);
@@ -686,6 +763,6 @@ const apiCmd = defineCommand({
 });
 
 export const pluginsCmd = defineCommand({
-  meta: { name: "plugins", description: "Tools, widgets, views and agents: start, install, remove; on or off, and their settings" },
+  meta: { name: "plugins", description: "Tools, widgets, views, live wallpapers and agents: start, install, remove; on or off, and their settings" },
   subCommands: { new: newCmd, add: addCmd, check: checkCmd, install: installCmd, search: searchCmd, rollback: rollbackCmd, reload: reloadCmd, remove: removeCmd, api: apiCmd, list: listCmd, show: showCmd, enable: switchCmd(true), disable: switchCmd(false), set: setCmd, reset: resetCmd, workspaces: workspacesCmd },
 });

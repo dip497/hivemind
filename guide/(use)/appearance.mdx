@@ -45,6 +45,24 @@ At the end, show the new values with \`hive config get appearance\`, and tell me
         for a still one. Over a background, the tile count, a frame's name and the selected tile's
         mark sit on the panel colour, so they read whatever the picture shows there.
 
+        **Shoal**, **Koi Pond**, **Jellyfish** and **Fireflies** are live scenes, drawn in
+        characters, with one creature for each of your agents, each program's agents one kind. In
+        Shoal a shark hunts while its agent works and circles the agent's tile when it needs you. In
+        Koi Pond the koi swim under lily pads, and a koi whose agent needs you comes up beside its
+        tile, mouthing at the surface. In Jellyfish a jelly comes up over its agent's tile and holds
+        there, glowing. In Fireflies an agent's firefly hovers by its tile flashing two bright
+        flashes, over and over, and when a turn ends well the small fireflies round it answer it.
+        A scene is drawn in your theme's colours; turn on **Colour** for its own: a reef's water,
+        coral and fish, a green pond with its pads and flowers, the deep sea, or a meadow at night.
+        **See-through** frosts the panels and tiles so the creatures show behind them.
+
+        In any live scene, point at a creature and its agent's name and state show beside the
+        pointer. Click it to go to that agent's tile. A click on open water stirs the scene.
+
+        A live wallpaper from a package you installed is listed after the built-in scenes. A
+        package can offer its own as your background once it is installed; nothing changes until
+        you say so. To make one: [Make a live wallpaper](/live-wallpapers).
+
         Check: the background shows behind your tiles.
       </Step>
       <Step title="Set the glass">
@@ -67,6 +85,7 @@ At the end, show the new values with \`hive config get appearance\`, and tell me
     hive config set appearance.radius 6
     hive config set appearance.glass.blur 12
     hive config set appearance.wallpaper.kind '"ice"'
+    hive config set appearance.wallpaper.kind '"@owner/package/name"'   # a package's live wallpaper
     ```
 
     Check: `hive config get appearance.glass.blur` prints `12`, and the open app has changed.
@@ -160,7 +179,7 @@ accent colour; importing one over a theme leaves the theme, so **Revert to previ
 keep a copy of your look with its photo, video and overlays, save `hive config get > my-look.json`:
 importing that file puts them back.
 
-A guest who joins your workspace sees your colours and accent, your own accent colour too, but not your photo, video, overlays or fonts.
+A guest who joins your workspace sees your colours and accent, your own accent colour too, but not your photo, video, overlays, fonts or a package's live wallpaper: the default background shows in its place.
 
 ## Check it worked
 

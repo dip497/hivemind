@@ -1037,6 +1037,17 @@ html.glass-on:not([data-wallpaper="none"]) .hm-layers {
   border-right-color: transparent;
   box-shadow: var(--hm-edge-glass);
 }
+/* Over a live scene (Shoal, Koi Pond …) the side panel is clear frosted glass, the scene running on
+   under it, as in the demos they are modelled on: a third of the panel tint (24% at the usual 72%),
+   and the blur, which is what keeps the names legible over a passing creature. Each scene's colours
+   are kept dark enough on a dark theme, light enough on a light one, for that (live/palette.ts).
+   Asked for less transparency or more contrast, the blocks at the end of this file have it solid,
+   as everywhere. */
+@media (not (prefers-reduced-transparency: reduce)) and (not (prefers-contrast: more)) {
+  html.glass-on.live-wallpaper .hm-layers {
+    background: color-mix(in srgb, var(--surface-2) calc(var(--glass-opacity) / 3), transparent);
+  }
+}
 /* (The glass-mode selection outline was removed — the top-clip indicator above
    works in both opaque + glass themes.) */
 /* Frost the floating islands (blur was removed for perf in the opaque theme; it
@@ -1244,6 +1255,24 @@ html.content-glass .hm-term-fs-panel {
 /* A photo or video before it loads, and its swatch in Settings. */
 [data-scene="image"]  { --wp-base: #0f172a; --wp-1: #334155; }
 [data-scene="video"]  { --wp-base: #0b1120; --wp-1: #1e293b; }
+/* A live scene draws on a canvas that fills the layer, its characters in the terminal's font. Till
+   it draws, and where it does not run, the layer shows its water: the page colour, or the scene's
+   own (Wallpaper.tsx, live/palette.ts). */
+.hm-live { position: absolute; inset: 0; font-family: var(--font-mono); }
+.hm-live > canvas { display: block; width: 100%; height: 100%; }
+/* A package's live wallpaper: its page in a sandboxed frame where the canvas would be. The canvas
+   above takes every pointer event (the app tells the frame); it shows once it has drawn. */
+.hm-live > .hm-live-frame { display: block; width: 100%; height: 100%; border: 0; background: transparent; pointer-events: none; opacity: 0; transition: opacity 0.4s ease-out; }
+.hm-live > .hm-live-frame[data-drawn] { opacity: 1; }
+/* The agent under the pointer, over its creature: its name and what it is doing. A click goes to it. */
+.hm-live-label {
+  position: fixed; z-index: 60; pointer-events: none; white-space: nowrap;
+  padding: 2px 8px; border-radius: 6px; font-family: var(--font-ui); font-size: var(--text-label); font-weight: 500; line-height: 18px;
+  color: var(--color-fg2); background: color-mix(in srgb, var(--color-bg2) 92%, transparent);
+  border: 1px solid var(--color-line); box-shadow: 0 2px 8px color-mix(in srgb, var(--color-bg) 40%, transparent);
+}
+.hm-live-label-name { color: var(--color-fg); font-weight: 600; }
+:root[data-over-creature] .react-flow__pane { cursor: pointer; }
 
 /* PERF — the blooms are plain composited textures on purpose. They used to
    carry `border-radius: 50%` + `filter: blur(60px)` + `mix-blend-mode: screen`,
@@ -1464,8 +1493,9 @@ html.glass-on .react-flow__node-browser {
   }
   html.glass-on body { background: var(--color-bg); }
   /* The layers panel is the one surface with a hand-tuned alpha, so the
-     --glass-opacity override above can't reach it. Solidify it explicitly. */
-  html.glass-on .hm-layers { background: var(--surface-2); }
+     --glass-opacity override above can't reach it. Solidify it explicitly, by the
+     same selector as the alpha's, which a plainer one lost to (it stayed 92%). */
+  html.glass-on:not([data-wallpaper="none"]) .hm-layers { background: var(--surface-2); }
   /* A full-viewport moving video behind opaque chrome is pure cost. */
   .hm-wallpaper { display: none !important; }
 }

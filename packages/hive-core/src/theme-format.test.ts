@@ -79,6 +79,11 @@ describe("checkTheme", () => {
     ["a file deeper than the app reads the folder", { wallpaper: { image: "a/b/c/d/e/still.webp" } }, /a\/b\/c\/d\/e\/still.webp is more than 4 folders deep/],
     ["a wallpaper of the wrong type", { wallpaper: { image: "clip.webm" } }, /is not an image/],
     ["a built-in wallpaper it does not have", { wallpaper: { kind: "image" } }, /wallpaper.kind is one of/],
+    // An app without a live scene would refuse the whole theme over it.
+    ["Shoal, which a theme cannot name yet", { wallpaper: { kind: "shoal" } }, /wallpaper.kind is one of/],
+    ["Koi Pond, which a theme cannot name yet", { wallpaper: { kind: "koi" } }, /wallpaper.kind is one of/],
+    ["Jellyfish, which a theme cannot name yet", { wallpaper: { kind: "jellyfish" } }, /wallpaper.kind is one of/],
+    ["Fireflies, which a theme cannot name yet", { wallpaper: { kind: "fireflies" } }, /wallpaper.kind is one of/],
     ["brightness out of range", { wallpaper: { kind: "mono", brightness: 2 } }, /brightness is from 0.4 to 1.1/],
     ["a sound of the wrong type", { sounds: { error: "wallpaper.webp" } }, /is not a sound/],
     ["a moment it does not have", { sounds: { hello: "sounds/needs.ogg" } }, /no moment hello/],
@@ -172,6 +177,14 @@ describe("themeFromLook", () => {
     expect(t.wallpaper).toEqual({ kind: "mono", brightness: 0.7 });
     expect(t.accent).toEqual(accent);
     expect(JSON.stringify(t)).not.toContain("hivemedia");
+  });
+
+  test("a live scene's look, built in or a package's: the theme gets Mono in its place, and the check takes it", () => {
+    for (const kind of ["shoal", "@acme/hive/bees"] as const) {
+      const t = themeFromLook("Mine", { ...DEFAULT_APPEARANCE, wallpaper: { kind, brightness: 0.85, colour: true } }, {});
+      expect(t.wallpaper).toEqual({ kind: "mono", brightness: 0.85 });
+      expect(checkTheme(t, [])).toHaveProperty("theme");
+    }
   });
 });
 

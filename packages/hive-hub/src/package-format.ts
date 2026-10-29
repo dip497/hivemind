@@ -9,6 +9,7 @@ import { isSafeRelativePath, MANIFEST_FILE as VIEW_MANIFEST } from "@hivemind/vi
 import { TOOL_MANIFEST } from "@hivemind/core/tool-format";
 import { THEME_MANIFEST } from "@hivemind/core/theme-format";
 import { THEME_ID_RE } from "@hivemind/core/appearance-extra";
+import { WALLPAPER_MANIFEST } from "@hivemind/view-sdk/wallpaper";
 import { UNSAFE_TEXT_RE } from "./index-format.js";
 
 /** The file holding a package's own manifest. */
@@ -21,8 +22,9 @@ const agentId = z.string().regex(/^(?!.*--)(?:@[a-z0-9][a-z0-9-]{0,38}\/)?[a-z0-
 /** A member's id: `@owner/name`, the owner being the package's. */
 export const MEMBER_ID = /^@[a-z0-9][a-z0-9-]{0,38}\/[a-z0-9][a-z0-9-]{0,63}$/;
 /** A member's id as its kind writes it, one rule for the package check and the hub's index: a
- *  theme's is `@owner/package/theme` (its folder in its package), every other kind's `@owner/name`. */
-export const memberIdRe = (kind: string): RegExp => (kind === "theme" ? THEME_ID_RE : MEMBER_ID);
+ *  theme's is `@owner/package/theme` and a live wallpaper's `@owner/package/wallpaper` (its folder in
+ *  its package), every other kind's `@owner/name`. */
+export const memberIdRe = (kind: string): RegExp => (kind === "theme" || kind === "wallpaper" ? THEME_ID_RE : MEMBER_ID);
 
 const folderEntry = z.strictObject({ path: relative });
 const presetEntry = z.strictObject({
@@ -41,11 +43,11 @@ export type MemberRuns = "sandboxed" | "in the app" | "as an agent's instruction
 export const runsWithoutTrust = (runs: MemberRuns): boolean => runs === "sandboxed" || runs === "nothing: it is data";
 
 export interface MemberFormat {
-  kind: "tool" | "widget" | "view" | "agent-preset" | "theme";
+  kind: "tool" | "widget" | "view" | "agent-preset" | "theme" | "wallpaper";
   /** What it is called in a sentence. */
   noun: string;
   /** The list in `hivemind-package.json` that names members of this kind. */
-  list: "tools" | "widgets" | "views" | "agents" | "themes";
+  list: "tools" | "widgets" | "views" | "agents" | "themes" | "wallpapers";
   /** How one entry of that list is written. */
   entry: z.ZodType;
   /** The most one package may hold. */
@@ -62,6 +64,7 @@ export const MEMBER_FORMATS: readonly MemberFormat[] = [
   { kind: "view", noun: "view", list: "views", most: 8, manifest: VIEW_MANIFEST, runs: "sandboxed", entry: folderEntry },
   { kind: "agent-preset", noun: "agent preset", list: "agents", most: 16, runs: "as an agent's instructions", entry: presetEntry },
   { kind: "theme", noun: "theme", list: "themes", most: 8, manifest: THEME_MANIFEST, runs: "nothing: it is data", entry: folderEntry },
+  { kind: "wallpaper", noun: "live wallpaper", list: "wallpapers", most: 8, manifest: WALLPAPER_MANIFEST, runs: "sandboxed", entry: folderEntry },
 ];
 
 export const memberFormat = (kind: string): MemberFormat | undefined => MEMBER_FORMATS.find((k) => k.kind === kind);
@@ -77,6 +80,8 @@ const schema = z.strictObject({
   ...Object.fromEntries(MEMBER_FORMATS.map((k) => [k.list, z.array(k.entry).max(k.most).default([])])),
   startup: z.strictObject({
     view: z.string().max(200).optional(),
+    /** One of its live wallpapers, offered as the background once it is installed. */
+    wallpaper: z.string().max(200).optional(),
     agents: z.array(z.string()).max(8).default([]),
     maxConcurrent: z.number().int().min(1).max(4).default(1),
   }).optional(),
@@ -88,8 +93,8 @@ export interface PackageManifest {
   name: string;
   version: string;
   replaces: string[];
-  startup?: { view?: string; agents: string[]; maxConcurrent: number };
-  /** The members, by the list each kind is named in (`tools`, `widgets`, `views`, `agents`, `themes`). */
+  startup?: { view?: string; wallpaper?: string; agents: string[]; maxConcurrent: number };
+  /** The members, by the list each kind is named in (`tools`, `widgets`, `views`, `agents`, `themes`, `wallpapers`). */
   [list: string]: unknown;
 }
 
@@ -114,7 +119,7 @@ export function checkPackageManifest(raw: unknown): { manifest: PackageManifest 
     const presets = entriesOf(m, memberFormat("agent-preset")!) as AgentPreset[];
     const p = twice(m.startup.agents, "startup agent")
       ?? m.startup.agents.filter((a) => !presets.some((x) => x.id === a)).map((a) => `unknown startup agent: ${a}`)[0]
-      ?? (!m.startup.view && !m.startup.agents.length ? "startup must select a view or start an agent" : null);
+      ?? (!m.startup.view && !m.startup.wallpaper && !m.startup.agents.length ? "startup must select a view or a wallpaper, or start an agent" : null);
     if (p) return { problem: p };
   }
   return { manifest: m };

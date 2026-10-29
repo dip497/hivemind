@@ -61,6 +61,10 @@ export async function readPackage(dir: string, given: { id?: string; folder: str
       }
     }
     unique(members.map((x) => `${x.kind}:${x.id}`), "member id");
+    const wallpaper = m.startup?.wallpaper;
+    if (wallpaper && !members.some((x) => x.kind === "wallpaper" && x.id === wallpaper)) {
+      fail(`unknown startup wallpaper: ${wallpaper}; it is one of its own, ${m.id}/<folder>, named in "wallpapers"`);
+    }
     return { id: m.id, name: m.name, version: m.version, members, replaces: m.replaces, manifest: m };
   }
   const k = MEMBER_KINDS.find((x) => x.manifest && existsSync(path.join(dir, x.manifest)));
@@ -195,6 +199,7 @@ export async function inspectPackage(directory: string, providers: readonly Pack
     files: data.files, bytes: data.bytes, members: read.members, agents,
     startup: manifest.startup ? {
       view: manifest.startup.view ?? null,
+      wallpaper: manifest.startup.wallpaper ?? null,
       agents: manifest.startup.agents.map((id) => agents.find((a) => a.id === id)!),
       maxConcurrent: manifest.startup.maxConcurrent,
       requiresWorkspaceSelection: true, requiresExplicitStart: true,

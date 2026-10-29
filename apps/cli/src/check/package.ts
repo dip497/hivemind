@@ -7,7 +7,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { checkPackageManifest, entriesOf, ownedBy, PACKAGE_MANIFEST, packageFiles, safeRelative, sizeProblem } from "@hivemind/hub";
 import { MEMBER_KINDS } from "@hivemind/core/package-kinds";
-import { kindNamed } from "../plugin-kinds.js";
+import { kindNamed, packageOnly } from "../plugin-kinds.js";
 import { sourceOf } from "../package-authoring.js";
 import { checkPlugin } from "./check.js";
 import type { Problem } from "./problem.js";
@@ -60,14 +60,15 @@ export async function checkPackage(dir: string): Promise<PackageCheckReport> {
       const needle = at ? `"${at}"` : `"${name}"`;
       const problems: PackageProblem[] = [];
       let steps: Record<string, string> | null = null;
-      const authored = kindNamed(k.kind);
-      if (at && authored) {
-        const source = sourceOf(authored, path.join(dir, at));
+      // Its code's own check: a kind you write alone, or a live wallpaper.
+      const checked = kindNamed(k.kind) ?? packageOnly(k.kind)?.check;
+      if (at && checked) {
+        const source = sourceOf(kindNamed(k.kind) ?? {}, path.join(dir, at));
         const rel = path.relative(dir, source).split(path.sep).join("/");
         if (!fs.existsSync(source)) problems.push(atManifest(`${k.list}: there is no folder ${at}`, needle, at));
-        else if (!fs.existsSync(path.join(source, authored.manifest))) problems.push(atManifest(`${k.list}: ${at} holds no ${authored.manifest}`, needle, at));
+        else if (!fs.existsSync(path.join(source, checked.manifest))) problems.push(atManifest(`${k.list}: ${at} holds no ${checked.manifest}`, needle, at));
         else {
-          const own = await checkPlugin(authored, source);
+          const own = await checkPlugin(checked, source);
           steps = own.steps;
           for (const n of own.notes) if (!report.notes.includes(n)) report.notes.push(n);
           problems.push(...own.problems.map((p) => ({ ...p, file: p.file ? `${rel}/${p.file}` : rel, member: at })));

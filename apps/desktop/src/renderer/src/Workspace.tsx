@@ -43,6 +43,8 @@ import { tileName } from "@hivemind/workspace-doc/tile-list";
 import { cleanName } from "@hivemind/agents";
 import { frameAtPoint } from "./frame-layout";
 import { Wallpaper } from "./Wallpaper";
+import { reloadWallpapers } from "./live/wallpaper-store";
+import type { SceneAgent } from "./live/roster";
 import { CanvasOverlay } from "./CanvasOverlay";
 import { applyTheme, setPluginScene, setWallpaperActive } from "./theme-store";
 import { patchSettings, useSettings } from "./settings-store";
@@ -1034,6 +1036,8 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
             break;
           }
           case "views.rescan": {
+            // A package's live wallpapers come and go with it too.
+            void reloadWallpapers();
             const r = await loadCommunityViews(rootRef.current);
             await reply(cmd.id, true, { registered: r.registered, refused: r.refused });
             break;
@@ -1267,6 +1271,25 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
     [selectedTileId, selectedFrameId, board.selectedId],
   );
 
+  // A live wallpaper's creatures (Shoal's sharks): the agents here. The same array until one comes, goes or falls
+  // asleep, so the wallpaper does no work when other tile changes go by.
+  const sceneKey = useMemo(() => tiles.filter((t) => t.kind === AGENT_TILE_KIND).map((t) => `${t.id}\t${agentOfTile(t) ?? ""}\t${t.sleeping ? 1 : 0}`).join("\n"), [tiles]);
+  const sceneAgents = useMemo((): SceneAgent[] => (sceneKey ? sceneKey.split("\n").map((line) => {
+    const [tileId, agent, sleeping] = line.split("\t");
+    return { tileId: tileId!, agent: agent || null, sleeping: sleeping === "1" };
+  }) : []), [sceneKey]);
+
+  // A creature on the wallpaper is labelled with its agent's tile's name, and a click on it goes to
+  // the tile, as `hive ctl focus` does.
+  const creatureName = useCallback((id: string) => {
+    const t = tilesRef.current.find((x) => x.id === id);
+    return t ? tileName(tileNames, agentTitles, t) : null;
+  }, [tileNames, agentTitles]);
+  const openCreature = useCallback((id: string) => {
+    setSelectedTileId(id);
+    focusTile(id);
+  }, [focusTile]);
+
   // ── what the active view receives ─────────────────────────────────────────
   const links = useMemo(() => ({ pipes, spawnLinks }), [pipes, spawnLinks]);
   const model: WorkspaceViewModel = useMemo(() => ({
@@ -1332,7 +1355,7 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
     <div className="relative h-full w-full flex flex-col" data-active-view={activeViewId ?? ""}>
       {/* Live wallpaper — fixed full-window layer behind ALL app content (z-index
           -1), so it shows through every view AND the panels beside it. */}
-      {chrome.wallpaper && <Wallpaper />}
+      {chrome.wallpaper && <Wallpaper agents={sceneAgents} live={!pluginScene} nameOf={creatureName} onOpen={openCreature} />}
       {/* Custom OVERLAY media — user's transparent foreground plane OVER the
           tiles. Fixed full-window + pointer-events:none. Same policy as the
           wallpaper: never over a view that paints its own scene. */}

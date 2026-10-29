@@ -362,6 +362,7 @@ starting waits for it (30 s in all). Exit 5: not running, or no such command; 4:
 Writing one: \`hive plugins new tool|widget|view <name>\` starts it, with a PROMPT.md that has the whole guide.
 Several as one: \`hive plugins new package <name>\`, then \`hive plugins new <kind> <name> --in <package>\`; \`hive plugins check <package>\` checks every member, \`hive plugins install <package>\` installs them as one.
 A package that opens with a view (\`"startup": {"view": …}\`): the install's \`--json\` names it as \`startView\`. The app offers to switch to it, unless it has offered that view before, so leave the person's view as it is unless they asked to see it; \`startView.open\` switches the running app.
+A live wallpaper (a scene behind the canvas, one creature for each agent): \`hive plugins new wallpaper <name>\` starts one in a package of its own that offers it, with a PROMPT.md. A package that offers one (\`"startup": {"wallpaper": …}\`): the install's \`--json\` names it as \`startWallpaper\`. The app asks the person, so run \`startWallpaper.use\` (\`hive config set appearance.wallpaper.kind '"<id>"'\`) only when they asked to see it.
 
 ## Beyond the canvas
 Each has \`--help\` with its exact options; read it before you run one.

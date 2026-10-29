@@ -8,7 +8,22 @@ import path from "node:path";
 import type { AuthoredKind } from "../plugin-kinds.js";
 import { compiledSelf } from "../remote.js";
 import type { Problem } from "./problem.js";
-import { checkTypes } from "./types.js";
+import { checkTypes, type TypeSetup } from "./types.js";
+
+/** A kind `checkPlugin` checks: one you write alone (`AuthoredKind`), or a live wallpaper. */
+export interface CheckedKind {
+  kind: string;
+  noun: string;
+  manifest: string;
+  types: TypeSetup;
+  validate(dir: string): Promise<string[]>;
+  /** Its code drawn once here, for a kind whose code never runs in `hive` (a live wallpaper's runs
+   *  in a browser's sandbox): what went wrong, or why it could not be drawn. Without it, the code
+   *  is drawn in a `hive` of its own (`drawApart`). */
+  drawHere?(dir: string): Promise<Problem[] | { notRun: string }>;
+  /** How its code was drawn, said under the report when `drawHere` drew it. */
+  drawNote?: string;
+}
 
 /** Set on the `hive` that draws, by the one checking: it draws and answers its problems as JSON. */
 export const DRAW_ALONE = "HIVE_CHECK_DRAWS";
@@ -40,7 +55,7 @@ function fieldLine(file: string, message: string): number | undefined {
 }
 
 export interface CheckReport {
-  kind: AuthoredKind["kind"];
+  kind: AuthoredKind["kind"] | CheckedKind["kind"];
   dir: string;
   /** What each step did: "ok", "failed", or why it did not run. */
   steps: { types: string; manifest: string; draw: string };
@@ -49,23 +64,24 @@ export interface CheckReport {
   problems: Problem[];
 }
 
-export async function checkPlugin(k: AuthoredKind, dir: string): Promise<CheckReport> {
+export async function checkPlugin(k: CheckedKind, dir: string): Promise<CheckReport> {
   const types = checkTypes(dir, k.types, k.noun);
   const manifest: Problem[] = (await k.validate(dir)).map((message) => {
     const line = fieldLine(path.join(dir, k.manifest), message);
     return { step: "manifest", file: k.manifest, ...(line ? { line } : {}), message };
   });
   // A manifest the app would not load says nothing of what its code draws.
-  const draw = manifest.length ? null : drawApart(dir);
+  const drawn = manifest.length ? { notRun: "not run: its manifest has problems" } : k.drawHere ? await k.drawHere(dir) : drawApart(dir);
+  const draw = Array.isArray(drawn) ? drawn : null;
   const state = (ran: boolean, problems: Problem[], why = "") => (!ran ? why : problems.length ? "failed" : "ok");
   return {
     kind: k.kind, dir,
     steps: {
       types: state(types.ran, types.problems, types.why),
       manifest: state(true, manifest),
-      draw: state(draw !== null, draw ?? [], "not run: its manifest has problems"),
+      draw: state(draw !== null, draw ?? [], "notRun" in drawn ? drawn.notRun : ""),
     },
-    notes: types.note ? [types.note] : [],
+    notes: [...(types.note ? [types.note] : []), ...(draw && k.drawHere && k.drawNote ? [k.drawNote] : [])],
     problems: [...types.problems, ...manifest, ...(draw ?? [])],
   };
 }

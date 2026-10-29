@@ -43,6 +43,8 @@ linux-unpacked/
 !.claude/skills/test-audit/
 !.claude/skills/maintaining-docs/
 !.claude/skills/feature-done/
+!.claude/skills/hivemind-live-wallpaper/
+!.claude/skills/ascii-character-animation/
 .hyperresearch/
 research/
 # screenshots/ are the README demo images — they MUST be committed so GitHub

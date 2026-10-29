@@ -4,19 +4,31 @@ import widgetGuide from "../../../guide/(extend)/widgets.mdx" with { type: "text
 import toolGuide from "../../../guide/(extend)/tool-plugins.mdx" with { type: "text" };
 import viewGuide from "../../../guide/(extend)/extension-authoring.mdx" with { type: "text" };
 import packagesGuide from "../../../guide/(extend)/packages.mdx" with { type: "text" };
+import wallpaperGuide from "../../../guide/(extend)/live-wallpapers.mdx" with { type: "text" };
+import wallpaperSkill from "../../../.claude/skills/hivemind-live-wallpaper/SKILL.md" with { type: "text" };
+import characterSkill from "../../../.claude/skills/ascii-character-animation/SKILL.md" with { type: "text" };
 
-export type PluginKind = "widget" | "tool" | "view";
+export type PluginKind = "widget" | "tool" | "view" | "wallpaper";
 
-/** A member's place in the package it is written in: the way from its folder to the package's,
- *  and the package's id. */
-export interface InPackage { root: string; id: string }
+/** A member's place in the package it is written in: the way from the folder its PROMPT.md is in
+ *  to the package's, and the package's id. `member` is the way to the member's own folder when
+ *  PROMPT.md is not in it (a live wallpaper's package of its own has it at its root). */
+export interface InPackage { root: string; id: string; member?: string }
 
-const GUIDE: Record<PluginKind, string> = { widget: widgetGuide, tool: toolGuide, view: viewGuide };
-const NOUN: Record<PluginKind, string> = { widget: "widget", tool: "tool plugin", view: "view" };
+const GUIDE: Record<PluginKind, string> = { widget: widgetGuide, tool: toolGuide, view: viewGuide, wallpaper: wallpaperGuide };
+const NOUN: Record<PluginKind, string> = { widget: "widget", tool: "tool plugin", view: "view", wallpaper: "live wallpaper" };
 const WHAT: Record<PluginKind, string> = {
   widget: "a box on the board (and in every view) that its own code draws and keeps state in",
   tool: "a kind of tile, drawn by its own React code inside the app, with the folder and programs of its frame",
   view: "a sandboxed web page that draws the whole workspace its own way",
+  wallpaper: "a sandboxed scene drawn behind the canvas whose creatures are the person's agents, one each",
+};
+
+/** The skills a live wallpaper's package carries for the person's coding agent, by their path in
+ *  it: this repository's own, so they say what its contributors are told. */
+export const WALLPAPER_SKILLS: Record<string, string> = {
+  ".claude/skills/hivemind-live-wallpaper/SKILL.md": wallpaperSkill,
+  ".claude/skills/ascii-character-animation/SKILL.md": characterSkill,
 };
 
 /** Commands with their comments lined up. */
@@ -29,6 +41,17 @@ const commented = (lines: Array<[string, string]>): string => {
  *  its package, which is what installs. */
 function loopInPackage(kind: PluginKind, id: string, p: InPackage): string {
   const record = `${kind}:${id}`;
+  if (kind === "wallpaper") {
+    // npm's --prefix, not a `cd`: each line runs from this folder, whatever ran before it.
+    const npm = p.member && p.member !== "." ? `npm --prefix ${p.member}` : "npm";
+    return commented([
+      [`${npm} install`, "once"],
+      [`${npm} run build`, "src/main.ts into dist/main.js, after each change"],
+      [`hive plugins check ${p.root}`, "the package; this wallpaper drawn in headless Chromium against a fake app; file:line for each problem"],
+      [`hive plugins install ${p.root}`, "the package, again after each change"],
+      [`hive config set appearance.wallpaper.kind '"${id}"'`, "see it behind the canvas"],
+    ]);
+  }
   return commented([
     ...(kind === "view" ? [["npm install", "once"] as [string, string]] : []),
     [`hive plugins check ${p.root}`, "the package: this member and every other one; file:line for each problem"],
@@ -80,35 +103,44 @@ export function plainMarkdown(mdx: string): string {
     .replace(/\n{3,}/g, "\n\n");
 }
 
-export function pluginBrief(kind: PluginKind, id: string, inPackage?: InPackage): string {
-  const at = inPackage?.root ?? ".";
-  return `# Build this ${NOUN[kind]}
+/** `file` of the package at `root`, as written from the folder PROMPT.md is in. */
+const inRoot = (root: string, file: string) => (root === "." ? file : `${root}/${file}`);
 
-Hand this file to your coding agent, after writing what you want under **What I want**. Everything
-it needs is here: it does not need the Hivemind source.
+/** How an agent sees for itself that a live wallpaper works, and when it is done. */
+function wallpaperChecks(id: string, at: string): string {
+  return `## Check your own work
 
-## What I want
+\`hive plugins check ${at}\` loads the built wallpaper in headless Chromium, sandboxed and with no
+network as the app runs it, and plays the app: it hands it agents in each state, tiles, the colours
+and each mode, points at it and clicks the water. It must say \`ready\` and \`drawn\`, name only
+creatures it was sent, and throw nothing. A test of its own does the same with the SDK's
+\`fakeWallpaperHost\` (\`@hivemind/view-sdk/testing\`).
 
-<!-- Say what it should show and do, and for whom. Be concrete. -->
-
-...
-
----
-
-## What you are building
-
-A **Hivemind ${NOUN[kind]}**: ${WHAT[kind]}. This is \`${id}\`, started in this folder, and it already
-runs. The guide below is the whole contract.${inPackage ? `
-
-It is a member of the package \`${inPackage.id}\` in \`${inPackage.root}\`, and installs only with it.` : ""}
-
-## The loop
+Then look at it in the app, behind the person's own agents:
 
 \`\`\`bash
-${loop(kind, id, inPackage)}
+${commented([
+  ["hive config get appearance.wallpaper.kind", "what they had: set it back when you are done"],
+  [`hive config set appearance.wallpaper.kind '"${id}"'`, "this one"],
+  ["hive config set appearance.wallpaper.colour true", "in its own colours; false: the theme's page and text"],
+  ["hive config set appearance.glass.animate false", "Animation off: one still frame"],
+])}
 \`\`\`
 
-## Check your own work
+## Done means
+
+1. \`hive plugins check ${at}\` says ok: its types, its manifest, and it drawn against a fake app.
+2. \`hive plugins install ${at}\` installs it, and \`hive plugins list\` shows it with no problem.
+3. It reads behind the canvas in a light and a dark theme, with **Colour** on and off and with
+   Animation off. Each creature shows its agent's state, and none sits under a tile.
+4. It draws at most 30 frames a second and nothing while held: \`animate\` does both.
+5. \`hivemind-wallpaper.json\` has a one-line description, and the package's README.md says what
+   the wallpaper shows, for its page on HiveHub.`;
+}
+
+/** How an agent drives and reads a running plugin through its commands, and when it is done. */
+function commandChecks(kind: PluginKind, id: string, at: string): string {
+  return `## Check your own work
 
 Declare \`"commands"\` in the manifest and answer them with \`onCommand\` (see the guide): then you can
 drive and read the running ${NOUN[kind]} yourself, as any agent can:
@@ -127,7 +159,48 @@ Give it at least one command that reports what it shows, so you can see that it 
 3. \`hive ctl plugin open\` shows it, in the light and the dark theme: colours come from the theme.${kind === "tool" ? "\n   \`hive ctl tile look\` shows it drew what was asked, and its console has no error." : ""}
 4. Its commands answer as described, and what it shows follows them.
 5. The manifest has a one-line description, a \`category\` and only the permissions it uses;
-   README.md says what it does and what it asks for, for its page on HiveHub.
+   README.md says what it does and what it asks for, for its page on HiveHub.`;
+}
+
+export function pluginBrief(kind: PluginKind, id: string, inPackage?: InPackage): string {
+  const at = inPackage?.root ?? ".";
+  const member = inPackage?.member && inPackage.member !== "." ? `\`${inPackage.member}\`` : "this folder";
+  const skills = Object.keys(WALLPAPER_SKILLS).map((s) => `\`${inRoot(at, s)}\``);
+  return `# Build this ${NOUN[kind]}
+
+Hand this file to your coding agent, after writing what you want under **What I want**. Everything
+it needs is here: it does not need the Hivemind source.
+
+## What I want
+
+<!-- Say what it should show and do, and for whom. Be concrete. -->
+
+...
+
+---
+
+## What you are building
+
+A **Hivemind ${NOUN[kind]}**: ${WHAT[kind]}. This is \`${id}\`, started in ${member}, and it already
+runs. The guide below is the whole contract.${inPackage ? `
+
+It is a member of the package \`${inPackage.id}\` ${at === "." ? "in this folder" : `in \`${at}\``}, and installs only with it.` : ""}${kind === "wallpaper" ? `
+
+A package offers one of its wallpapers as the background when it is installed: \`"startup": {"wallpaper": "<id>"}\`
+in its \`hivemind-package.json\`. The app asks the person; it never switches by itself.
+
+Two skills come with it, for you. Read both before you draw:
+
+- ${skills[0]}: the contract, the SDK, the package and HiveHub.
+- ${skills[1]}: how a scene drawn in characters looks good, reads behind tiles and stays cheap.` : ""}
+
+## The loop
+
+\`\`\`bash
+${loop(kind, id, inPackage)}
+\`\`\`
+
+${kind === "wallpaper" ? wallpaperChecks(id, at) : commandChecks(kind, id, at)}
 
 ---
 
@@ -145,7 +218,7 @@ it needs is here: it does not need the Hivemind source.
 
 ## What I want
 
-<!-- Say what the package is for, and which tools, widgets, views and themes it should hold. -->
+<!-- Say what the package is for, and which tools, widgets, views, themes and live wallpapers it should hold. -->
 
 ...
 
@@ -153,7 +226,7 @@ it needs is here: it does not need the Hivemind source.
 
 ## What you are building
 
-A **Hivemind package**: one folder holding tools, widgets, views and themes, each in a folder of its own,
+A **Hivemind package**: one folder holding tools, widgets, views, themes and live wallpapers, each in a folder of its own,
 that installs, switches on, updates and is removed as one. This is \`${id}\`, started in this
 folder. \`hivemind-package.json\` names its members; it holds none yet.
 
@@ -174,12 +247,14 @@ it before you write the member's code. Every member's id is \`${owner}/<name>\`.
 
 \`\`\`bash
 ${commented([
+  ["npm --prefix wallpapers/<name> run build", "a live wallpaper: built before it is checked"],
   ["hive plugins check .", "the package and every member: types, manifest, code drawn once; file:line for each problem"],
   ["hive plugins install .", "again after each change; it prints what the package holds"],
   [`hive plugins enable ${id}`, "once, if it says it is off (a tool or an agent preset arrives off)"],
   ["hive ctl plugin open <kind>:<member id>", "open a tool's tile, put a widget on the board, switch to a view"],
   ["hive ctl tile look <tile>", "the picture of a tile, its state and what its code logged"],
   [`hive theme use ${id}/<theme>`, "a theme: see it on the app; `hive theme revert` goes back in one step"],
+  [`hive config set appearance.wallpaper.kind '"${id}/<wallpaper>"'`, "a live wallpaper: see it behind the canvas"],
 ])}
 \`\`\`
 

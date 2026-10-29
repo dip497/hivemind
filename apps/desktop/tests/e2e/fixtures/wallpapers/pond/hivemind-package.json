@@ -1,0 +1,8 @@
+{
+  "apiVersion": 2,
+  "id": "@e2e/pond",
+  "name": "Pond",
+  "version": "1.0.0",
+  "wallpapers": [{ "path": "wallpapers/dots" }],
+  "startup": { "wallpaper": "@e2e/pond/dots" }
+}

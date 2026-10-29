@@ -194,8 +194,12 @@ export function fakeHost(opts: FakeHostOptions = {}): FakeHost {
   };
   port.start();
 
+  // From the page it is framed in, as the app's handshake is: a framed page takes it from no other.
+  // Only a browser's window has one; a runtime with no Window (Bun, the CLI's draw) sends none.
   const handshake = (target: EventTarget) => {
-    target.dispatchEvent(new MessageEvent("message", { data: { type: PORT_HANDSHAKE }, ports: [channel.port2] }));
+    const parent = (target as { parent?: unknown }).parent;
+    const source = typeof Window !== "undefined" && parent instanceof Window ? { source: parent } : {};
+    target.dispatchEvent(new MessageEvent("message", { data: { type: PORT_HANDSHAKE }, ports: [channel.port2], ...source }));
   };
 
   return Object.assign(host, {
@@ -224,3 +228,5 @@ export function fakeHost(opts: FakeHostOptions = {}): FakeHost {
     close: () => { port.onmessage = null; port.close(); },
   });
 }
+
+export { fakeWallpaperHost, type FakeWallpaperHost, type FakeWallpaperOptions } from "./wallpaper-testing.js";

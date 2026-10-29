@@ -20,6 +20,15 @@ of its bundle and always gets the SDK of the app it runs in.
 Test a view without the app with `fakeHost()` from `@hivemind/view-sdk/testing`: it greets the view
 as the app does and says why the app would refuse what the view sends.
 
+It is also the client of a **live wallpaper**, a scene drawn behind the canvas whose creatures are
+the person's agents: `connectWallpaper()` (`src/wallpaper-client.ts`) speaks live wallpaper
+protocol 1 (`src/wallpaper.ts`), and `fakeWallpaperHost()` tests one without the app. How to make
+one: https://hivemind.griiken.com/guide/live-wallpapers/.
+
+```sh
+hive plugins new wallpaper <name>     # a package holding a working one
+```
+
 ## Contributing
 
 The protocol, and each command's permission (`COMMAND_PERMISSION`), are in `src/protocol.ts`, checked against
