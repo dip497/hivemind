@@ -1,21 +1,21 @@
 ---
 title: "Make a live wallpaper"
-description: "A scene behind your canvas whose creatures are your agents: build one, ship it in a package, publish it."
+description: "A scene of your own behind the canvas, whose life moves by itself and plays with your pointer: build one, ship it in a package, publish it."
 ---
 
-Make a scene of your own that runs behind your canvas, with one creature for each of your agents,
-as Shoal's sharks are. You or your coding agent can take it from an idea to HiveHub with the
-`hive` command.
+Make a scene of your own that runs behind your canvas: a small world whose life moves by itself
+and plays with your pointer, as Shoal's fish scatter from it. You or your coding agent can take it
+from an idea to HiveHub with the `hive` command.
 
 <AgentPrompt description="Paste this into your coding agent to build a live wallpaper, use it as your background and publish it." page="live-wallpapers">{`
-Build a Hivemind live wallpaper (a scene drawn behind the canvas in a sandboxed frame, one creature for each of my agents) and, if I want, publish it on HiveHub.
+Build a Hivemind live wallpaper (a scene drawn behind the canvas in a sandboxed frame, a world of its own that moves by itself and plays with the pointer) and, if I want, publish it on HiveHub.
 
-1. Ask me what the scene is: its world, what an agent's creature is, and what a creature does while its agent works, is ready, needs me, and rests. Ask its name (lowercase letters, digits and dashes).
+1. Ask me what the scene is: its world, what lives in it, what that life does on its own, and what it does when my pointer comes near and when I click. Ask its name (lowercase letters, digits and dashes).
 2. Start it: \`hive plugins new wallpaper <name>\`. It writes a package of that name holding the wallpaper in \`wallpapers/<name>\`, with \`startup.wallpaper\` set. It takes the owner from the GitHub account \`gh\` is signed in as. If \`gh\` is not signed in, ask me for my GitHub login and pass \`--owner <login>\`. To add the wallpaper to a package I already have, pass \`--in <package>\` instead.
-3. Read \`PROMPT.md\` in full, and the two skills it copied into the package's \`.claude/skills/\`: hivemind-live-wallpaper (the contract) and ascii-character-animation (the craft). Write the scene in \`src/main.ts\` from them. The wallpaper has no network and no permissions. It is told each agent's creature (never a name), where the tiles are, the colours, whether to run, and the pointer and clicks over empty canvas.
-4. Where the starter's \`package.json\` is, run \`npm install\` once, then \`npm run build\` after each change, then \`hive plugins check <package>\`. It must say ok. It names the file and line of each problem, and loads the wallpaper in a headless browser to check it says ready and drawn and names only creatures it was sent.
+3. Read \`PROMPT.md\` in full, and the two skills it copied into the package's \`.claude/skills/\`: hivemind-live-wallpaper (the contract) and ascii-character-animation (the craft). Write the scene in \`src/main.ts\` from them. The wallpaper has no network and no permissions. It is told its size, the theme's colours and font, whether to run, and the pointer and clicks over empty canvas, and nothing of my workspace.
+4. Where the starter's \`package.json\` is, run \`npm install\` once, then \`npm run build\` after each change, then \`hive plugins check <package>\`. It must say ok. It names the file and line of each problem, and loads the wallpaper in a headless browser to check it says ready and drawn, says nothing else, and throws no error.
 5. Install it: \`hive plugins install <package>\`. Ask me before changing my background. On a yes, run the command the install prints for it (\`--json\` gives it as startWallpaper), or \`hive config set appearance.wallpaper.kind '"<the wallpaper's id>"'\`. Its id is \`@owner/package/<folder>\`.
-6. Done means: it draws in my theme's two colours, light and dark; its creatures keep off my tiles; the creature of an agent that needs me goes to the open side of that agent's tile; it draws nothing on its own while held and one settled frame while still; and \`README.md\` says what it is.
+6. Done means: it reads behind my tiles in a light and a dark theme; its life moves on its own, calmly, and answers my pointer and a click; it draws nothing on its own while held and one settled frame while still; and \`README.md\` says what it is.
 7. Publish only if I say so. Commit the package with the wallpaper's \`dist/\`, push it to GitHub, and run \`hivehub publish <package>\`, as https://hivemind.griiken.com/guide/publish-to-hivehub.md says. If I must sign in, ask me to open the link and type the code myself.
 
 At the end, tell me the wallpaper's id, the command others use to install it (\`hive plugins install @owner/package\`), and anything you could not check.
@@ -28,31 +28,29 @@ as it runs a [view](/extension-authoring). Shoal, Koi Pond, Jellyfish and Firefl
 that come with the app ([how to pick one](/appearance)). Yours ships in a
 [package](/packages), and its id is `@owner/package/<folder>`.
 
-What it is told is less than a view is:
+It is a world of its own. What lives in it moves by itself, and plays with the person at the
+computer through the pointer. It is told only:
 
-- Each agent's creature: an id that means nothing outside the scene, the program (`claude`,
-  `codex` …), a `kind` from 0 to 1 that is the same for every agent of one program, a `size`, and
-  what the agent is doing: `working`, `ready`, `needs-you` or `resting`.
-- Where the tiles are on the screen, and whether they are see-through.
-- The colours to draw in, and whether to run, keep its last frame or show one settled frame.
-- The pointer and clicks over empty canvas, and a turn an agent finished well.
+- its size, and the screen's pixel ratio;
+- the theme: its page and text colours, whether it is dark, and the terminals' font;
+- whether to run, keep its last frame, or show one settled frame;
+- the pointer over empty canvas, and clicks there.
 
-It is never told an agent's name, a folder, a command, a tile's own id or anything a terminal
-shows. It loads and fetches nothing from the network, has no permissions, never has the keyboard,
-and cannot change the workspace. The two things it says back are that its first frame is up, and
-which creature is under the pointer. While the pointer is over empty canvas, the app shows that
-agent's name and state beside the pointer, and a click there goes to the agent's tile.
+It is told nothing of your workspace: not your agents, your tiles, their names or what they show.
+It loads and fetches nothing from the network, has no permissions, never has the keyboard, and
+cannot change the workspace. The two things it says back are that it speaks the protocol, and
+that its first frame is up.
 
 Like a view, its frame can still open a WebRTC connection, which no page policy in Chromium
 stops, and so could send what it is told elsewhere. Install live wallpapers, like views, from
 people you trust.
 
-It is not drawn behind a view you installed, which lays its tiles out itself, nor on the
+It is not drawn behind a view you installed, which paints its own scene, nor on the
 [phone page](/phone).
 
 ## Before you start
 
-- Hivemind 2026.10.8 or newer, open on a project with a few agents.
+- Hivemind 2026.10.9 or newer.
 - Node 22 or newer, for `npm`.
 - You know a little TypeScript or JavaScript, or your coding agent does.
 
@@ -65,8 +63,9 @@ It is not drawn behind a view you installed, which lays its tiles out itself, no
     It writes the package `pond/`. Its `hivemind-package.json` names the wallpaper in
     `wallpapers/pond` and offers it as the background once it is installed (`startup.wallpaper`).
     The wallpaper's folder holds its `hivemind-wallpaper.json` and a working scene in
-    `src/main.ts`. A `PROMPT.md` and two skills in the package's `.claude/skills/`, one for the
-    contract and one for drawing in characters, are there for your coding agent.
+    `src/main.ts`: fish drawn in characters that wander the water, shy from the pointer, and
+    ripple where you click. A `PROMPT.md` and two skills in the package's `.claude/skills/`, one
+    for the contract and one for drawing in characters, are there for your coding agent.
 
     The owner is the GitHub login `gh` is signed in as, or the one you pass with `--owner`. To
     add a wallpaper to a package you have, run `hive plugins new wallpaper pond --in kit`.
@@ -74,8 +73,8 @@ It is not drawn behind a view you installed, which lays its tiles out itself, no
     Check: `hivemind-package.json` has `"startup": { "wallpaper": "@<your login>/pond/pond" }`.
   </Step>
   <Step title="Write the scene">
-    The starter draws a working scene. The smallest one that runs on the app's clock looks like
-    this:
+    The smallest scene that runs on the app's clock looks like this: motes that drift on a slow
+    current, lean away from the pointer, and ring where you click.
 
     ```ts src/main.ts
     import { connectWallpaper } from "@hivemind/view-sdk";
@@ -84,53 +83,59 @@ It is not drawn behind a view you installed, which lays its tiles out itself, no
     const canvas = document.body.appendChild(document.createElement("canvas"));
     Object.assign(canvas.style, { position: "fixed", inset: "0" });
     const g = canvas.getContext("2d")!;
-    const at = new Map<string, { x: number; y: number }>();
+
+    let motes: { x: number; y: number }[] = [];
+    const rings: { x: number; y: number; age: number }[] = [];
+    let pointer: { x: number; y: number } | null = null;
+    let t = 0;
 
     // Sharp on any screen: the canvas is the viewport times its pixel ratio.
+    // As many motes as the screen holds, so a big one is as full as a small one.
     wp.on("viewport", ({ w, h, dpr }) => {
       canvas.width = Math.round(w * dpr);
       canvas.height = Math.round(h * dpr);
       Object.assign(canvas.style, { width: `${w}px`, height: `${h}px` });
+      motes = Array.from({ length: Math.round((w * h) / 12000) }, () => ({ x: Math.random() * w, y: Math.random() * h }));
     });
-    // An agent that closed: its creature goes.
-    wp.on("creatures", (cs) => {
-      for (const id of at.keys()) if (!cs.some((c) => c.id === id)) at.delete(id);
-    });
-    // Which creature is at a point: the app shows its agent's name, and a click opens its tile.
-    wp.hitTest((x, y) => {
-      for (const [id, p] of at) if (Math.hypot(p.x - x, p.y - y) < 12) return id;
-      return null;
-    });
+    // The pointer over empty canvas, or gone from it.
+    wp.on("pointer", ({ x, y, over }) => { pointer = over ? { x, y } : null; });
+    // A click on empty canvas.
+    wp.on("click", ({ x, y }) => { rings.push({ x, y, age: 0 }); });
 
     wp.animate({
       step(dt) {
+        t += dt;
         const { w, h } = wp.viewport;
-        for (const c of wp.creatures) {
-          const p = at.get(c.id) ?? { x: Math.random() * w, y: Math.random() * h };
-          p.x = (p.x + (c.state === "working" ? 60 : 15) * dt) % w;
-          at.set(c.id, p);
+        for (const m of motes) {
+          m.x = (m.x + 12 * dt + w) % w;                    // a slow current of its own
+          m.y = (m.y + Math.sin(t + m.x / 90) * 8 * dt + h) % h;
+          if (!pointer) continue;
+          const dx = m.x - pointer.x, dy = m.y - pointer.y, d = Math.hypot(dx, dy);
+          if (d > 0 && d < 120) { m.x += (dx / d) * 60 * dt; m.y += (dy / d) * 60 * dt; }
         }
+        for (const r of rings) r.age += dt;
+        while (rings.length && rings[0]!.age > 1.5) rings.shift();
       },
       draw() {
         const { w, h, dpr } = wp.viewport;
-        const { page, text, attention, mono } = wp.look;
+        const { dark, mono } = wp.look;
         g.setTransform(dpr, 0, 0, dpr, 0, 0);
-        g.fillStyle = page;
+        g.globalAlpha = 1;
+        g.fillStyle = dark ? "#0b1d26" : "#e4f1ef";         // its own water, dark or light
         g.fillRect(0, 0, w, h);
-        g.font = `16px ${mono}, monospace`;
-        for (const c of wp.creatures) {
-          const p = at.get(c.id);
-          if (!p) continue;
-          g.fillStyle = c.state === "needs-you" ? attention : text;
-          g.fillText("@", p.x, p.y);
+        g.fillStyle = dark ? "#8fd3d0" : "#2d6f78";
+        g.font = `14px ${mono}, monospace`;
+        for (const m of motes) g.fillText("*", m.x, m.y);
+        for (const r of rings) {
+          g.globalAlpha = 1 - r.age / 1.5;
+          for (let a = 0; a < 6.28; a += 0.4) g.fillText("~", r.x + Math.cos(a) * r.age * 80, r.y + Math.sin(a) * r.age * 50);
         }
       },
     });
     ```
 
-    This one does not yet keep off the tiles or go to its agent's tile; the sections below say
-    how. To have your coding agent write it, put your idea at the top of `PROMPT.md` and hand it
-    the file.
+    To have your coding agent write yours, put your idea at the top of `PROMPT.md` and hand it the
+    file.
   </Step>
   <Step title="Build and check it">
     Where the starter's `package.json` is, run `npm install` once. Then, after each change:
@@ -141,9 +146,11 @@ It is not drawn behind a view you installed, which lays its tiles out itself, no
     ```
 
     The check reads the package and every member as the install and HiveHub do, with the file and
-    line of each problem. It also loads the wallpaper in a headless browser against a pretend app,
-    and checks that it says it is ready, draws its first frame, and names only creatures it was
-    sent.
+    line of each problem. It also loads the wallpaper in a headless browser against a pretend app
+    that gives it two sizes, a light and a dark theme, each mode, the pointer and clicks. The
+    wallpaper must say it is ready, draw its first frame, say nothing else, and throw or log no
+    error. That part needs Playwright's Chromium where Node finds it; without it, the check says
+    it did not run that part and how to install it.
 
     Check: it ends with `ok`. `--json` gives the same report to an agent.
   </Step>
@@ -165,13 +172,14 @@ It is not drawn behind a view you installed, which lays its tiles out itself, no
     Or open **Settings → Appearance** and pick it under **Background**, after the built-in
     scenes. Install again after each change.
 
-    Check: your agents swim behind the canvas. Point at one and its agent's name shows.
+    Check: your scene moves behind the canvas. Move the pointer over empty canvas and click there,
+    and it answers.
   </Step>
   <Step title="Publish it">
     Commit the package with the wallpaper's `dist/`, push it to GitHub, and run
     `hivehub publish pond`. A package publishes as one listing: see
     [Publish a plugin](/publish-to-hivehub#publish-a-package). HiveHub lists a package that
-    holds a live wallpaper as needing Hivemind 2026.10.8 or newer.
+    holds a live wallpaper as needing Hivemind 2026.10.9 or newer.
   </Step>
 </Steps>
 
@@ -179,28 +187,27 @@ It is not drawn behind a view you installed, which lays its tiles out itself, no
 
 The app and the wallpaper talk over one message port. Every message is a JSON object with a
 `type`, checked on both sides. `@hivemind/view-sdk` speaks it for you: `connectWallpaper()`
-waits for the app and gives you the values and their changes as `wp.on(…)`.
+waits for the app, and `wp.on(…)` gives you each message below. `wp.viewport`, `wp.look` and
+`wp.mode` hold the latest, and a new listener for one of those three is called at once with it.
 
 | The app sends | Holds | When |
 |---|---|---|
-| `hello` | everything below, at once | once, after it says `ready` |
+| `hello` | `{ protocol, viewport, look, mode }`: everything below at once | once, after it says `ready` |
 | `viewport` | `{ w, h, dpr }`: its size in CSS pixels, and the screen's pixel ratio | the window is resized or moves to another screen |
-| `look` | `{ page, text, attention, dark, colour, mono }`: the theme's page, text and needs-you colours as `#rrggbb`, whether the theme is dark, whether to draw in its own colours, and the terminals' font as a CSS font list | the look changes |
+| `look` | `{ page, text, dark, mono }`: the theme's page and text colours as `#rrggbb`, whether the theme is dark, and the terminals' font as a CSS font list | the theme or the code font changes |
 | `mode` | `run`, `hold` or `still` | see [the clock](#the-clock) |
-| `creatures` | up to 8 of `{ id, agent, kind, size, state }` | an agent comes, goes or changes state |
-| `tiles` | `{ tiles, seeThrough }`: each tile, and each panel that is not glass, as `{ x0, y0, x1, y1, id? }` in CSS pixels; `id` is the creature's id on its agent's tile | once a second while it runs, and at most once a frame while the canvas moves |
-| `done` | `{ id }`: that creature's agent finished a turn well | a turn ends well |
-| `pointer` | `{ x, y, over }`: the pointer over empty canvas, or gone from it | at most once a frame while it moves there |
-| `click` | `{ x, y, id }`: a click on empty canvas, and the creature it opened, or `null` for open water | a click |
+| `pointer` | `{ x, y, over }`: the pointer over empty canvas, or gone from it (`over` is `false`) | at most once a frame while it moves there, and once as it leaves |
+| `click` | `{ x, y }`: the main button pressed on empty canvas | as the press starts |
 
 | It sends | Holds | The SDK sends it |
 |---|---|---|
-| `ready` | `{ protocol: 1 }` | in `connectWallpaper()` |
+| `ready` | `{ protocol: 2 }` | in `connectWallpaper()` |
 | `drawn` | nothing: the first frame is up, and the app shows the layer | after the first frame of `animate`, or with `wp.drawn()` |
-| `hover` | `{ id }`, the creature under the pointer, or `null` | when what `hitTest` answers changes |
 
-A creature's `size` is the same for its agent every time, from about 0.78 to 1. Pick what kind of
-creature it is from `kind`, so all of one program's agents look alike.
+Each message carries its own keys and no others. Empty canvas is the canvas itself, not a tile, a
+frame or a panel over it. The pointer leaves it when it goes over one of those, out of the window,
+or when the window loses focus. A touch screen sends no pointer, but a tap is a click. The same
+press also reaches the canvas, so a drag that starts there still pans it.
 
 ## The clock
 
@@ -218,81 +225,67 @@ The mode decides what runs:
 
 | Mode | When | What the clock does |
 |---|---|---|
-| `run` | the window is in use | steps and draws |
-| `hold` | the window is hidden, unfocused, idle or covered | nothing. It draws one frame again only when something it shows changes: the size, the look, the creatures or the tiles |
-| `still` | the person turned off **Animate the background**, or the computer asks for reduced motion | one settled frame: `settle()` and one draw. Again only when something it shows changes |
+| `run` | the window is shown and focused, whether or not you are using it | steps and draws |
+| `hold` | the window is hidden or not focused, or something covers the canvas: **Settings**, or a tile made fullscreen | nothing. It draws one frame again only when the size or the look changes. No pointer or click comes |
+| `still` | the person turned off **Animation**, or the computer asks for reduced motion | one settled frame: `settle()` and one draw. Again only when the size or the look changes |
 
 Its first frame is drawn at once, whatever the mode. Never start a timer or a
 `requestAnimationFrame` loop of your own: while held, a wallpaper that keeps drawing spends the
 battery on a window nobody sees.
 
-## Keep off the tiles
+When the computer asks for more contrast or less transparency, the app draws no live wallpaper
+at all.
 
-Your agents' tiles sit over the scene, and their text must stay readable. Use `tiles`:
+## Play with the pointer
 
-- Pick where a creature goes in the open water between the tiles, and a way there that does not
-  pass under one.
-- Turn a creature away before it goes under a tile. One a tile was put down over goes out by the
-  nearest side, quickly.
-- Draw nothing of a creature under a tile. When `seeThrough` is true the tiles are frosted glass,
-  and a creature under one may show through, soft and faint.
+The pointer is the one thing a person does to the scene, and the scene's life should notice it,
+calmly. The built-in scenes show how: in Shoal small fish scatter from the pointer, and in Koi
+Pond a click drops pellets that the nearest koi race to eat. What each one does is in
+[Change how Hivemind looks](/appearance).
 
-When an agent needs you, its creature goes to that agent's tile: the tile in `tiles` whose `id`
-is the creature's. It holds by the open side, the side with more room clear of the other tiles,
-else the other side, else above or below. When the tile is not on the screen, the creature stays
-in the open water.
-
-## Hover and click
-
-`wp.hitTest((x, y) => id)` answers which creature is at a point of the viewport, or `null`. While
-the pointer is over empty canvas, the app shows that creature's agent's name and state beside it,
-and a click there goes to the agent's tile. The wallpaper never learns the name, and the app
-takes `hover` only for a creature it sent.
-
-Every click on empty canvas comes as `click`. Its `id` is the creature the app opened, or `null`
-for open water: answer a click on open water in your scene, with a ripple or a scatter.
-
-The built-in scenes answer the pointer the same way.
+- Let the pointer nudge, draw or scare what is near it, by a little and over a short reach. The
+  rest of the scene goes on as before.
+- When `over` is `false`, let whatever followed or fled the pointer go back to its own life.
+- A click is brief: a ripple, food dropped, a scatter, gone within a second or two.
+- Answer both in `step`, so a held or still scene stays as it is.
 
 ## Colours
 
-- **Your theme's colours.** By default draw in `page` and `text` and the steps between them, so
-  the scene follows every theme. `dark` says which way round: light creatures on a dark page, or
-  ink on paper on a light one. Keep `attention`, the theme's colour for an agent that needs you,
-  for that alone.
-- **Its own colours.** With `"colour": true` in its manifest, Settings shows the **Colour** switch
-  for it, and `look.colour` says when the person turned it on. Then draw in your scene's own
-  colours: one set for a dark theme and one for a light one.
+- **Its own colours.** Draw the scene in a palette of its own, one version for a dark theme and
+  one for a light one, picked by `dark`, as each built-in scene does.
+- **The theme's colours.** `page` and `text` are there to draw in, or to lean your ground toward,
+  so the scene sits with any theme.
 - **Characters.** `mono` is the terminals' font, as a CSS font list. It is the person's choice and
   may not be on this computer, so end it with a fallback: `` `${mono}, monospace` ``.
 - **Panel text over it.** With glass on, the Layers panel and the toolbars are frosted glass, and
-  their text sits over your scene. Keep the scene dark enough on a dark theme, and light enough on
-  a light one, that the text reads over every part of it. Test it: the built-in scenes keep the
-  Layers panel's text at 7:1 and its secondary text at 4.5:1 over every point of their water.
+  their text sits over your scene. Over a live wallpaper the Layers panel is clearer than usual,
+  a third of its tint. Keep the scene dark enough on a dark theme, and light enough on a light
+  one, that the text reads over every part of it. The hivemind-live-wallpaper skill in your
+  package's `.claude/skills/` says how to test it.
 
 ## hivemind-wallpaper.json
 
 | Field | Needed | Takes |
 |---|---|---|
-| `protocol` | yes | `1` |
+| `protocol` | yes | `2` |
 | `name` | yes | up to 60 characters: the name in **Settings → Appearance** |
 | `entry` | yes | an `.html` page or a `.js` script inside the folder, usually `dist/main.js`. A script is put in a page of the app's own |
 | `description` | no | one sentence, up to 200 characters, shown under its name |
-| `colour` | no | `true` when it draws in colours of its own with **Colour** on |
-| `preview` | no | a `.png`, `.jpg` or `.webp` inside the folder, up to 512 KB, shown in the picker |
+| `preview` | no | a PNG, JPEG or WebP picture inside the folder (`.png`, `.jpg` or `.webp`), up to 512 KB, shown in the picker |
 
 ```json
 {
-  "protocol": 1,
+  "protocol": 2,
   "name": "Pond",
   "entry": "dist/main.js",
-  "description": "Koi under lily pads, one for each agent.",
-  "colour": true,
+  "description": "Koi under lily pads that drift toward your pointer.",
   "preview": "preview.png"
 }
 ```
 
-The folder's name is the last part of its id: lowercase letters, digits and single dashes.
+The folder's name is the last part of its id: lowercase letters, digits and single dashes. A
+wallpaper whose `protocol` is `1` is refused at install and by `hive plugins check`: build it
+again with the SDK the app serves, and set `protocol` to `2`.
 
 ## Ship it in a package
 
@@ -318,7 +311,7 @@ update and roll it back: [Packages](/packages).
 The app turns a live wallpaper off for the session, shows a notice, and draws the plain
 background instead, when it:
 
-- sends 8 messages that are malformed, or that name a creature the app did not send;
+- sends 8 messages that are malformed;
 - sends more than 120 messages a second;
 - asks for a newer protocol than this Hivemind speaks;
 - takes the keyboard (focuses anything in its frame);
@@ -332,8 +325,6 @@ turned off. Measure what a frame costs: the hivemind-live-wallpaper skill in you
 
 | What | Most |
 |---|---|
-| Creatures | 8. With more agents, the ones that need you come first, then the ones at work |
-| Tiles in one `tiles` message | 256 |
 | Live wallpapers in a package | 8 |
 | A preview picture | 512 KB |
 | Frames a second | 30, or what `fps` asks, up to 60 |

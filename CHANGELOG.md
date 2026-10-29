@@ -9,6 +9,11 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- **Breaking:** live wallpaper protocol 2. A package's live wallpaper is told its size, your theme's colours and code font, whether to move, and the pointer and clicks over empty canvas, and nothing of your workspace: not your agents, your tiles or their names. It says back only that it is ready and that its first frame is drawn. A wallpaper built for protocol 1 is refused at install and by `hive plugins check`: build it again with the SDK this version serves, and set `"protocol": 2` in its `hivemind-wallpaper.json`. HiveHub lists a package that holds one as needing this release. `hive plugins new wallpaper` now starts fish drawn in characters that wander, shy from the pointer and ripple where you click. Guide: [Make a live wallpaper](https://hivemind.griiken.com/guide/live-wallpapers/).
+- Changed: Shoal, Koi Pond, Jellyfish and Fireflies no longer follow your agents. Each fills the screen with its own life, which moves on its own and plays with your pointer over empty canvas: in Shoal small fish scatter from it and a click ripples the water and bursts them; in Koi Pond the koi drift toward a resting pointer and a click drops pellets the nearest koi race to eat; in Jellyfish the pointer pushes the snow and a click sends a pulse that jets the jellies away; in Fireflies they drift toward the pointer and circle it, and a click is a burst of light. Hovering names nothing, and a click opens nothing.
+- Changed: the **Colour** switch is gone. A live scene is always drawn in its own colours, with a light version on a light theme; `appearance.wallpaper.colour` is no longer a setting.
+- Changed: a live scene keeps moving while you are idle, and pauses only while the window is hidden, not focused or covered by Settings or a fullscreen tile. The other moving backgrounds, such as a video or a photo's slow pan, still pause when you are idle.
+
 ## [2026.10.8] — 2026-10-30
 
 - Fixed: on light themes other than Clean Light, such as Tokyo Night Day, Gruvbox Light and Catppuccin Latte, an issue's state on its state picker and its assignee's initial were a little too faint to read; they are darker now.
