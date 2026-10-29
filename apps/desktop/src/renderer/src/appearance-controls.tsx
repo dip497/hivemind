@@ -31,7 +31,7 @@ import { accentOf } from "@hivemind/core/appearance-extra";
 import { ACCENT_CONTRAST, accentMark, themeSwatches } from "@hivemind/core/theme-format";
 import { useSettings } from "./settings-store";
 import {
-  ACCENTS, ANCHORS, CINEMATIC, WALLPAPERS, addOverlay, chooseAccent, chooseAccentColours, choosePreset, removeOverlay, setTheme, updateOverlay, wallpaperDrawn,
+  ACCENTS, ANCHORS, CINEMATIC, SEE_THROUGH, WALLPAPERS, addOverlay, chooseAccent, chooseAccentColours, choosePreset, removeOverlay, setTheme, updateOverlay, wallpaperDrawn,
   type AccentId, type MediaAnchor, type MediaFit, type MediaLayer, type ThemeState, type WallpaperId,
 } from "./theme-store";
 
@@ -322,11 +322,19 @@ export function BackgroundControls({ t }: { t: ThemeState }) {
         <p className="settings-note">The background shows behind your tools when glass is on.</p>
       )}
       {t.wallpaper === "shoal" && (
-        <p className="settings-note">
-          {t.glass
-            ? "The sharks show through the frosted panels. Tiles stay solid, so their text never runs over one."
-            : "Panels and tiles stay solid over Shoal. Turn glass on to see the sharks through the panels."}
-        </p>
+        <div className="settings-row">
+          <div>
+            <label>Sharks behind your tools</label>
+            <p>
+              {!t.glass
+                ? "Panels and tiles are solid over Shoal."
+                : !t.contentGlass
+                  ? "They show through the frosted panels. Frost tool content to see them behind your agents too."
+                  : "They show through the frosted panels and tiles, softened behind the text."}
+            </p>
+          </div>
+          <Button variant="outline" title="Thin frosted panels and tiles, so the sharks show behind your agents" onClick={() => setTheme(SEE_THROUGH)}>See-through</Button>
+        </div>
       )}
     </>
   );

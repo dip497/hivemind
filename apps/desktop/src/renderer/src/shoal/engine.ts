@@ -94,9 +94,9 @@ export class ShoalEngine {
     this.post({ type: "roster", sharks });
   }
 
-  /** Where the tiles and panels are on the screen. */
-  setBoxes(boxes: Box[]) {
-    this.post({ type: "boxes", boxes });
+  /** Where the tiles and panels are on the screen, and whether the tiles are see-through. */
+  setBoxes(boxes: Box[], seeThrough: boolean) {
+    this.post({ type: "boxes", boxes, seeThrough });
   }
 
   /** An agent finished a turn: its shark bites. */

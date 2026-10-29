@@ -37,6 +37,9 @@ const INK = {
   edge: 0.05, edgeSpan: 0.12, edgeGlyph: 0.14,
   fish: 0.36, wake: 0.32, grid: 0.015,
 };
+/** How far toward the text a shark under a see-through tile goes, against one in open water: it
+ *  is seen through the tile's tint, softened, behind the tile's text. */
+const SOFT = 0.55;
 /** How much of each kind's cast (TINTS) shows: enough to read as grey-blue or grey-brown, not
  *  as a colour, which in Hivemind says something. */
 const CAST = 0.6;
@@ -321,6 +324,8 @@ export class AsciiRenderer {
   private ramp: string[] = [];
   /** The same for each kind of shark (KIND_LIST), leaning toward its cast. */
   private kindRamps: string[][] = [];
+  /** And as pixels (ImageData's RGBA, little-endian), for what is drawn under a see-through tile. */
+  private kindPixels: Uint32Array[] = [];
   /** The page is lighter than the text. */
   private light = false;
   private wakeStyles: string[] = [];
@@ -333,6 +338,20 @@ export class AsciiRenderer {
   /** The tiles and panels as last told, and the cells they cover (`coveredCells`). */
   private boxes: readonly Box[] = [];
   private cover = new Uint8Array(0);
+  /** The tiles are see-through: a shark under one is drawn soft, not left out. */
+  private seeThrough = false;
+  /** One pixel a cell, what is under the see-through tiles this frame, drawn scaled up and smoothed
+   *  over them: a shark behind frosted glass. */
+  private soft = new OffscreenCanvas(1, 1);
+  private softCtx: OffscreenCanvasRenderingContext2D | null = null;
+  private softData: ImageData | null = null;
+  private softPixels = new Uint32Array(0);
+  private softAny = false;
+  /** The cells this frame's soft pixels span, so only that much is drawn scaled up. */
+  private softC0 = 0;
+  private softC1 = 0;
+  private softR0 = 0;
+  private softR1 = 0;
   private spine = new Float32Array(SHARK_NODES * 2);
   private arc = new Float32Array(SHARK_NODES);
   private arcTotal = 1;
@@ -381,16 +400,21 @@ export class AsciiRenderer {
     // A channel's weight is how fast it goes from the page toward the text: on light water more
     // red ink leaves a shark bluer, so a light theme takes the inverse of the original's tint.
     const ramp = ([wr, wg, wb]: readonly number[]) => {
-      const out: string[] = [];
+      const styles: string[] = [];
+      const pixels = new Uint32Array(RAMP + 1);
       for (let i = 0; i <= RAMP; i++) {
         const t = i / RAMP;
         const mix = (k: number, w: number) => clamp(Math.round(ch(page, k) + (ch(text, k) - ch(page, k)) * t * w), 0, 255);
-        out.push(hex((mix(16, wr!) << 16) | (mix(8, wg!) << 8) | mix(0, wb!)));
+        const [r, g, b] = [mix(16, wr!), mix(8, wg!), mix(0, wb!)];
+        styles.push(hex((r << 16) | (g << 8) | b));
+        pixels[i] = ((255 << 24) | (b << 16) | (g << 8) | r) >>> 0;
       }
-      return out;
+      return { styles, pixels };
     };
-    this.ramp = ramp([1, 1, 1]);
-    this.kindRamps = KIND_LIST.map((k) => ramp(TINTS[k].map((c) => 1 + ((this.light ? 1 / c : c) - 1) * CAST)));
+    this.ramp = ramp([1, 1, 1]).styles;
+    const kinds = KIND_LIST.map((k) => ramp(TINTS[k].map((c) => 1 + ((this.light ? 1 / c : c) - 1) * CAST)));
+    this.kindRamps = kinds.map((k) => k.styles);
+    this.kindPixels = kinds.map((k) => k.pixels);
     const wake = this.light ? INK.wake : WAKE_REACH;
     this.wakeStyles = Array.from({ length: ALPHA_LEVELS }, (_, l) => this.tone((wake * (l + 1)) / ALPHA_LEVELS));
     this.fishStyles = FISH_LEVELS.map((a) => this.tone(a * (this.light ? INK.fish : 0.9)));
@@ -445,19 +469,25 @@ export class AsciiRenderer {
       this.sharkDepth = new Float32Array(n);
       this.sharkKind = new Uint8Array(n);
       this.fishStamp = new Uint32Array(n);
+      this.soft = new OffscreenCanvas(this.cols, this.rows);
+      this.softCtx = this.soft.getContext("2d");
+      this.softData = this.softCtx?.createImageData(this.cols, this.rows) ?? null;
+      this.softPixels = this.softData ? new Uint32Array(this.softData.data.buffer) : new Uint32Array(0);
     }
     this.cover = coveredCells(this.boxes, this.cols, this.rows, this.cw, this.ch);
     this.paintBackground();
   }
 
-  /** Where the tiles and panels are on the screen: no shark is drawn under them. Told once a second;
-   *  the cells are worked out again only when one has moved. */
-  setBoxes(boxes: readonly Box[]) {
+  /** Where the tiles and panels are on the screen, and whether the tiles are see-through: a shark
+   *  under a solid one is not drawn, one under a see-through one is drawn soft. Told once a second,
+   *  and each frame while the canvas moves; the cells are worked out again only when one has moved. */
+  setBoxes(boxes: readonly Box[], seeThrough: boolean) {
     const same = boxes.length === this.boxes.length && boxes.every((b, i) => {
       const o = this.boxes[i]!;
       return b.x0 === o.x0 && b.y0 === o.y0 && b.x1 === o.x1 && b.y1 === o.y1;
     });
     this.boxes = boxes;
+    this.seeThrough = seeThrough;
     if (!same && this.cols) this.cover = coveredCells(boxes, this.cols, this.rows, this.cw, this.ch);
   }
 
@@ -494,8 +524,51 @@ export class AsciiRenderer {
 
     this.drawFish();
     this.drawSharks(t);
+    if (this.softAny) this.drawSoft();
     // Flashes go over the sharks: a shark swims on over the spot it bit.
     this.drawHeat();
+  }
+
+  /** What is under the see-through tiles, one pixel a cell, scaled up smoothly over them: soft,
+   *  with no characters for the tile's own text to run through. */
+  private drawSoft() {
+    const { ctx, soft, softCtx, softData, cols, rows, cw, ch } = this;
+    this.softAny = false;
+    if (!softCtx || !softData) return;
+    // Only the cells the soft pixels span, and one more round them for the smoothing to fade into.
+    const c0 = Math.max(0, this.softC0 - 1);
+    const r0 = Math.max(0, this.softR0 - 1);
+    const w = Math.min(cols, this.softC1 + 2) - c0;
+    const h = Math.min(rows, this.softR1 + 2) - r0;
+    softCtx.putImageData(softData, 0, 0, c0, r0, w, h);
+    ctx.save();
+    ctx.beginPath();
+    for (const b of this.boxes) ctx.rect(b.x0 - cw / 2, b.y0 - ch / 2, b.x1 - b.x0 + cw, b.y1 - b.y0 + ch);
+    ctx.clip();
+    ctx.imageSmoothingEnabled = true;
+    // Plain bilinear: softer than the "high" filter, which rings round a dark fin, and a quarter
+    // of its cost (2.3 against 6 ms a frame at 1440×900 in software, 7 against 26 at 2×).
+    ctx.imageSmoothingQuality = "low";
+    ctx.drawImage(soft, c0, r0, w, h, c0 * cw, r0 * ch, w * cw, h * ch);
+    ctx.restore();
+    for (let r = r0; r < r0 + h; r++) this.softPixels.fill(0, r * cols + c0, r * cols + c0 + w);
+  }
+
+  /** A shark's cell under a see-through tile, `t` toward the text as it would be drawn. */
+  private softCell(i: number, t: number, kind: number) {
+    this.softPixels[i] = this.kindPixels[kind]![clamp(Math.round(t * SOFT * RAMP), 0, RAMP)]!;
+    const c = i % this.cols;
+    const r = (i / this.cols) | 0;
+    if (!this.softAny) {
+      this.softAny = true;
+      this.softC0 = this.softC1 = c;
+      this.softR0 = this.softR1 = r;
+      return;
+    }
+    if (c < this.softC0) this.softC0 = c;
+    else if (c > this.softC1) this.softC1 = c;
+    if (r < this.softR0) this.softR0 = r;
+    else if (r > this.softR1) this.softR1 = r;
   }
 
   // ── simulation → field ──────────────────────────────────────────────
@@ -839,7 +912,7 @@ export class AsciiRenderer {
         const cLo = Math.max(c0, Math.floor(lo / cw));
         const cHi = Math.min(c1, Math.floor(hi / cw));
         for (let c = cLo; c <= cHi; c++) {
-          if (cover[r * cols + c]) continue;
+          if (cover[r * cols + c] && !this.seeThrough) continue;
           const x = c * cw;
           const y = r * ch;
           const centerHit = this.sampleShark(x + cw / 2, y + ch / 2, L);
@@ -880,7 +953,7 @@ export class AsciiRenderer {
   }
 
   private drawSharks(t: number) {
-    const { ctx, cols, rows, cw, ch, light, sharkFlag, sharkShade, sharkKey, sharkDepth, sharkKind } = this;
+    const { ctx, cols, rows, cw, ch, light, sharkFlag, sharkShade, sharkKey, sharkDepth, sharkKind, cover } = this;
     const n = cols * rows;
     for (let i = 0; i < n; i++) {
       const flag = sharkFlag[i]!;
@@ -892,7 +965,8 @@ export class AsciiRenderer {
       const key = sharkKey[i]!;
       const shade = sharkShade[i]!;
       const dim = 0.7 + 0.3 * sharkDepth[i]!;
-      const ramp = this.kindRamps[sharkKind[i]!]!;
+      const kind = sharkKind[i]!;
+      const ramp = this.kindRamps[kind]!;
 
       // Glints re-roll on a staggered clock so the hide shimmers.
       const tick = Math.floor(t * 2.4 + (key % 997) / 97);
@@ -903,6 +977,10 @@ export class AsciiRenderer {
         // block under it too, so the edge fades into the page.
         const set = shade >= 0.5 ? EDGE_HEAVY : EDGE_LIGHT;
         const glyph = set[(key >>> 8) % set.length]!;
+        if (cover[i]) {
+          this.softCell(i, light ? (INK.edge + INK.edgeSpan * shade) * dim : (((70 + shade * 80) * dim) / 255) * shade, kind);
+          continue;
+        }
         if (light) {
           const block = (INK.edge + INK.edgeSpan * shade) * dim;
           ctx.fillStyle = this.tone(block, ramp);
@@ -951,6 +1029,10 @@ export class AsciiRenderer {
         else if (roll < 0.05) ink = 1;
         else ink = shade > 0.55 ? 0.05 : 0.1;
       }
+      if (cover[i]) {
+        this.softCell(i, block, kind);
+        continue;
+      }
       ctx.fillStyle = this.tone(block, ramp);
       ctx.fillRect(x + 1, y + 1, cw - 1, ch - 1);
       ctx.fillStyle = this.tone(ink, ramp);
@@ -973,7 +1055,7 @@ export class AsciiRenderer {
       for (const f of world.fish) {
         if (!f.alive || (f.depth > 0.78 ? 0 : 1) !== pass) continue;
         const i = this.cellIndex(f.x, f.y);
-        if (i < 0 || fishStamp[i]! === frame || sharkFlag[i]!) continue;
+        if (i < 0 || fishStamp[i]! === frame || sharkFlag[i]! || this.cover[i]) continue;
         fishStamp[i] = frame;
         const glint = clamp(Math.abs(f.turn) / 3.5, 0, 1);
         const v = 0.3 + (0.4 * (f.depth - 0.55)) / 0.45 + 0.3 * Math.max(glint, f.alarm);
@@ -998,7 +1080,7 @@ export class AsciiRenderer {
     const { ctx, heat, cols, cw, ch } = this;
     for (let i = 0; i < heat.length; i++) {
       const h = heat[i]!;
-      if (h < 0.08) continue;
+      if (h < 0.08 || this.cover[i]) continue;
       const col = i % cols;
       const row = (i / cols) | 0;
       // A bite flashes in the text colour and fades back to the page.
@@ -1017,7 +1099,7 @@ export class AsciiRenderer {
 
     for (let i = 0; i < n; i++) {
       const e = energy[i]!;
-      if (sharkFlag[i]! || fishStamp[i]! === frameId || e < 0.45) {
+      if (sharkFlag[i]! || fishStamp[i]! === frameId || e < 0.45 || this.cover[i]) {
         bucketOf[i] = SKIP;
         continue;
       }

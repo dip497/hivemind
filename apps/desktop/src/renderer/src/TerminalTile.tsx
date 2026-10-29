@@ -241,17 +241,22 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
   // opacity-slider drags (which don't change it) never trigger a refresh.
   const termPalette = useThemeField("terminal");
   const contentGlass = useThemeField("contentGlass");
+  const glassSetting = useThemeField("glass");
   const surfacePolicy = useSurfacePolicy();
   const termBg = surfacePolicy.glass && contentGlass ? "rgba(0,0,0,0)" : termPalette.background;
   useEffect(() => {
     const term = termRef.current;
     if (!term) return;
+    // Frost tool content switched on or off while the terminal is open: without allowTransparency a
+    // clear background is painted black. Set before the theme, whose change has the renderer draw
+    // its glyphs again for the new background.
+    term.options.allowTransparency = glassSetting && contentGlass;
     term.options.theme = { ...withScrollbar(terminalThemeFor(termPalette)), background: termBg };
     // A program that asked (mode 2031) hears the background went light or dark; the window whose
     // keys reach the session tells it, so two windows showing it do not say it twice.
     const report = themeNotifyRef.current?.theme(isDarkBackground(termPalette.background));
     if (report && kbRef.current.mayType) window.hive.ptyWrite(ptyIdRef.current, report);
-  }, [termBg, termPalette]);
+  }, [termBg, termPalette, glassSetting, contentGlass]);
   // One session per tile, its id the tile's: the same tile reattaches to its session in the daemon
   // across restarts, a remount (StrictMode, a view move) shares it, and an unmount lets go of it
   // (only a close kills it). Not keyed on cwd: a frame rebinding its folder keeps the session, which
@@ -376,10 +381,10 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
       fontFamily: getTheme().monoFont,
       fontSize: fontSizeRef.current,
       lineHeight: 1.3,
-      // ONLY when Frost-tile-content is on at mount. allowTransparency disables
+      // ONLY when Frost-tile-content is on. allowTransparency disables
       // subpixel-antialiased text (text goes grayscale → softer/blurrier vs a
       // native terminal), so opaque terminals must keep it OFF to stay crisp.
-      // (Toggling content-glass later needs a reload to apply to open terminals.)
+      // (Toggled later, the theme effect switches it.)
       allowTransparency: getTheme().glass && getTheme().contentGlass,
       theme: { ...termThemeFor(getTheme()), background: termBgFor(getTheme()) },
       // No blink — a blinking cursor repaints EVERY terminal ~2×/s forever, so

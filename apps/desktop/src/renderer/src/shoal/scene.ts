@@ -25,7 +25,7 @@ export type ShoalMessage =
   | { type: "size"; width: number; height: number; dpr: number }
   | { type: "colours"; page: number; text: number }
   | { type: "roster"; sharks: SharkSpec[] }
-  | { type: "boxes"; boxes: Box[] }
+  | { type: "boxes"; boxes: Box[]; seeThrough: boolean }
   | { type: "finished"; key: string }
   | { type: "mode"; mode: ShoalMode }
   | { type: "pointer"; x: number; y: number; active: boolean }
@@ -140,7 +140,9 @@ scope.onmessage = ({ data: m }) => {
       break;
     case "boxes":
       world.setBoxes(m.boxes);
-      renderer?.setBoxes(m.boxes);
+      renderer?.setBoxes(m.boxes, m.seeThrough);
+      // A still picture shows the tiles where they are now.
+      if (mode === "still") draw();
       break;
     case "finished":
       if (mode === "run") world.finished(m.key);

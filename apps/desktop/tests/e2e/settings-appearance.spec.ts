@@ -240,3 +240,26 @@ test("an accent of your own that is hard to see on the panels says so, by the ru
   await closeSettings();
   expect(hive("theme", "use", "signal").rescanned).toBe(true);
 });
+
+test("over Shoal, See-through frosts the panels and the tools in one click, and the Layers panel goes as thin as the slider says", async () => {
+  const before = onDisk().appearance;
+  try {
+    await page.evaluate(() => window.hive.settingsSet("appearance.wallpaper.kind", "shoal"));
+    await openSettings("appearance");
+    await page.getByRole("button", { name: "See-through" }).click();
+    await expect.poll(() => onDisk().appearance?.glass).toMatchObject({ enabled: true, contentGlass: true, opacity: 0.5, blur: 14, contentOpacity: 0.45 });
+    await expect(page.locator("[data-settings-body]")).toContainText("They show through the frosted panels and tiles");
+    await closeSettings();
+    // Over another background the panel stops at 68% so its names stay legible; over Shoal its blur
+    // does that, and it follows the slider to 50%.
+    const alpha = () => page.locator(".hm-layers").first().evaluate((el) => {
+      const m = /\/\s*([\d.]+)\)\s*$/.exec(getComputedStyle(el).backgroundColor);
+      return m ? Number(m[1]) : 1;
+    });
+    await expect.poll(alpha).toBeCloseTo(0.5, 2);
+    await page.evaluate(() => window.hive.settingsSet("appearance.wallpaper.kind", "mono"));
+    await expect.poll(alpha).toBeCloseTo(0.68, 2);
+  } finally {
+    await page.evaluate((a) => window.hive.settingsSet("appearance", a), before);
+  }
+});

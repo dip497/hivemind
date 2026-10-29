@@ -1037,6 +1037,11 @@ html.glass-on:not([data-wallpaper="none"]) .hm-layers {
   border-right-color: transparent;
   box-shadow: var(--hm-edge-glass);
 }
+/* Over Shoal what passes under the panel is a shark, and the blur alone keeps the names over it
+   legible: the panel follows the opacity slider down, not only to 68%, so the sharks can show. */
+html.glass-on[data-wallpaper="shoal"] .hm-layers {
+  background: color-mix(in srgb, var(--surface-2) clamp(35%, var(--glass-opacity), 92%), transparent);
+}
 /* (The glass-mode selection outline was removed — the top-clip indicator above
    works in both opaque + glass themes.) */
 /* Frost the floating islands (blur was removed for perf in the opaque theme; it

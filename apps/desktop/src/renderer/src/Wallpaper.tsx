@@ -16,7 +16,7 @@ const NO_AGENTS: readonly ShoalAgent[] = [];
  * a plugin view, which paints its own scene: Shoal shows its water's colour there and runs nothing.
  */
 export function Wallpaper({ embedded = false, covering = false, agents = NO_AGENTS, live = true }: { embedded?: boolean; covering?: boolean; agents?: readonly ShoalAgent[]; live?: boolean } = {}): React.ReactElement | null {
-  const { glass, wallpaper, videoSrc, imageSrc, themeId, animate, palette, monoFont } = useTheme();
+  const { glass, contentGlass, wallpaper, videoSrc, imageSrc, themeId, animate, palette, monoFont } = useTheme();
   const cls = embedded ? " embedded" : "";
   const [inactive, setInactive] = useState(false);
   const occluded = useWorkspaceOccluded();
@@ -90,7 +90,7 @@ export function Wallpaper({ embedded = false, covering = false, agents = NO_AGEN
     if (wallpaper === "shoal") {
       return (
         <div className={`hm-wallpaper${cls}`} data-scene="shoal" aria-hidden="true">
-          {!embedded && live && <Shoal agents={agents} paused={paused} animate={animate} frosted={glass} page={palette.bg} text={palette.fg} monoFont={monoFont} />}
+          {!embedded && live && <Shoal agents={agents} paused={paused} animate={animate} frosted={glass} seeThrough={contentGlass} page={palette.bg} text={palette.fg} monoFont={monoFont} />}
         </div>
       );
     }

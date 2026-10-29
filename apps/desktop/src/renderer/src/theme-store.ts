@@ -30,6 +30,9 @@ export type ThemeState = FlatTheme;
 
 /** Legible-over-video defaults (one preset of glass settings, not a theme). */
 export const CINEMATIC: Partial<ThemeState> = { glass: true, blur: 20, opacity: 0.78, videoBrightness: 0.55, contentGlass: false, animate: true };
+/** Shoal seen through the tools (another preset of glass settings): thin frosted panels and tool
+ *  content frosted too, so the sharks show behind both, softened behind the text. */
+export const SEE_THROUGH: Partial<ThemeState> = { glass: true, blur: 14, opacity: 0.5, contentGlass: true, contentOpacity: 0.45 };
 
 /** The person's own theme, as their settings say. */
 let own: ThemeState = flattenAppearance(getSettings().appearance, getSettings().appearanceExtra);

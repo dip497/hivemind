@@ -40,7 +40,7 @@ function boxesOnPage(frosted: boolean): Box[] {
 
 const rosterKey = (sharks: SharkSpec[]) => sharks.map((s) => `${s.key}:${s.kind}:${s.size}:${s.mood}`).join("|");
 
-export function Shoal({ agents, paused, animate, frosted, page, text, monoFont }: {
+export function Shoal({ agents, paused, animate, frosted, seeThrough, page, text, monoFont }: {
   /** The workspace's agents, the same array until one comes, goes or falls asleep. */
   agents: readonly ShoalAgent[];
   /** The window is hidden, unfocused or idle, or something covers the workspace. */
@@ -49,6 +49,8 @@ export function Shoal({ agents, paused, animate, frosted, page, text, monoFont }
   animate: boolean;
   /** Glass is on: the panels over the scene are frosted, and the sharks swim under them. */
   frosted: boolean;
+  /** Tool content is frosted too: a shark under a tile shows through it, soft. */
+  seeThrough: boolean;
   /** The theme's page and text colours (CSS). */
   page: string;
   text: string;
@@ -74,15 +76,34 @@ export function Shoal({ agents, paused, animate, frosted, page, text, monoFont }
   useEffect(() => { engine?.fontChanged(); }, [engine, monoFont]);
 
   // Where the tiles and panels are: read once a second while the scene runs, once for a still
-  // frame, never while it is held. Read from the page's canvas view, the only one it runs behind.
+  // frame, never while it is held; and while the canvas moves (a pan, a zoom, a tile dragged or
+  // resized), at most once a frame, so what is drawn under a tile keeps to it. Read from the page's
+  // canvas view, the only one it runs behind. Only the viewport's and the tiles' own style is
+  // watched: what a tile shows inside it (a terminal's output) changes nothing here.
   useEffect(() => {
     if (!engine) return;
-    if (mode !== "hold") engine.setBoxes(boxesOnPage(frosted));
+    const send = () => engine.setBoxes(boxesOnPage(frosted), frosted && seeThrough);
+    // Before the mode: a still picture is settled with the tiles where they are.
+    if (mode !== "hold") send();
     engine.setMode(mode);
-    if (mode !== "run") return;
-    const id = setInterval(() => engine.setBoxes(boxesOnPage(frosted)), 1000);
-    return () => clearInterval(id);
-  }, [engine, mode, frosted]);
+    if (mode === "hold") return;
+    let queued = false;
+    const moved = new MutationObserver(() => {
+      if (queued) return;
+      queued = true;
+      requestAnimationFrame(() => { queued = false; send(); });
+    });
+    const watch = () => {
+      moved.disconnect();
+      const style = { attributes: true, attributeFilter: ["style"] };
+      const viewport = document.querySelector(".react-flow__viewport");
+      if (viewport) moved.observe(viewport, style);
+      for (const tile of document.querySelectorAll(TILES)) moved.observe(tile, style);
+    };
+    watch();
+    const id = mode === "run" ? setInterval(() => { send(); watch(); }, 1000) : undefined;
+    return () => { clearInterval(id); moved.disconnect(); };
+  }, [engine, mode, frosted, seeThrough]);
 
   // The sharks again whenever an agent comes, goes or changes to a status that changes its shark;
   // a turn that ends well is its shark's bite.
