@@ -84,8 +84,10 @@ export function fakeWallpaperHost(opts: FakeWallpaperOptions = {}): FakeWallpape
   };
   port.start();
 
+  // From the page it is framed in, as the app's handshake is: a framed page takes it from no other.
   const handshake = (target: EventTarget) => {
-    target.dispatchEvent(new MessageEvent("message", { data: { type: PORT_HANDSHAKE }, ports: [channel.port2] }));
+    const parent = (target as { parent?: MessageEventSource | null }).parent;
+    target.dispatchEvent(new MessageEvent("message", { data: { type: PORT_HANDSHAKE }, ports: [channel.port2], ...(parent ? { source: parent } : {}) }));
   };
 
   return {
