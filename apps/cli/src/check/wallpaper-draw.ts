@@ -131,7 +131,7 @@ async function play(browser: Browser, fake: FakeWallpaperHost, dir: string, entr
   const page = await context.newPage();
   page.on("pageerror", (e) => problems.push(thrown("draw", { name: e.name, message: e.message, stack: local(e.stack ?? "", dir) }, dir, "it threw: ")));
   page.on("console", (m) => {
-    if (m.type() !== "error" || m.location().url.startsWith(APP)) return;
+    if (m.type() !== "error" || m.location().url.startsWith(`${APP}/`)) return;
     const text = local(m.text(), dir);
     problems.push({ step: "draw", message: `it logged an error: ${text.split("\n")[0]}`, ...placeIn(text, dir) });
   });

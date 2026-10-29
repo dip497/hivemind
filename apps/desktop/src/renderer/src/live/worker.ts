@@ -101,7 +101,9 @@ async function loadFaces(faces: FaceSource[]) {
 scope.onmessage = ({ data: m }) => {
   switch (m.type) {
     case "start":
-      scene = SCENES[m.scene](m.canvas);
+      // Only a scene of the app's own: never a key the table holds by inheritance.
+      if (!Object.hasOwn(SCENES, m.scene)) return;
+      scene = SCENES[m.scene as LiveSceneId](m.canvas);
       scene.setFontFamily(m.font);
       void loadFaces(m.faces);
       break;
