@@ -12,7 +12,7 @@
 import { contrastRatio, cssColorToHex, cssColorToOklab, cssColorToRgb, parseCssColor } from "./css-color.js";
 import { diffContrastProblem } from "./diff-colours.js";
 import { FAMILY_RE, MAX_FACE_FILES, STYLE_RE, WEIGHT_RE, accentOf, isThemeColor, type AccentColors, type AppearanceExtra } from "./appearance-extra.js";
-import { ACCENTS, isLiveScene, PALETTE_KEYS, WALLPAPERS, type AccentId, type Appearance, type LiveSceneId, type Palette, type TerminalPalette, type WallpaperId } from "./settings-schema.js";
+import { ACCENTS, isLiveScene, isPluginWallpaper, PALETTE_KEYS, WALLPAPERS, type AccentId, type Appearance, type LiveSceneId, type Palette, type TerminalPalette, type WallpaperId } from "./settings-schema.js";
 
 /** The file that makes a folder a theme. */
 export const THEME_MANIFEST = "theme.json";
@@ -379,8 +379,9 @@ export function themeSwatches(t: Pick<Theme, "palette" | "accent">): string[] {
  *  corners and a built-in wallpaper. Font files, a picture wallpaper and sounds are files the
  *  author adds to the folder and names. */
 export function themeFromLook(name: string, a: Appearance, extra: AppearanceExtra): Record<string, unknown> {
-  // A picture, a video and a live scene are not a theme's to carry: the theme gets Mono in their place.
-  const media = a.wallpaper.kind === "image" || a.wallpaper.kind === "video" || isLiveScene(a.wallpaper.kind);
+  // A picture, a video and a live scene, built in or a package's, are not a theme's to carry: the
+  // theme gets Mono in their place.
+  const media = a.wallpaper.kind === "image" || a.wallpaper.kind === "video" || isLiveScene(a.wallpaper.kind) || isPluginWallpaper(a.wallpaper.kind);
   return {
     format: THEME_FORMAT,
     name,

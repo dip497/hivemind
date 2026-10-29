@@ -5,6 +5,8 @@ import YAML from "yaml";
 import { agentDisclosures, defFromManifest, RESERVED_AGENTS, type AgentProviderDef } from "@hivemind/agents";
 import { parseToolManifest, type ToolPackage } from "@hivemind/core/tool-format";
 import { readTheme, THEME_MANIFEST, themeFiles } from "@hivemind/core/theme-format";
+import { readWallpaper } from "@hivemind/core/wallpaper-format";
+import { WALLPAPER_MANIFEST } from "@hivemind/view-sdk/wallpaper";
 import { parseCategory, type PluginCategory } from "@hivemind/view-sdk/category";
 import { permissionWords } from "@hivemind/view-sdk/protocol";
 import { idProblem, pathsProblem, safeRelative, smallJson, UNSAFE_TEXT_RE, type CatalogFile, type CatalogType } from "./index-format.js";
@@ -23,7 +25,7 @@ const MAX_ICON = 16 << 10;
 /** The manifests that make a folder one plugin, as the check looks for them at its top. */
 const PLUGIN_MANIFESTS = ["agent.yaml", "agent.yml", "hivemind-view.json", "widget.json", "hivemind-tool.json"];
 /** The manifests a package's member folder is read by. */
-const MEMBER_MANIFESTS = new Set([...PLUGIN_MANIFESTS, THEME_MANIFEST]);
+const MEMBER_MANIFESTS = new Set([...PLUGIN_MANIFESTS, THEME_MANIFEST, WALLPAPER_MANIFEST]);
 const NO_MANIFEST = `no ${PACKAGE_MANIFEST}, agent.yaml, hivemind-view.json, widget.json or hivemind-tool.json in that folder`;
 
 /** An agent is one global name for one CLI. */
@@ -401,6 +403,8 @@ const RUNS: Record<MemberRuns, string> = {
 
 /** What a theme does, in the words the app shows before it installs. */
 const THEME_DOES = "Changes how the app looks and sounds, once you apply it";
+/** What a live wallpaper does, the same way: what it is told, and that it can do nothing else. */
+const WALLPAPER_DOES = "Draws behind your canvas once you pick it, told only each agent's state and where your tiles are: never a name, a folder or what a terminal shows";
 
 /** Whether dotted version `a` is later than `b`. */
 const later = (a: string, b: string) => {
@@ -440,6 +444,14 @@ function readPackage(pkg: { raw: unknown; manifest: PackageManifest; json: strin
           does: [`${THEME_DOES}${holds ? ` (${holds} file${holds === 1 ? "" : "s"}: fonts, a wallpaper or sounds)` : ""}`] });
         continue;
       }
+      if (format.kind === "wallpaper") {
+        // Read from its folder as the app reads it (`readWallpaper`).
+        const source = sub.get(WALLPAPER_MANIFEST) ?? refuse(`${shown(at)}: ${format.list} names a folder holding no ${WALLPAPER_MANIFEST}`);
+        const w = readWallpaper(at.slice(at.lastIndexOf("/") + 1), m.id, source, inside.map((f) => ({ path: f.path, bytes: sizes.get(prefix + f.path) ?? 0 })));
+        if ("problem" in w) return refuse(`${shown(at)}: ${escaped(w.problem)}`);
+        members.push({ kind: "wallpaper", id: w.id, name: plain(WALLPAPER_MANIFEST, "name", w.manifest.name), runs: format.runs, permissions: [], does: [RUNS[format.runs], WALLPAPER_DOES] });
+        continue;
+      }
       let d: CheckedPlugin | null;
       try { d = readPlugin(inside, sub); } catch (e) { return refuse(`${shown(at)}: ${(e as Error).message}`); }
       if (!d || d.type !== format.kind) return refuse(`${shown(at)}: ${format.list} names a folder holding no ${format.manifest}`);
@@ -459,6 +471,9 @@ function readPackage(pkg: { raw: unknown; manifest: PackageManifest; json: strin
   for (const x of members) if (!ownedBy(m.id, x.id)) refuse(`${x.kind} ${x.id} is not ${owner}'s: every member of ${m.id} is ${owner}/<name>`);
   const ids = members.map((x) => `${x.kind}:${x.id}`);
   if (new Set(ids).size !== ids.length) refuse("a member is named twice");
+  // Offered as the background once installed: one of its own (and so dated by its `wallpapers`).
+  const wallpaper = m.startup?.wallpaper;
+  if (wallpaper && !members.some((x) => x.kind === "wallpaper" && x.id === wallpaper)) refuse(`startup.wallpaper names ${shown(wallpaper)}, which is none of its live wallpapers`);
   const readmeName = [...text.keys()].find((f) => README_RE.test(f));
   // What is listed is what installs (`packageFiles`): `files` are those already.
   return {

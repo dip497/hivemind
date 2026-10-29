@@ -37,6 +37,9 @@ export interface InstalledPackage {
   /** The id of the view member it opens with (its manifest's `startup.view`, checked by
    *  `readPackage`), or null. */
   startView: string | null;
+  /** The id of the live wallpaper it offers as the background (`startup.wallpaper`, checked by
+   *  `readPackage`), or null. */
+  startWallpaper: string | null;
 }
 
 /** Refused because a package holds it: one of its plugins cannot be installed, removed or switched
@@ -154,6 +157,7 @@ export async function installPackage(src: string, given: { id?: string; dryRun?:
       record: p.record, members: read.members.map((m, i) => ({ ...m, digest: version.members[i]!.digest, dir: path.join(dir, m.path) })),
       replaced: p.old ? versionOf(p.old) : null, tookOver: p.taken.map((t) => t.id), changes: p.changes,
       startView: read.manifest?.startup?.view ?? null,
+      startWallpaper: read.manifest?.startup?.wallpaper ?? null,
     });
     if (given.dryRun) return result(plan(await readInstalledPackages(), read, version), files);
     const installed = await changeInstalledPackages(async (records) => {

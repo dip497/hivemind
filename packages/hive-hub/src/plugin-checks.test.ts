@@ -173,6 +173,32 @@ describe("checking a package", () => {
     expect(await problem({ "hivemind-package.json": pkg, ...pet(), ...harbour({ ...THEME, sounds: { done: "bell.ogg" } }), "themes/harbour/bell.ogg": new Uint8Array(500 * 1024) }))
       .toMatch(/sounds\.done: bell\.ogg is 500 KB; .* at most 400 KB/);
   });
+
+  const bees = (extra: object = {}) => ({
+    "wallpapers/bees/hivemind-wallpaper.json": JSON.stringify({ protocol: 1, name: "Bees", entry: "dist/main.js", ...extra }),
+    "wallpapers/bees/dist/main.js": "",
+  });
+  test("a live wallpaper is listed as sandboxed code that is told only each agent's state and where the tiles are, and dates its package", async () => {
+    const kit = await plugin({ "hivemind-package.json": manifest({ wallpapers: [{ path: "wallpapers/bees" }], startup: { wallpaper: "@ada/kit/bees" } }), ...pet(), ...bees() });
+    expect(kit.members).toContainEqual({ kind: "wallpaper", id: "@ada/kit/bees", name: "Bees", runs: "sandboxed", permissions: [],
+      does: ["Runs in a sandbox that holds it to what it asks for", expect.stringMatching(/never a name, a folder or what a terminal shows/)] });
+    // An app before live wallpapers refuses the package's `wallpapers`: it is listed for the app that reads them.
+    expect(kit.minAppVersion).toBe(SINCE["package.wallpapers"]);
+    const { id, type, name, description, version, category, members } = kit;
+    const { index, skipped } = writeHubIndex([{ id, type, name, description, version, category, members, files: kit.files, author: "ada", path: "packages/kit" }]);
+    expect(skipped).toEqual([]);
+    expect(parseHubIndex(JSON.parse(JSON.stringify(index))).plugins[0]?.members).toContainEqual(expect.objectContaining({ kind: "wallpaper", id: "@ada/kit/bees" }));
+  });
+
+  test("a live wallpaper the app would refuse is refused by the hub for the same reason", async () => {
+    const pkg = (extra: object = {}) => manifest({ wallpapers: [{ path: "wallpapers/bees" }], ...extra });
+    expect(await problem({ "hivemind-package.json": pkg(), ...pet(), "wallpapers/bees/hivemind-wallpaper.json": JSON.stringify({ protocol: 1, name: "Bees", entry: "dist/main.js" }) }))
+      .toBe('"wallpapers/bees": its entry, dist/main.js, is not a file in its folder: build it first');
+    expect(await problem({ "hivemind-package.json": pkg(), ...pet(), ...bees({ permissions: ["workspace:spawn"] }) })).toMatch(/^"wallpapers\/bees": hivemind-wallpaper\.json: there is no field "permissions"/);
+    expect(await problem({ "hivemind-package.json": pkg(), ...pet(), ...bees({ protocol: 2 }) })).toMatch(/needs live wallpaper protocol 2/);
+    expect(await problem({ "hivemind-package.json": pkg(), ...pet(), ...bees({ preview: "p.webp" }), "wallpapers/bees/p.webp": new Uint8Array(600 * 1024) })).toMatch(/its preview, p\.webp, is over 512 KB/);
+    expect(await problem({ "hivemind-package.json": pkg({ startup: { wallpaper: "@ada/kit/wasps" } }), ...pet(), ...bees() })).toMatch(/startup\.wallpaper names "@ada\/kit\/wasps", which is none of its live wallpapers/);
+  });
 });
 
 describe("a folder read a few files at a time", () => {

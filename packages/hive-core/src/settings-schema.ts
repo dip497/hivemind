@@ -84,7 +84,17 @@ export const WALLPAPERS: { id: WallpaperId; label: string }[] = [
  *  (apps/desktop live/). A theme cannot name one yet: an app without it would refuse the theme. */
 export const LIVE_SCENES = ["shoal", "koi", "jellyfish", "fireflies"] as const satisfies readonly WallpaperId[];
 export type LiveSceneId = (typeof LIVE_SCENES)[number];
-export const isLiveScene = (id: WallpaperId): id is LiveSceneId => (LIVE_SCENES as readonly WallpaperId[]).includes(id);
+export const isLiveScene = (id: WallpaperKind): id is LiveSceneId => (LIVE_SCENES as readonly WallpaperKind[]).includes(id);
+
+/** A live wallpaper a package holds (its `wallpapers`, `hivemind-wallpaper.json`), by its id:
+ *  `@owner/package/<folder>`, as a theme's is. */
+export type PluginWallpaperId = `@${string}/${string}/${string}`;
+export const PLUGIN_WALLPAPER_ID_RE = /^@[a-z0-9][a-z0-9-]{0,38}\/[a-z0-9][a-z0-9-]{0,63}\/[a-z0-9][a-z0-9-]{0,63}$/;
+export const isPluginWallpaper = (kind: unknown): kind is PluginWallpaperId => typeof kind === "string" && PLUGIN_WALLPAPER_ID_RE.test(kind);
+/** What `appearance.wallpaper.kind` holds: a built-in wallpaper, or a package's live wallpaper.
+ *  One that is not installed (or its package is off) draws as the default does. */
+export type WallpaperKind = WallpaperId | PluginWallpaperId;
+const isWallpaperKind = (v: unknown): v is WallpaperKind => WALLPAPERS.some((x) => x.id === v) || isPluginWallpaper(v);
 
 /** The `--color-*` tokens a preset sets. Values are CSS colours (oklch or hex). */
 export const PALETTE_KEYS = ["bg", "bg2", "bg3", "bg4", "line", "line2", "fg", "fg2", "fg3", "select", "ok", "warn", "err"] as const;
@@ -124,7 +134,7 @@ export interface Appearance {
     animate: boolean;
   };
   wallpaper: {
-    kind: WallpaperId;
+    kind: WallpaperKind;
     /** hm-media:// source for kind "video" / "image". */
     videoSrc?: string;
     imageSrc?: string;
@@ -145,7 +155,7 @@ export interface Appearance {
   lookBefore?: LookBefore;
 }
 
-export interface LookBefore { glass: boolean; wallpaper: WallpaperId; radius: number }
+export interface LookBefore { glass: boolean; wallpaper: WallpaperKind; radius: number }
 
 export interface ThemePreset {
   id: string;
@@ -606,8 +616,8 @@ function mediaLayer(p: unknown, i: number): MediaLayer | null {
 const THEME_KEYS = new Set(Object.keys(DEFAULT_APPEARANCE));
 
 function lookBeforeOf(v: unknown): LookBefore | undefined {
-  if (!isObj(v) || typeof v.glass !== "boolean" || !WALLPAPERS.some((x) => x.id === v.wallpaper)) return undefined;
-  return { glass: v.glass, wallpaper: v.wallpaper as WallpaperId, radius: clamp(v.radius, 0, 24, DEFAULT_APPEARANCE.radius) };
+  if (!isObj(v) || typeof v.glass !== "boolean" || !isWallpaperKind(v.wallpaper)) return undefined;
+  return { glass: v.glass, wallpaper: v.wallpaper, radius: clamp(v.radius, 0, 24, DEFAULT_APPEARANCE.radius) };
 }
 
 export function mergeAppearance(raw: unknown, base: Appearance = DEFAULT_APPEARANCE): Appearance {
@@ -640,7 +650,7 @@ export function mergeAppearance(raw: unknown, base: Appearance = DEFAULT_APPEARA
       animate: bool(g.animate, base.glass.animate),
     },
     wallpaper: {
-      kind: WALLPAPERS.some((x) => x.id === w.kind) ? (w.kind as WallpaperId) : base.wallpaper.kind,
+      kind: isWallpaperKind(w.kind) ? w.kind : base.wallpaper.kind,
       videoSrc: srcOk(w.videoSrc),
       imageSrc: srcOk(w.imageSrc),
       brightness: clamp(w.brightness, 0.4, 1.1, base.wallpaper.brightness),
@@ -660,13 +670,14 @@ export function mergeAppearance(raw: unknown, base: Appearance = DEFAULT_APPEARA
 }
 
 /** A host's look as a guest shows it, from anything (a peer's message is untrusted): checked as
- *  settings are, with nothing that names a file on the host's disk. A picture or video wallpaper
- *  becomes the default one, and overlays go: their media is the host's alone. Fonts are not the
+ *  settings are, with nothing that names a file on the host's disk. A picture or video wallpaper,
+ *  or a package's live wallpaper, becomes the default one, and overlays go: their media, and the
+ *  package, are the host's alone. Fonts are not the
  *  look: a guest reads in their own, so the host's are not sent. Each field is named: a field
  *  added later, or one a newer build wrote, reaches guests only when it is added here. */
 export function sharedAppearance(raw: unknown): SharedAppearance {
   const a = mergeAppearance(raw);
-  const media = a.wallpaper.kind === "image" || a.wallpaper.kind === "video";
+  const media = a.wallpaper.kind === "image" || a.wallpaper.kind === "video" || isPluginWallpaper(a.wallpaper.kind);
   // The custom accent (a theme's colours), as `lookForGuests` adds it: a colour, never a file.
   const accentCustom = accentColorsOf((raw as { accentCustom?: unknown } | null)?.accentCustom);
   return {
@@ -968,7 +979,7 @@ const AGENT_KEY_RE = /^[a-z0-9][a-z0-9-]{0,31}$/;
 // settings.json keeps the nested one. Two pure moves, round-trip tested.
 
 export interface FlatTheme {
-  glass: boolean; blur: number; opacity: number; wallpaper: WallpaperId; accent: AccentId;
+  glass: boolean; blur: number; opacity: number; wallpaper: WallpaperKind; accent: AccentId;
   videoSrc?: string; imageSrc?: string; videoBrightness?: number; animate: boolean;
   /** `wallpaper.colour`: a live scene in its own colours. */
   wallpaperColour: boolean;

@@ -9,6 +9,7 @@ import { installPackage, removePlugin, reviewedOf, rollbackPackage, switchPackag
 import { packagesDir, readInstalledPackages } from "./installed-packages.js";
 import { listWidgets } from "./widgets.js";
 import { listToolPackages } from "./tool-packages.js";
+import { listInstalledWallpapers } from "./wallpaper-folder.js";
 import { isPluginOn } from "./plugin-settings.js";
 import { readSettings } from "./settings.js";
 
@@ -148,6 +149,39 @@ test("a theme installs as a member with no code: its id is in its package, and a
 
 test("a theme on its own is no package: it is refused, saying it comes in one", async () => {
   await expect(installPackage(folder("harbour", { "theme.json": THEME }), { dryRun: true })).rejects.toThrow(/a theme comes in a package/);
+});
+
+/** A package holding the live wallpaper `bees`, its entry built. */
+function hive(startup?: object): string {
+  const root = folder("hive", { "hivemind-package.json": JSON.stringify({ apiVersion: 2, id: "@acme/hive", name: "Hive", version: "1.0.0", wallpapers: [{ path: "wallpapers/bees" }], ...(startup ? { startup } : {}) }) });
+  fs.mkdirSync(path.join(root, "wallpapers", "bees", "dist"), { recursive: true });
+  fs.writeFileSync(path.join(root, "wallpapers", "bees", "hivemind-wallpaper.json"), JSON.stringify({ protocol: 1, name: "Bees", entry: "dist/main.js", colour: true }));
+  fs.writeFileSync(path.join(root, "wallpapers", "bees", "dist", "main.js"), "");
+  return root;
+}
+
+test("a live wallpaper installs as sandboxed code that asks for nothing: its id is in its package, the package arrives on, and the app finds it", async () => {
+  const { record } = await installPackage(hive());
+  expect(record.members).toEqual([expect.objectContaining({ kind: "wallpaper", id: "@acme/hive/bees", path: "wallpapers/bees", permissions: [] })]);
+  expect(record.on).toBe(true);
+  expect(await listInstalledWallpapers()).toEqual([expect.objectContaining({
+    id: "@acme/hive/bees", error: null, manifest: { protocol: 1, name: "Bees", entry: "dist/main.js", colour: true }, package: expect.objectContaining({ id: "@acme/hive", on: true }),
+  })]);
+});
+
+test("a live wallpaper on its own is no package, and one whose entry is not built is refused saying so", async () => {
+  const bees = path.join(hive(), "wallpapers", "bees");
+  await expect(installPackage(bees, { dryRun: true })).rejects.toThrow(/a live wallpaper comes in a package/);
+  fs.rmSync(path.join(bees, "dist"), { recursive: true });
+  await expect(installPackage(path.dirname(path.dirname(bees)), { dryRun: true })).rejects.toThrow(/its entry, dist\/main\.js, is not a file in its folder: build it first/);
+});
+
+test("an install says which live wallpaper the package offers, and a package offering one it does not hold is refused", async () => {
+  expect((await installPackage(hive({ wallpaper: "@acme/hive/bees", agents: [] }), { dryRun: true })).startWallpaper).toBe("@acme/hive/bees");
+  fs.rmSync(path.join(tmp, "hive"), { recursive: true });
+  expect((await installPackage(hive(), { dryRun: true })).startWallpaper).toBeNull();
+  fs.rmSync(path.join(tmp, "hive"), { recursive: true });
+  await expect(installPackage(hive({ wallpaper: "@acme/hive/wasps", agents: [] }), { dryRun: true })).rejects.toThrow(/unknown startup wallpaper: @acme\/hive\/wasps/);
 });
 
 test("a member whose id has another owner is refused, and nothing is installed", async () => {

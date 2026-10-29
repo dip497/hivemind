@@ -224,3 +224,5 @@ export function fakeHost(opts: FakeHostOptions = {}): FakeHost {
     close: () => { port.onmessage = null; port.close(); },
   });
 }
+
+export { fakeWallpaperHost, type FakeWallpaperHost, type FakeWallpaperOptions } from "./wallpaper-testing.js";

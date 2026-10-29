@@ -100,6 +100,14 @@ describe("settings schema", () => {
     expect(GEIST_FONT.startsWith('"Geist Sans"')).toBe(true);
   });
 
+  test("a package's live wallpaper is a background, kept by its id; an id of another shape is not", () => {
+    const kind = (k: unknown) => mergeAppearance({ wallpaper: { kind: k } }).wallpaper.kind;
+    expect(kind("@acme/hive/bees")).toBe("@acme/hive/bees");
+    for (const bad of ["@acme/bees", "@acme/hive/bees/x", "@Acme/hive/bees", "@acme/hive/../x", "javascript:x"]) expect(kind(bad)).toBe(DEFAULT_APPEARANCE.wallpaper.kind);
+    // Clean puts back what it replaced: a package's live wallpaper too.
+    expect(mergeAppearance({ lookBefore: { glass: true, wallpaper: "@acme/hive/bees", radius: 8 } }).lookBefore?.wallpaper).toBe("@acme/hive/bees");
+  });
+
   test("a host's look as a guest gets it names no file on the host, and junk from a peer is dropped", () => {
     const host = {
       ...DEFAULT_APPEARANCE, preset: "nord", accent: "ice", mode: "light", uiFont: "Host Sans", monoFont: "Host Mono",
@@ -113,6 +121,8 @@ describe("settings schema", () => {
     expect(sharedAppearance({ ...host, wallpaper: { kind: "aurora", imageSrc: "file:///etc/passwd" } }).wallpaper).toEqual({ kind: "aurora", brightness: DEFAULT_APPEARANCE.wallpaper.brightness, colour: false });
     // A live scene in its own colours is the host's look: the guest sees it so.
     expect(sharedAppearance({ ...host, wallpaper: { kind: "shoal", colour: true } }).wallpaper).toEqual({ kind: "shoal", brightness: DEFAULT_APPEARANCE.wallpaper.brightness, colour: true });
+    // A package's live wallpaper is the host's install, which a guest may not have: the default one.
+    expect(sharedAppearance({ ...host, wallpaper: { kind: "@acme/hive/bees", colour: true } }).wallpaper).toEqual({ kind: DEFAULT_APPEARANCE.wallpaper.kind, brightness: DEFAULT_APPEARANCE.wallpaper.brightness, colour: true });
     expect(sharedAppearance({ accent: "<script>", radius: 9999, palette: { bg: "url(x)" } })).toMatchObject({ accent: DEFAULT_APPEARANCE.accent, radius: 24, palette: { bg: DEFAULT_APPEARANCE.palette.bg } });
     // A key this build does not know, which settings keep, never reaches a guest; nor does a picture's path.
     const later = sharedAppearance({ ...host, wallpaper: { kind: "image", imageSrc: "hivemedia://media/host-cat.png", brightness: 0.7 }, theme: { before: "/home/host/theme.json" } });

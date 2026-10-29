@@ -179,10 +179,12 @@ describe("themeFromLook", () => {
     expect(JSON.stringify(t)).not.toContain("hivemedia");
   });
 
-  test("a live scene's look: the theme gets Mono in its place, and the check takes it", () => {
-    const t = themeFromLook("Mine", { ...DEFAULT_APPEARANCE, wallpaper: { kind: "shoal", brightness: 0.85, colour: true } }, {});
-    expect(t.wallpaper).toEqual({ kind: "mono", brightness: 0.85 });
-    expect(checkTheme(t, [])).toHaveProperty("theme");
+  test("a live scene's look, built in or a package's: the theme gets Mono in its place, and the check takes it", () => {
+    for (const kind of ["shoal", "@acme/hive/bees"] as const) {
+      const t = themeFromLook("Mine", { ...DEFAULT_APPEARANCE, wallpaper: { kind, brightness: 0.85, colour: true } }, {});
+      expect(t.wallpaper).toEqual({ kind: "mono", brightness: 0.85 });
+      expect(checkTheme(t, [])).toHaveProperty("theme");
+    }
   });
 });
 
