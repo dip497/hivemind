@@ -70,8 +70,9 @@ const install = (dir: string) => {
 let app: ElectronApplication;
 let page: Page;
 const shot = async (name: string) => { if (shots) await page.screenshot({ path: path.join(shots, `${name}.png`) }); };
+/** The wallpaper's frame, once its page has drawn (before, it may still be the empty page). */
 const wallpaperFrame = async (id: string): Promise<Frame> => {
-  await expect.poll(() => page.frame({ name: `hm-wallpaper:${id}` }) !== null).toBe(true);
+  await expect(page.locator(`.hm-live-frame[data-drawn][data-wallpaper="${id}"]`)).toHaveCount(1);
   return page.frame({ name: `hm-wallpaper:${id}` })!;
 };
 const tiles = () => page.locator(".react-flow__node-terminal").evaluateAll((ns) => ns.map((n) => n.getAttribute("data-id")!));
@@ -190,7 +191,9 @@ test("what a wallpaper says is under the pointer counts only over open water, an
   await page.waitForTimeout(300);
   await expect(label).toHaveCount(0);
   // Over the water it is, and the name goes with the pointer.
-  const water = (await openWater(60))!;
+  await zoomOut();
+  await expect.poll(() => openWater(40)).not.toBeNull();
+  const water = (await openWater(40))!;
   await page.mouse.move(water.x, water.y);
   await say();
   await expect(label).toHaveCount(1);
@@ -203,11 +206,13 @@ test("what a wallpaper says is under the pointer counts only over open water, an
 });
 
 test("a wallpaper that takes the keyboard is turned off, and the terminal that had it gets it back", async () => {
+  await page.evaluate(() => window.hive.settingsSet("appearance.wallpaper.kind", "@e2e/rogue/liar"));
   const frame = await wallpaperFrame("@e2e/rogue/liar");
-  const [tile] = await tiles();
   const focusedTile = () => page.evaluate(() => document.activeElement?.closest(".react-flow__node")?.getAttribute("data-id") ?? null);
-  const at = await middleOf(tile!);
-  await page.mouse.click(at.x, at.y);
+  // Gone to from the Tiles list (one not selected, so going to it moves the keyboard there): its
+  // terminal has the keyboard.
+  const tile = await page.locator(".react-flow__node-terminal:not(.selected)").first().getAttribute("data-id");
+  await page.locator(`[data-layer-tile="${tile}"]`).click();
   await expect.poll(focusedTile).toBe(tile);
   await frame.evaluate(() => (window as unknown as Liar).steal());
   await expect(page.getByText(/The Liar live wallpaper was turned off: it took the keyboard/)).toBeVisible();

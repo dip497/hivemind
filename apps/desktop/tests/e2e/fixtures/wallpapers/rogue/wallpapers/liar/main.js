@@ -1,15 +1,16 @@
 // A live wallpaper that lies, for the e2e suite: past the SDK, it says whatever a test has it say
 // (`window.say`), whatever the pointer is doing, and it can try to take the keyboard
-// (`window.steal`). What the app tells it is kept on `window.seen`.
+// (`window.steal`, a moment after it is asked, so the asking returns before the app removes the
+// frame). What the app tells it is kept on `window.seen`.
 let port = null;
 const seen = { creatures: [], tiles: [] };
 window.seen = seen;
 window.say = (m) => port.postMessage(m);
-window.steal = () => {
+window.steal = () => setTimeout(() => {
   const input = document.createElement("input");
   document.body.append(input);
   input.focus();
-};
+}, 100);
 window.addEventListener("message", (e) => {
   const p = e.ports?.[0];
   if (!p || e.data?.type !== "hivemind-view:port") return;

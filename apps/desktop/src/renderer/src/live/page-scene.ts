@@ -54,6 +54,9 @@ export abstract class PageScene implements SceneEngine {
   protected mode: SceneMode = "hold";
   private pointer = { x: 0, y: 0, active: false };
   private pointerQueued = false;
+  /** What the scene last said is under the pointer, and what the page shows: that, while the
+   *  pointer is over the water, else nothing. */
+  private said: string | null = null;
   private hovered: string | null = null;
   /** A press on a creature, kept until it is a click (or a pan). */
   private press: { key: string; x: number; y: number } | null = null;
@@ -82,7 +85,8 @@ export abstract class PageScene implements SceneEngine {
     window.removeEventListener("click", this.onClick);
     window.removeEventListener("blur", this.onLeave);
     document.documentElement.removeEventListener("pointerleave", this.onLeave);
-    if (this.hovered) this.hover(null);
+    this.said = null;
+    this.show();
   }
 
   setMode(mode: SceneMode) {
@@ -103,9 +107,14 @@ export abstract class PageScene implements SceneEngine {
   /** A click on the water, and the creature it opened, if any. */
   protected abstract sendClick(x: number, y: number, opened: string | null): void;
 
-  /** The scene says which creature is under the pointer: none, while the pointer is not over the water. */
+  /** The scene says which creature is under the pointer. */
   protected hover(key: string | null) {
-    if (!this.pointer.active) key = null;
+    this.said = key;
+    this.show();
+  }
+
+  private show() {
+    const key = this.pointer.active ? this.said : null;
     if (key === this.hovered) return;
     this.hovered = key;
     this.events.hover(key, { x: this.pointer.x, y: this.pointer.y });
@@ -131,10 +140,10 @@ export abstract class PageScene implements SceneEngine {
   private onPointerMove = (e: PointerEvent) => {
     if (this.mode === "hold") return;
     const active = e.pointerType !== "touch" && overWater(e);
-    // Onto a tile or a panel: no creature is under the pointer there, whatever the scene says next.
-    if (!active && this.hovered) this.hover(null);
     if (!active && !this.pointer.active) return;
     this.pointer = { x: e.clientX, y: e.clientY, active };
+    // Onto a tile or a panel, no creature is under the pointer, whatever the scene says.
+    this.show();
     if (this.pointerQueued) return;
     this.pointerQueued = true;
     requestAnimationFrame(() => {
@@ -163,9 +172,9 @@ export abstract class PageScene implements SceneEngine {
 
   private onLeave = () => {
     this.press = null;
-    if (this.hovered) this.hover(null);
     if (!this.pointer.active) return;
     this.pointer = { ...this.pointer, active: false };
+    this.show();
     this.sendPointer(this.pointer.x, this.pointer.y, false);
   };
 }

@@ -166,13 +166,13 @@ test("Copy JSON copies the look without the wallpaper's picture, and says so; Im
   await page.getByRole("button", { name: "Copy JSON" }).click();
   await expect(page.getByText("Left out the wallpaper picture")).toBeVisible();
   const copied = await app.evaluate(({ clipboard }) => clipboard.readText());
-  expect([JSON.parse(copied).wallpaper, copied.includes("alice")]).toEqual([{ kind: "image", brightness: 0.8 }, false]);
+  expect([JSON.parse(copied).wallpaper, copied.includes("alice")]).toEqual([{ kind: "image", brightness: 0.8, colour: false }, false]);
   // The file back, with other corners: the look changes and the picture stays.
   const file = JSON.stringify({ ...JSON.parse(copied), radius: 3 });
   await page.locator('input[type="file"][accept*="json"]').setInputFiles({ name: "theme.json", mimeType: "application/json", buffer: Buffer.from(file) });
   await expect(page.getByText("Imported theme.json")).toBeVisible();
   await expect.poll(() => onDisk().appearance.radius, { timeout: 5_000 }).toBe(3);
-  expect(onDisk().appearance.wallpaper).toEqual({ kind: "image", imageSrc: picture, brightness: 0.8 });
+  expect(onDisk().appearance.wallpaper).toEqual({ kind: "image", imageSrc: picture, brightness: 0.8, colour: false });
   await expect(page.locator(".hm-wp-image")).toHaveCount(1);
   // A package.json picked by mistake sets nothing of the look: refused, and the look stays.
   const before = onDisk().appearance;
