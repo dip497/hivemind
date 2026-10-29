@@ -269,8 +269,28 @@ export interface PackageReview {
   replaces: { version: string; on: boolean } | null;
   /** The view it opens with (its manifest's `startup.view`), which the app offers once it is installed. */
   opens: { id: string; name: string } | null;
+  /** The live wallpaper it offers as the background (its manifest's `startup.wallpaper`), which the
+   *  app offers once it is installed. */
+  wallpaper: { id: string; name: string } | null;
   members: Array<{ kind: string; id: string; name: string; permissions: string[]; runs: MemberRuns }>;
   changes: Array<MemberChange & { name: string; runs: MemberRuns }>;
+}
+
+/** A live wallpaper an installed package holds, as main lists it (main/wallpaper-packages.ts). */
+export interface WallpaperPackageInfo {
+  /** `@owner/package/name`: what `appearance.wallpaper.kind` holds to draw it. */
+  id: string;
+  name: string;
+  description: string | null;
+  /** It draws in colours of its own when the person turns Colour on. */
+  colour: boolean;
+  /** Its picture for the picker, as a data URL. */
+  preview: string | null;
+  package: { id: string; name: string; on: boolean };
+  /** Where its frame loads from: null when its package is off or it cannot be read. */
+  url: string | null;
+  /** Why it cannot be used, or null. */
+  error: string | null;
 }
 
 /** One community view package as the main process sees it (see main/view-packages.ts). */
@@ -373,6 +393,9 @@ export interface HiveIpc {
   /** Installed view packages (user dir + this repo's .hivemind/views), each
    *  with its load URL or the reason it will not load. Rescans on every call. */
   listViews(repoRoot: string | null): Promise<ViewPackageInfo[]>;
+  /** The live wallpapers installed packages hold, each with where its frame loads from or why it
+   *  cannot be used. Rescans on every call. */
+  listWallpapers(): Promise<WallpaperPackageInfo[]>;
   viewOpen(id: string, workspace: string, screen: ViewScreen): Promise<{ session: string }>;
   viewPost(session: string, message: PluginMessage, workspace: string): void;
   viewScreen(session: string, screen: ViewScreen, workspace: string): void;
@@ -474,10 +497,11 @@ export interface HiveIpc {
   reviewPackageFolder?(): Promise<PackageReview | null>;
   /** Install the folder last reviewed. */
   installPackageFolder?(token: string): Promise<void>;
-  /** The packages whose start view (`startup.view`) this window should offer now, given the views
-   *  it loaded and the one it shows; each is recorded as offered, so it is offered once. Only the
-   *  window the person is at is offered any. */
-  startViewOffers?(registered: string[], showing: string | null): Promise<Array<{ package: string; name: string; view: string }>>;
+  /** The packages whose start view (`startup.view`) or live wallpaper (`startup.wallpaper`) this
+   *  window should offer now, given the views it loaded, the one it shows and the background it
+   *  draws; each is recorded as offered, so it is offered once. Only the window the person is at is
+   *  offered any. */
+  startViewOffers?(registered: string[], showing: string | null, background?: string): Promise<Array<{ package: string; name: string; view: string | null; wallpaper: string | null }>>;
   /** Main's watchdog saw a plugin frame peg a core for several samples. */
   onViewRunaway(cb: (e: { id: string; cpuPct: number }) => void): () => void;
   // ── identity (R3) ─────────────────────────────────────────

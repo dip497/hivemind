@@ -135,6 +135,8 @@
    (or in the scene's own colours, set on the element, with Colour on). */
 .settings-wallpaper-preview[data-live] { overflow: hidden; background: var(--color-bg); color: var(--color-fg2); }
 .settings-live-mark { font-family: var(--font-mono); font-size: var(--text-chip); line-height: 1; white-space: pre; }
+/* A package's live wallpaper: its own picture, or the first letters of its name. */
+.settings-wallpaper-preview[data-plugin] { background-size: cover; background-position: center; }
 .settings-wallpaper-name { display: block; margin-top: 5px; font-size: var(--text-label); color: var(--color-fg2); }
 .settings-wallpaper[aria-checked=true] .settings-wallpaper-name { color: var(--color-fg); }
 .settings-color { width: 100%; height: 24px; padding: 0; border: 1px solid var(--color-line2); border-radius: 4px; background: transparent; }

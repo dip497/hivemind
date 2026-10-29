@@ -50,6 +50,7 @@ function hashOf(s: string): number {
 export function roster(agents: readonly SceneAgent[], statusOf: (tileId: string) => TileStatusKind | null | undefined): CreatureSpec[] {
   const all = agents.map((a, i) => ({ i, spec: {
     key: a.tileId,
+    agent: a.agent,
     variant: hashOf(a.agent ?? ""),
     size: 0.78 + 0.22 * hashOf(a.tileId),
     mood: moodOf(statusOf(a.tileId), a.sleeping),

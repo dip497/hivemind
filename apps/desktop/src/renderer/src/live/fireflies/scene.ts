@@ -56,6 +56,10 @@ class FireflyScene implements LiveScene {
     this.meadow.splash(x, y);
   }
 
+  creatureAt(x: number, y: number) {
+    return this.meadow.fireflyAt(x, y);
+  }
+
   step(dt: number) {
     this.meadow.step(dt);
   }

@@ -24,12 +24,13 @@ import { Input } from "./components/ui/input";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "./components/ui/select";
 import { computerFonts, type ComputerFont } from "./computer-fonts";
 import { Switch as SwitchPrimitive } from "./components/ui/switch";
-import { isLiveScene, PRESETS, type LiveSceneId, type TerminalPalette } from "@hivemind/core/settings-schema";
+import { isLiveScene, isPluginWallpaper, PRESETS, type LiveSceneId, type TerminalPalette } from "@hivemind/core/settings-schema";
 import { NAMED_FONTS, fontNameOf, fontStack, type FontSlot } from "@hivemind/core/font-names";
 import { cssColorToHex } from "@hivemind/core/css-color";
 import { accentOf } from "@hivemind/core/appearance-extra";
 import { ACCENT_CONTRAST, accentMark, themeSwatches } from "@hivemind/core/theme-format";
 import { lightOf, swatchInk, waterCss } from "./live/palette";
+import { usableWallpaper, wallpaperOffBecause, useWallpapers } from "./live/wallpaper-store";
 import { cssColorToHex as hexOf } from "./workspace/css-color";
 import { useSettings } from "./settings-store";
 import {
@@ -279,7 +280,12 @@ export function BackgroundControls({ t }: { t: ThemeState }) {
     else setTheme({ wallpaper: "image", imageSrc: r.url });
   };
   const isMedia = t.wallpaper === "video" || t.wallpaper === "image";
-  const current = WALLPAPERS.find((w) => w.id === t.wallpaper)?.label ?? "None";
+  // The live wallpapers installed packages hold, after the app's own.
+  const { wallpapers, loaded } = useWallpapers();
+  const installed = wallpapers.filter((w) => w.url && !w.error);
+  const pluginId = isPluginWallpaper(t.wallpaper) ? t.wallpaper : null;
+  const plugin = pluginId ? usableWallpaper(wallpapers, pluginId) : null;
+  const current = pluginId ? wallpapers.find((w) => w.id === pluginId)?.name ?? pluginId.slice(pluginId.lastIndexOf("/") + 1) : WALLPAPERS.find((w) => w.id === t.wallpaper)?.label ?? "None";
   const live = isLiveScene(t.wallpaper) ? t.wallpaper : null;
   // A live scene's swatch in its own colours when Colour is on, else on the page as it draws.
   const light = lightOf(hexOf(t.palette.bg), hexOf(t.palette.fg));
@@ -309,8 +315,22 @@ export function BackgroundControls({ t }: { t: ThemeState }) {
               </button>
             );
           })}
+          {installed.map((w) => (
+            <button key={w.id} type="button" className="settings-wallpaper" role="radio" aria-checked={t.wallpaper === w.id} aria-label={w.name} title={w.description ?? `${w.name}, from ${w.package.name}`} data-wallpaper-option={w.id} onClick={() => setTheme({ wallpaper: w.id as ThemeState["wallpaper"] })}>
+              <span className="settings-wallpaper-preview" aria-hidden data-live data-plugin style={w.preview ? { backgroundImage: `url("${w.preview}")` } : undefined}>
+                {!w.preview && <span className="settings-live-mark">{w.name.slice(0, 2)}</span>}
+              </span>
+              <span className="settings-wallpaper-name">{w.name}</span>
+            </button>
+          ))}
         </div>
       </details>
+      {pluginId && !plugin && loaded && (
+        <p className="settings-note" role="status">
+          {wallpaperOffBecause(pluginId) ? `${current} was turned off: ${wallpaperOffBecause(pluginId)}. ` : `${current} is not installed, or its package is off. `}
+          The plain background shows instead.
+        </p>
+      )}
 
       {isMedia && (
         <div className="settings-row">
@@ -335,16 +355,16 @@ export function BackgroundControls({ t }: { t: ThemeState }) {
       {t.wallpaper !== "none" && !wallpaperDrawn(t) && (
         <p className="settings-note">The background shows behind your tools when glass is on.</p>
       )}
-      {live && (
+      {(live || plugin?.colour) && (
         <div className="settings-row">
-          <div><label>Colour</label><p>In its own colours: the water, what lives in it, the light coming down. Off, it is drawn in your theme's page and text colours.</p></div>
+          <div><label>Colour</label><p>{live ? "In its own colours: the water, what lives in it, the light coming down." : "In its own colours."} Off, it is drawn in your theme's page and text colours.</p></div>
           <Switch on={t.wallpaperColour} onChange={(v) => setTheme({ wallpaperColour: v })} label={`Draw ${current} in its own colours`} />
         </div>
       )}
-      {live && (
+      {(live || plugin) && (
         <div className="settings-row">
           <div>
-            <label>{SCENES[live].creatures} behind your tools</label>
+            <label>{live ? SCENES[live].creatures : "Its creatures"} behind your tools</label>
             <p>
               {!t.glass
                 ? `Panels and tiles are solid over ${current}.`
@@ -353,7 +373,7 @@ export function BackgroundControls({ t }: { t: ThemeState }) {
                   : "They show through the frosted panels and tiles, softened behind the text."}
             </p>
           </div>
-          <Button variant="outline" title={`Thin frosted panels and tiles, so the ${SCENES[live].creatures.toLowerCase()} show behind your agents`} onClick={() => setTheme(SEE_THROUGH)}>See-through</Button>
+          <Button variant="outline" title={`Thin frosted panels and tiles, so the ${live ? SCENES[live].creatures.toLowerCase() : "creatures"} show behind your agents`} onClick={() => setTheme(SEE_THROUGH)}>See-through</Button>
         </div>
       )}
     </>

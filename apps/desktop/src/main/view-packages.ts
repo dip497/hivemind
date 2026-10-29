@@ -42,6 +42,17 @@ async function remoteCall<T>(method: string, params: unknown[]): Promise<T> {
  *  not always the id (`@owner/name` is served as `owner--name`), so the id travels with it. */
 const served = new Map<string, { id: string; dir?: string; repo?: string; own: ViewAddress }>();
 
+/** A package's live wallpapers, served beside the views from origins of their own, by host: set
+ *  whole by each listing (wallpaper-packages.ts), apart from the views' scans. */
+const wallpapers = new Map<string, { id: string; dir?: string; repo?: string; own: ViewAddress }>();
+
+/** Serve these live wallpapers, and no other, each from its own `hm-view://<host>`. */
+export function serveWallpapers(list: ReadonlyArray<{ host: string; id: string; dir: string }>): void {
+  wallpapers.clear();
+  // No `files`: a wallpaper fetches nothing, its own files included.
+  for (const w of list) wallpapers.set(w.host, { id: w.id, dir: w.dir, own: { at: `${VIEW_SCHEME}://${w.host}`, fetch: false } });
+}
+
 /** The views that come with the app, built beside its main bundle (scripts/build-views.mjs). */
 export const appViewsDir = (): string => fileURLToPath(new URL("../views", import.meta.url));
 
@@ -97,7 +108,7 @@ export function handleViewProtocol(): void {
   serveScheme(VIEW_SCHEME, async (request) => {
     try {
       const u = new URL(request.url);
-      const source = served.get(u.host);
+      const source = served.get(u.host) ?? wallpapers.get(u.host);
       if (!source) return new Response("unknown view", { status: 404 });
       const rel = decodeURIComponent(u.pathname.replace(/^\/+/, ""));
       if (source.repo) {
@@ -156,7 +167,7 @@ export function startViewWatchdog(win: BrowserWindow): () => void {
     for (const f of frames) {
       let id = "";
       // The frame knows its host; the registry knows ids. Report the id or nothing is disabled.
-      try { const host = new URL(f.url).host; id = served.get(host)?.id ?? host; } catch { continue; }
+      try { const host = new URL(f.url).host; id = served.get(host)?.id ?? wallpapers.get(host)?.id ?? host; } catch { continue; }
       seen.add(id);
       const cpu = byPid.get(f.osProcessId) ?? 0;
       const n = cpu >= RUNAWAY_CPU_PCT ? (strikes.get(id) ?? 0) + 1 : 0;

@@ -52,6 +52,10 @@ export class SwimScene implements LiveScene {
     this.world.splash(x, y);
   }
 
+  creatureAt(x: number, y: number) {
+    return this.world.swimmerAt(x, y);
+  }
+
   step(dt: number) {
     this.world.step(dt);
   }

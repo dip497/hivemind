@@ -159,6 +159,18 @@ export class Meadow {
   }
 
   /** A click in the meadow: the fireflies near it scatter, flashing. */
+  /** The agent whose firefly is at (x, y), give or take its glow; the nearest when two are close.
+   *  None for open air or one flying off. */
+  fireflyAt(x: number, y: number): string | null {
+    let best: { key: string; d: number } | null = null;
+    for (const f of this.flies) {
+      if (f.leaving) continue;
+      const d = Math.hypot(x - f.x, y - f.y);
+      if (d <= 18 * Math.max(0.8, f.size) && (!best || d < best.d)) best = { key: f.key, d };
+    }
+    return best?.key ?? null;
+  }
+
   splash(x: number, y: number) {
     for (const m of this.motes) {
       const d = Math.hypot(m.x - x, m.y - y);

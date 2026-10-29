@@ -285,3 +285,25 @@ test("a still picture changes only what changed: a closed agent's shark goes at 
     assert.equal(b.depth, 1, "and already come up");
   });
 });
+
+test("the shark under a point is its agent's, anywhere along its body, and open water or a shark swimming off is no one's", () => {
+  seeded(4, () => {
+    const w = water([shark("a", "hunt"), shark("b", "cruise")]);
+    run(w, 5);
+    const a = sharkOf(w, "a");
+    // Its snout, its middle and its tail.
+    for (const i of [0, Math.floor(a.nodes.length / 4) * 2, a.nodes.length - 2]) assert.equal(w.swimmerAt(a.nodes[i]!, a.nodes[i + 1]!), "a", `node ${i / 2}`);
+    // Beside its body, where a fin is: a tenth of its length off its middle.
+    const m = Math.floor(a.nodes.length / 4) * 2;
+    const [dx, dy] = [a.nodes[m + 2]! - a.nodes[m]!, a.nodes[m + 3]! - a.nodes[m + 1]!];
+    const side = a.length * 0.1 / Math.hypot(dx, dy);
+    assert.equal(w.swimmerAt(a.nodes[m]! - dy * side, a.nodes[m + 1]! + dx * side), "a", "beside it");
+    // Well clear of every shark.
+    const far = (x: number, y: number) => w.swimmers.every((s) => { for (let i = 0; i < s.nodes.length; i += 2) if (Math.hypot(s.nodes[i]! - x, s.nodes[i + 1]! - y) < 200) return false; return true; });
+    const open = [[10, 10], [W - 10, 10], [10, H - 10], [W - 10, H - 10], [W / 2, 10]].find(([x, y]) => far(x!, y!))!;
+    assert.equal(w.swimmerAt(open[0]!, open[1]!), null);
+    const [x, y] = [a.nodes[0]!, a.nodes[1]!];
+    w.setRoster([shark("b", "cruise")]);
+    assert.equal(w.swimmerAt(x, y), null);
+  });
+});

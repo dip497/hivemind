@@ -16,6 +16,8 @@ export interface CreatureSpec {
   variant: number;
   size: number;
   mood: Mood;
+  /** The program's id, which a package's wallpaper is told (the app's own scenes go by `variant`). */
+  agent?: string | null;
 }
 
 /** A box on the screen a scene keeps its life out from under: a tile or a panel. `key` is a tile's id. */
@@ -56,6 +58,9 @@ export interface LiveScene {
   pointer(x: number, y: number, active: boolean): void;
   /** A click on the water. */
   splash(x: number, y: number): void;
+  /** The agent whose creature is at (x, y) now, or null: the app shows its name there, and a click
+   *  goes to its tile. */
+  creatureAt(x: number, y: number): string | null;
   /** The simulation, `dt` seconds on. */
   step(dt: number): void;
   /** Draw it as it is; `dt` for what fades with time. */

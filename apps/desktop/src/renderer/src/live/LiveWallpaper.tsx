@@ -1,11 +1,18 @@
-/** A live wallpaper: a scene drawn in characters behind the canvas (Shoal's sharks, Koi Pond's koi
- *  …), one creature per agent, in the theme's page and text colours or the scene's own. */
+/** A live wallpaper: a scene behind the canvas (Shoal's sharks, Koi Pond's koi, a package's own …),
+ *  one creature per agent, in the theme's page and text colours or the scene's own. The pointer over
+ *  a creature shows its agent's name and what it is doing; a click there goes to its tile. */
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { createPortal } from "react-dom";
+import { toast } from "sonner";
 import { statusOf, subscribeStatus } from "../agent-status-bus";
 import { cssColorToHex } from "../workspace/css-color";
+import { statusWord } from "../workspace/status-look";
 import { LiveEngine, type SceneId } from "./engine";
+import type { SceneEngine } from "./page-scene";
+import { PluginEngine, type PluginWallpaper } from "./plugin-engine";
 import { roster, turnEnded, type SceneAgent } from "./roster";
 import type { Box, CreatureSpec, SceneMode } from "./scene";
+import { turnWallpaperOff } from "./wallpaper-store";
 
 /** A media query as a store, for useSyncExternalStore. */
 function mediaStore(query: string) {
@@ -40,8 +47,9 @@ function boxesOnPage(frosted: boolean): Box[] {
 
 const rosterKey = (creatures: CreatureSpec[]) => creatures.map((s) => `${s.key}:${s.variant}:${s.size}:${s.mood}`).join("|");
 
-export function LiveWallpaper({ scene, colour, agents, paused, animate, frosted, seeThrough, page, text, monoFont }: {
-  scene: SceneId;
+export function LiveWallpaper({ scene, colour, agents, paused, animate, frosted, seeThrough, page, text, attention, dark, monoFont, nameOf, onOpen }: {
+  /** One of the app's scenes, or a package's live wallpaper. */
+  scene: SceneId | PluginWallpaper;
   /** Drawn in the scene's own colours, not the theme's page and text. */
   colour: boolean;
   /** The workspace's agents, the same array until one comes, goes or falls asleep. */
@@ -54,29 +62,63 @@ export function LiveWallpaper({ scene, colour, agents, paused, animate, frosted,
   frosted: boolean;
   /** Tool content is frosted too: a creature under a tile shows through it, soft. */
   seeThrough: boolean;
-  /** The theme's page and text colours (CSS). */
+  /** The theme's page and text colours (CSS), and its "needs you" colour; whether it is dark. */
   page: string;
   text: string;
+  attention: string;
+  dark: boolean;
   /** The terminal's font, which the scene's characters take (read from the page; this says when). */
   monoFont: string;
+  /** An agent's tile's name, for the label over its creature. */
+  nameOf: (tileId: string) => string | null;
+  /** Go to an agent's tile: its creature was clicked. */
+  onOpen: (tileId: string) => void;
 }): React.ReactElement {
   const hostRef = useRef<HTMLDivElement>(null);
-  const [engine, setEngine] = useState<LiveEngine | null>(null);
+  const [engine, setEngine] = useState<SceneEngine | null>(null);
+  /** The creature under the pointer, and where the pointer was when it came. */
+  const [over, setOver] = useState<{ key: string; x: number; y: number } | null>(null);
+  const openRef = useRef(onOpen);
+  openRef.current = onOpen;
+  const sceneKey = typeof scene === "string" ? scene : `${scene.id} ${scene.url}`;
   const reduced = useSyncExternalStore(lessMotion.watch, lessMotion.now, lessMotion.now);
   const contrast = useSyncExternalStore(moreContrast.watch, moreContrast.now, moreContrast.now);
   const solid = useSyncExternalStore(lessTransparency.watch, lessTransparency.now, lessTransparency.now);
   const shown = !contrast && !solid;
   const mode: SceneMode = !animate || reduced ? "still" : paused ? "hold" : "run";
 
-  // A scene of its own for each: a canvas is handed to one worker only once.
+  // The colours it is drawn in now: a package's page is told them first, with everything else.
+  const look = { page: cssColorToHex(page), text: cssColorToHex(text), attention: cssColorToHex(attention), dark, colour, mono: monoFont };
+  const lookRef = useRef(look);
+  lookRef.current = look;
+
+  // A scene of its own for each: a canvas is handed to one worker only once, and a package's page
+  // gets a frame of its own.
   useEffect(() => {
     if (!shown) return;
-    const e = new LiveEngine(hostRef.current!, scene);
+    const events = {
+      hover: (key: string | null, at: { x: number; y: number }) => setOver(key ? { key, ...at } : null),
+      open: (key: string) => openRef.current(key),
+      disable: (reason: string) => {
+        if (typeof scene === "string") return;
+        turnWallpaperOff(scene.id, reason);
+        toast.error(`The ${scene.name} live wallpaper was turned off: ${reason}. The plain background shows until Hivemind starts again.`);
+      },
+    };
+    const e = typeof scene === "string" ? new LiveEngine(hostRef.current!, scene, events) : new PluginEngine(hostRef.current!, scene, lookRef.current, events);
     setEngine(e);
-    return () => { e.destroy(); setEngine(null); };
-  }, [shown, scene]);
+    return () => { e.destroy(); setEngine(null); setOver(null); };
+    // `scene` is the same scene while its key is.
+  }, [shown, sceneKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => { engine?.setLook({ page: cssColorToHex(page), text: cssColorToHex(text), colour }); }, [engine, page, text, colour]);
+  // The pointer shows it can go to an agent while it is over its creature.
+  useEffect(() => {
+    if (!over) return;
+    document.documentElement.dataset.overCreature = "";
+    return () => { delete document.documentElement.dataset.overCreature; };
+  }, [over]);
+
+  useEffect(() => { engine?.setLook(lookRef.current); }, [engine, page, text, attention, dark, colour, monoFont]);
   useEffect(() => { engine?.fontChanged(); }, [engine, monoFont]);
 
   // Where the tiles and panels are: read once a second while the scene runs, once for a still
@@ -136,5 +178,17 @@ export function LiveWallpaper({ scene, colour, agents, paused, animate, frosted,
     return off;
   }, [engine, agents]);
 
-  return <div ref={hostRef} className="hm-live" />;
+  const name = over ? nameOf(over.key) : null;
+  return <>
+    <div ref={hostRef} className="hm-live" />
+    {/* Over everything, as a tooltip is: the wallpaper's own layer is behind the canvas. */}
+    {over && name && createPortal(
+      <div className="hm-live-label" role="tooltip" data-creature={over.key}
+        // Beside the pointer, on its left near the window's right edge so it is never cut off.
+        style={over.x > window.innerWidth - 260 ? { right: window.innerWidth - over.x + 14, top: over.y + 16 } : { left: over.x + 14, top: over.y + 16 }}>
+        <span className="hm-live-label-name">{name}</span> · {statusWord(statusOf(over.key) ?? null)}
+      </div>,
+      document.body,
+    )}
+  </>;
 }

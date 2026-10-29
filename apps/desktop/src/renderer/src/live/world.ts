@@ -348,6 +348,22 @@ export class World {
     };
   }
 
+  /** The agent whose creature is at (x, y): the nearest whose body (its spine, give or take a
+   *  fin) is there, the one in front when two cross. None for open water or one swimming off. */
+  swimmerAt(x: number, y: number): string | null {
+    let best: { key: string; d: number; depth: number } | null = null;
+    for (const s of this.swimmers) {
+      if (s.leaving) continue;
+      const reach = Math.max(12, s.length * 0.14);
+      const n = s.nodes;
+      let d = Infinity;
+      for (let i = 0; i + 3 < n.length; i += 2) d = Math.min(d, segmentDistance(x, y, n[i]!, n[i + 1]!, n[i + 2]!, n[i + 3]!));
+      if (d > reach) continue;
+      if (!best || s.depth > best.depth || (s.depth === best.depth && d < best.d)) best = { key: s.key, d, depth: s.depth };
+    }
+    return best?.key ?? null;
+  }
+
   splash(x: number, y: number) {
     this.events.push({ kind: "splash", x, y });
     this.scatter(x, y, 240);
@@ -902,4 +918,13 @@ export class World {
       f.vy = Math.sin(inward) * sp.cruise * 1.4;
     }
   }
+}
+
+/** How far (x, y) is from the segment (ax, ay)–(bx, by). */
+function segmentDistance(x: number, y: number, ax: number, ay: number, bx: number, by: number): number {
+  const dx = bx - ax;
+  const dy = by - ay;
+  const len = dx * dx + dy * dy;
+  const t = len > 0 ? Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / len)) : 0;
+  return Math.hypot(x - (ax + t * dx), y - (ay + t * dy));
 }

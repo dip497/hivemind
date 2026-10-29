@@ -19,7 +19,7 @@ async function linked(over: Partial<WallpaperScene> = {}) {
   const heard: WallpaperHostMessage[] = [];
   // Every message the frame's end receives, before the client reads it.
   ch.port2.addEventListener("message", (e) => heard.push(e.data as WallpaperHostMessage));
-  link.attach(ch.port1 as unknown as Parameters<WallpaperLink["attach"]>[0]);
+  link.attach(ch.port1);
   const target = new EventTarget();
   const client = connectWallpaper({ target: target as unknown as Window, timeoutMs: 2000 });
   target.dispatchEvent(new MessageEvent("message", { data: { type: PORT_HANDSHAKE }, ports: [ch.port2] }));
@@ -98,7 +98,7 @@ describe("a live wallpaper's link", () => {
     const ch = new MessageChannel();
     const heard: unknown[] = [];
     ch.port2.onmessage = (e) => heard.push(e.data);
-    link.attach(ch.port1 as unknown as Parameters<WallpaperLink["attach"]>[0]);
+    link.attach(ch.port1);
     ch.port2.postMessage({ type: "ready", protocol: 2 });
     await settle();
     expect([events.off, heard]).toEqual(["it needs live wallpaper protocol 2; this Hivemind has 1", []]);

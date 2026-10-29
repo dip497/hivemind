@@ -81,6 +81,8 @@ class Wallpaper implements WallpaperClient {
   private listeners = new Map<keyof Events, Set<(p: unknown) => void>>();
   private hit: ((x: number, y: number) => string | null) | null = null;
   private hovered: string | null = null;
+  /** Where the pointer is over empty canvas, or null: a creature may swim in under it, or away. */
+  private at: { x: number; y: number } | null = null;
   private saidDrawn = false;
   private clock: SceneClock | null = null;
 
@@ -106,7 +108,11 @@ class Wallpaper implements WallpaperClient {
     this.clock?.stop();
     const clock = sceneClock({
       step: (dt) => scene.step(dt),
-      draw: (dt) => { scene.draw(dt); this.drawn(); },
+      draw: (dt) => {
+        scene.draw(dt);
+        this.drawn();
+        if (this.at) this.hover(this.hitAt(this.at.x, this.at.y));
+      },
       ...(scene.settle ? { settle: () => scene.settle!() } : {}),
     }, opts);
     this.clock = clock;
@@ -171,6 +177,7 @@ class Wallpaper implements WallpaperClient {
       case "tiles": this.tiles = m.tiles; this.seeThrough = m.seeThrough; this.emit("tiles", { tiles: m.tiles, seeThrough: m.seeThrough }); this.clock?.changed(); return;
       case "done": this.emit("done", { id: m.id }); return;
       case "pointer":
+        this.at = m.over ? { x: m.x, y: m.y } : null;
         this.emit("pointer", { x: m.x, y: m.y, over: m.over });
         this.hover(m.over ? this.hitAt(m.x, m.y) : null);
         return;

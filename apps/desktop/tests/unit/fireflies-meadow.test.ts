@@ -137,3 +137,14 @@ test("the fireflies keep off the tiles", () => {
   run(m, 1.5);
   assert.ok(f.x < over.x0, `still under it, at ${f.x.toFixed(0)} (the tile starts at ${over.x0.toFixed(0)})`);
 });
+
+test("the firefly at a point is its agent's, and open air or one flying off is no one's", () => {
+  const m = meadow([spec("a", "cruise"), spec("b", "hunt")], [], 3);
+  run(m, 3);
+  const a = m.flies.find((f) => f.key === "a")!;
+  assert.equal(m.fireflyAt(a.x + 6, a.y - 6), "a");
+  const far = m.flies.every((f) => Math.hypot(f.x - 5, f.y - 5) > 200) ? [5, 5] : [W - 5, 5];
+  assert.equal(m.fireflyAt(far[0]!, far[1]!), null);
+  m.setRoster([spec("b", "hunt")]);
+  assert.equal(m.fireflyAt(a.x, a.y), null);
+});

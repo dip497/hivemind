@@ -1,18 +1,16 @@
 /**
- * The page's side of a live wallpaper. It puts a canvas in its host, hands it to the scene's worker
- * (worker.ts), where the simulation and its drawing run, and tells it what changes. What stays on
- * the page is cheap: the canvas's size and pixel ratio, the font, the pointer over empty canvas (at
- * most once a frame, and only while it is there), a click on the water, and what the component
- * passes on. Each engine makes its own canvas: one can be handed to a worker only once.
+ * The page's side of one of the app's own live wallpapers. It puts a canvas in its host, hands it to
+ * the scene's worker (worker.ts), where the simulation and its drawing run, and tells it what
+ * changes; what every scene gets from the page is page-scene.ts's. What stays here is the font,
+ * which a worker sees none of the page's faces of. Each engine makes its own canvas: one can be
+ * handed to a worker only once.
  */
 import SceneWorker from "./worker?worker";
-import type { Box, CreatureSpec, Look, SceneMode } from "./scene";
-import type { FaceSource, SceneId, SceneMessage } from "./worker";
+import { PageScene, type PageLook, type SceneEvents } from "./page-scene";
+import type { Box, CreatureSpec, SceneMode } from "./scene";
+import type { FaceSource, SceneAnswer, SceneId, SceneMessage } from "./worker";
 
 export type { SceneId };
-
-/** Empty canvas: the pane itself, not a tile, a frame or a panel over it. */
-const overWater = (e: PointerEvent) => e.target instanceof Element && e.target.classList.contains("react-flow__pane");
 
 const unquote = (s: string) => s.trim().replace(/^["']|["']$/g, "");
 
@@ -42,40 +40,23 @@ function facesOf(stack: string): FaceSource[] {
   return (at600.length ? at600 : all).map(({ bold: _bold, ...f }) => f);
 }
 
-export class LiveEngine {
+export class LiveEngine extends PageScene {
   private worker = new SceneWorker();
-  private canvas = document.createElement("canvas");
   private font: string;
-  private resizeObserver: ResizeObserver;
-  private running = false;
-  private pointer = { x: 0, y: 0, active: false };
-  private pointerQueued = false;
-  private stopRatio = () => {};
 
-  constructor(private host: HTMLElement, scene: SceneId) {
-    host.appendChild(this.canvas);
+  constructor(host: HTMLElement, scene: SceneId, events: SceneEvents) {
+    const canvas = document.createElement("canvas");
+    super(host, canvas, events);
     this.font = getComputedStyle(host).fontFamily;
-    const offscreen = this.canvas.transferControlToOffscreen();
+    const offscreen = canvas.transferControlToOffscreen();
     this.post({ type: "start", scene, canvas: offscreen, font: this.font, faces: facesOf(this.font) }, [offscreen]);
-    this.resizeObserver = new ResizeObserver(() => this.resize());
-    this.resizeObserver.observe(this.canvas);
-    window.addEventListener("pointermove", this.onPointerMove, { passive: true });
-    window.addEventListener("pointerdown", this.onPointerDown, { passive: true });
-    window.addEventListener("blur", this.onLeave);
-    document.documentElement.addEventListener("pointerleave", this.onLeave);
-    this.watchRatio();
+    this.worker.onmessage = ({ data }: MessageEvent<SceneAnswer>) => { if (data.type === "hover") this.hover(data.key); };
     this.resize();
   }
 
   destroy() {
     this.worker.terminate();
-    this.resizeObserver.disconnect();
-    this.stopRatio();
-    this.canvas.remove();
-    window.removeEventListener("pointermove", this.onPointerMove);
-    window.removeEventListener("pointerdown", this.onPointerDown);
-    window.removeEventListener("blur", this.onLeave);
-    document.documentElement.removeEventListener("pointerleave", this.onLeave);
+    super.destroy();
   }
 
   /** The terminal's font changed (Settings): the scene's characters follow it. */
@@ -86,70 +67,39 @@ export class LiveEngine {
     this.post({ type: "font", font, faces: facesOf(font) });
   }
 
-  setLook(look: Look) {
-    this.post({ type: "look", look });
+  setLook({ page, text, colour }: PageLook) {
+    this.post({ type: "look", look: { page, text, colour } });
   }
 
   setRoster(creatures: CreatureSpec[]) {
     this.post({ type: "roster", creatures });
   }
 
-  /** Where the tiles and panels are on the screen, and whether the tiles are see-through. */
   setBoxes(boxes: Box[], seeThrough: boolean) {
     this.post({ type: "boxes", boxes, seeThrough });
   }
 
-  /** An agent finished a turn: its creature shows it. */
   finished(key: string) {
     this.post({ type: "finished", key });
   }
 
-  setMode(mode: SceneMode) {
-    this.running = mode === "run";
+  protected sendMode(mode: SceneMode) {
     this.post({ type: "mode", mode });
+  }
+
+  protected sendSize(width: number, height: number, dpr: number) {
+    this.post({ type: "size", width, height, dpr });
+  }
+
+  protected sendPointer(x: number, y: number, active: boolean) {
+    this.post({ type: "pointer", x, y, active });
+  }
+
+  protected sendClick(x: number, y: number, opened: string | null) {
+    this.post({ type: "click", x, y, opened });
   }
 
   private post(m: SceneMessage, transfer: Transferable[] = []) {
     this.worker.postMessage(m, transfer);
   }
-
-  /** A window moved to a screen of another pixel ratio is not resized: watch the ratio itself. */
-  private watchRatio() {
-    const ratio = window.matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`);
-    const changed = () => {
-      this.resize();
-      this.watchRatio();
-    };
-    ratio.addEventListener("change", changed, { once: true });
-    this.stopRatio = () => ratio.removeEventListener("change", changed);
-  }
-
-  private resize() {
-    const r = this.canvas.getBoundingClientRect();
-    if (r.width < 1 || r.height < 1) return;
-    this.post({ type: "size", width: r.width, height: r.height, dpr: Math.min(window.devicePixelRatio || 1, 2) });
-  }
-
-  private onPointerMove = (e: PointerEvent) => {
-    if (!this.running) return;
-    const active = e.pointerType !== "touch" && overWater(e);
-    if (!active && !this.pointer.active) return;
-    this.pointer = { x: e.clientX, y: e.clientY, active };
-    if (this.pointerQueued) return;
-    this.pointerQueued = true;
-    requestAnimationFrame(() => {
-      this.pointerQueued = false;
-      this.post({ type: "pointer", ...this.pointer });
-    });
-  };
-
-  private onPointerDown = (e: PointerEvent) => {
-    if (this.running && e.button === 0 && overWater(e)) this.post({ type: "splash", x: e.clientX, y: e.clientY });
-  };
-
-  private onLeave = () => {
-    if (!this.pointer.active) return;
-    this.pointer = { ...this.pointer, active: false };
-    this.post({ type: "pointer", ...this.pointer });
-  };
 }

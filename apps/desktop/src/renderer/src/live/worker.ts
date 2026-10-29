@@ -6,6 +6,7 @@
  * last frame or show one settled frame.
  */
 import type { LiveSceneId } from "@hivemind/core/settings-schema";
+import { SCENE_STEP, SETTLE_STEPS, sceneClock } from "@hivemind/view-sdk/wallpaper";
 import type { Box, CreatureSpec, LiveScene, Look, SceneMode } from "./scene";
 import { firefliesScene } from "./fireflies/scene";
 import { jellyScene } from "./jelly/scene";
@@ -39,72 +40,52 @@ export type SceneMessage =
   | { type: "finished"; key: string }
   | { type: "mode"; mode: SceneMode }
   | { type: "pointer"; x: number; y: number; active: boolean }
-  | { type: "splash"; x: number; y: number };
+  /** A click on the water, and the creature it opened (the one under the pointer), if any: open
+   *  water ripples, a creature's agent is gone to. */
+  | { type: "click"; x: number; y: number; opened: string | null };
 
-const STEP = 1 / 60;
-const MAX_STEPS = 4;
-/** ASCII reads as smooth at 30 frames a second, and it halves what the scene costs at 60. */
-const FRAME_MS = 1000 / 30;
+/** What the scene tells the page: the creature under the pointer, when that changes. */
+export type SceneAnswer = { type: "hover"; key: string | null };
 
 const scope = self as unknown as {
   fonts?: FontFaceSet;
-  requestAnimationFrame?: (cb: (now: number) => void) => number;
-  cancelAnimationFrame?: (id: number) => void;
   onmessage: ((e: MessageEvent<SceneMessage>) => void) | null;
+  postMessage(m: SceneAnswer): void;
 };
-// A worker paces itself on the display's frames where it can, else on a timer.
-const nextFrame = (cb: (now: number) => void): number =>
-  scope.requestAnimationFrame ? scope.requestAnimationFrame(cb) : (setTimeout(() => cb(performance.now()), FRAME_MS) as unknown as number);
-const cancelFrame = (id: number) => (scope.cancelAnimationFrame ? scope.cancelAnimationFrame(id) : clearTimeout(id));
 
 let scene: LiveScene | null = null;
 /** The agents' creatures as last told, for a still picture made again from scratch. */
 let roster: CreatureSpec[] = [];
 /** Whether the scene has had its creatures: the first are already in the water when it starts. */
 let stocked = false;
-let mode: SceneMode = "hold";
-let raf = 0;
-let last = 0;
-let drawnAt = 0;
-let acc = 0;
+/** The pointer over the water, and the creature under it as last said. */
+let pointer = { x: 0, y: 0, active: false };
+let hovered: string | null = null;
 
-function frame(now: number) {
-  raf = nextFrame(frame);
-  if (now - drawnAt < FRAME_MS - 2) return;
-  drawnAt = now;
-  const dt = Math.min(0.1, (now - last) / 1000);
-  last = now;
-  acc += dt;
-  let steps = 0;
-  while (acc >= STEP && steps < MAX_STEPS) {
-    scene?.step(STEP);
-    acc -= STEP;
-    steps++;
-  }
-  if (steps === MAX_STEPS) acc = 0;
-  scene?.draw(dt);
+/** Say which creature is under the pointer when that changes: one swims in under it, or away. */
+function hover() {
+  const key = pointer.active && scene ? scene.creatureAt(pointer.x, pointer.y) : null;
+  if (key === hovered) return;
+  hovered = key;
+  scope.postMessage({ type: "hover", key });
 }
 
-const draw = () => scene?.draw(STEP);
-
-/** Motion off: put the creatures where their moods have them, let the scene settle, then show
- *  that one frame. */
-function settle() {
-  if (!scene) return;
-  scene.setRoster(roster, true);
-  for (let i = 0; i < 360; i++) scene.step(STEP);
-  draw();
-}
-
-function setMode(next: SceneMode) {
-  if (next === mode) return;
-  mode = next;
-  cancelFrame(raf);
-  if (mode === "run") {
-    last = performance.now();
-    raf = nextFrame(frame);
-  } else if (mode === "still") settle();
-}
+/** The clock every live wallpaper runs on (the SDK's): 30 frames a second while running, nothing
+ *  while held, and for motion off the creatures put where their moods have them and the scene let
+ *  settle, then that one frame. */
+const clock = sceneClock({
+  step: (dt) => scene?.step(dt),
+  draw: (dt) => {
+    scene?.draw(dt);
+    if (pointer.active) hover();
+  },
+  settle: () => {
+    if (!scene) return;
+    scene.setRoster(roster, true);
+    for (let i = 0; i < SETTLE_STEPS; i++) scene.step(SCENE_STEP);
+  },
+});
+const draw = () => scene?.draw(SCENE_STEP);
 
 async function loadFaces(faces: FaceSource[]) {
   const fonts = scope.fonts;
@@ -114,7 +95,7 @@ async function loadFaces(faces: FaceSource[]) {
     fonts.add(face);
     await face.load().catch(() => {});
   }));
-  if (mode !== "run") draw();
+  if (clock.mode !== "run") draw();
 }
 
 scope.onmessage = ({ data: m }) => {
@@ -136,32 +117,37 @@ scope.onmessage = ({ data: m }) => {
       break;
     case "look":
       scene?.setLook(m.look);
-      if (mode !== "run") draw();
+      if (clock.mode !== "run") draw();
       break;
     case "roster":
       roster = m.creatures;
       // The agents there when the scene starts are in the water already; one started later swims
       // in. In a still picture only what changed moves: a creature comes, goes or comes up to its tile.
-      scene?.setRoster(m.creatures, mode === "still" || !stocked);
+      scene?.setRoster(m.creatures, clock.mode === "still" || !stocked);
       stocked = true;
-      if (mode !== "run") draw();
+      if (hovered && !m.creatures.some((c) => c.key === hovered)) hover();
+      if (clock.mode !== "run") draw();
       break;
     case "boxes":
       scene?.setBoxes(m.boxes, m.seeThrough);
       // A still picture shows the tiles where they are now.
-      if (mode === "still") draw();
+      if (clock.mode === "still") draw();
       break;
     case "finished":
-      if (mode === "run") scene?.finished(m.key);
+      if (clock.mode === "run") scene?.finished(m.key);
       break;
     case "mode":
-      setMode(m.mode);
+      clock.setMode(m.mode);
+      if (m.mode === "hold") { pointer = { ...pointer, active: false }; hover(); }
       break;
     case "pointer":
-      scene?.pointer(m.x, m.y, m.active && mode === "run");
+      // The creatures shy from it only while they move; which one it is over, whenever it is shown.
+      pointer = { x: m.x, y: m.y, active: m.active };
+      scene?.pointer(m.x, m.y, m.active && clock.mode === "run");
+      hover();
       break;
-    case "splash":
-      if (mode === "run") scene?.splash(m.x, m.y);
+    case "click":
+      if (!m.opened && clock.mode === "run") scene?.splash(m.x, m.y);
       break;
   }
 };

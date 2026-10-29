@@ -154,6 +154,7 @@ export function hiveOverIpc(port: IpcPort, workspace: WorkspaceClient): Omit<Hiv
     settingsPath: () => port.invoke("settings:path"),
     onSettingsChanged: (cb) => port.on("settings:changed", cb),
     listViews: (repoRoot) => port.invoke("views:list", repoRoot),
+    listWallpapers: () => port.invoke("wallpapers:list"),
     listAgents: (repoRoot) => port.invoke("agents:list", repoRoot),
     agentOptionChoices: (id) => port.invoke("agents:option-choices", id),
     agentPresence: () => port.invoke("agents:presence"),

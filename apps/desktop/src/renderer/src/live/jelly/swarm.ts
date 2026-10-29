@@ -177,6 +177,20 @@ export class Swarm {
   }
 
   /** A click on the water: the snow round it scatters, and the jellies near it start and glow. */
+  /** The agent whose jelly's bell is at (x, y), give or take its rim; the nearest when two overlap.
+   *  None for open water or one swimming off. */
+  jellyAt(x: number, y: number): string | null {
+    let best: { key: string; d: number } | null = null;
+    for (const j of this.jellies) {
+      if (j.leaving) continue;
+      const { w, h } = bellOf(j);
+      // Around the middle of its bell, above its rim: wide enough to take it leaning too.
+      const d = Math.hypot((x - j.x) / Math.max(w + 8, 14), (y - (j.y - h * 0.5)) / Math.max(h * 0.5 + 8, 14));
+      if (d <= 1 && (!best || d < best.d)) best = { key: j.key, d };
+    }
+    return best?.key ?? null;
+  }
+
   splash(x: number, y: number) {
     for (const m of this.snow) {
       const d = Math.hypot(m.x - x, m.y - y);

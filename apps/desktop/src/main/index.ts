@@ -81,6 +81,7 @@ import { ipcPath, upgradeCommand, windowsStartMenuShortcut } from "./platform.js
 import { driveSockPath, readOrCreateToken } from "@hivemind/agent-host/hooks/token";
 import { ApiError, isErrorCode } from "@hivemind/workspace-api/protocol";
 import { appViewsDir, handleViewProtocol, listViewPackages, startViewWatchdog, VIEW_SCHEME_PRIVILEGES, viewSdk } from "./view-packages.js";
+import { listWallpaperPackages } from "./wallpaper-packages.js";
 import { installSettingsIpc, reloadSettings, getSettings as getAppSettings, onSettingsChange, settingsFile, settingsBusy, settingsSettled } from "./settings-store.js";
 import { followWindowLook, initialWindowBackground } from "./window-look.js";
 import { flushWorkspaceStore, installWorkspaceStoreIpc, storeFor, workspaceStore } from "./workspace-store-ipc.js";
@@ -1668,6 +1669,7 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
       agentTile: (tileId) => control.agentOf.has(toBareId(tileId)),
     });
     handle("views:list", wrap(async (_e, repoRoot: string | null) => listViewPackages(repoRoot ? String(repoRoot) : null)));
+    handle("wallpapers:list", wrap(async () => listWallpaperPackages()));
 
     // A repo's agents belong to that repo. Opening a second workspace must not take the
     // first one's agents out of the catalog (its tiles still spawn through it), and a

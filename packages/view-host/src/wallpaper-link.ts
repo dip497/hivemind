@@ -7,6 +7,7 @@
  *
  * No DOM and no Node: the window runs it, and its tests run it over a real MessageChannel.
  */
+import type { PortLike } from "./link.js";
 import {
   WALLPAPER_PROTOCOL, parseWallpaperMessage, wallpaperRefusal,
   type WallpaperCreature, type WallpaperHostMessage, type WallpaperLook, type WallpaperMode, type WallpaperTile, type WallpaperViewport,
@@ -41,15 +42,8 @@ export interface WallpaperLinkDeps {
   onDisable(reason: string): void;
 }
 
-interface MinimalPort {
-  postMessage(m: unknown): void;
-  onmessage: ((e: { data: unknown }) => void) | null;
-  start?(): void;
-  close?(): void;
-}
-
 export class WallpaperLink {
-  private port: MinimalPort | null = null;
+  private port: PortLike | null = null;
   private ready = false;
   private disabled: string | null = null;
   private refused = 0;
@@ -63,7 +57,7 @@ export class WallpaperLink {
   constructor(private readonly deps: WallpaperLinkDeps, private scene: WallpaperScene) {}
 
   /** Its frame's port: it says `ready`, and is sent everything at once. */
-  attach(port: MinimalPort): void {
+  attach(port: PortLike): void {
     this.port = port;
     port.onmessage = (e) => this.receive(e.data);
     port.start?.();

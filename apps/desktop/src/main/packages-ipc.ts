@@ -27,12 +27,18 @@ function opensWith(r: InstalledPackage): PackageReview["opens"] {
   return view ? { id: view.id, name: view.name } : null;
 }
 
+/** The live wallpaper a package offers as the background, named as its member is. */
+function offersWallpaper(r: InstalledPackage): PackageReview["wallpaper"] {
+  const w = r.members.find((m) => m.kind === "wallpaper" && m.id === r.startWallpaper);
+  return w ? { id: w.id, name: w.name } : null;
+}
+
 /** A dry run's result as the app reviews it, with whether the version it replaces is on now. */
 export async function packageReview(r: InstalledPackage, token: string): Promise<PackageReview> {
   const named = new Map(r.members.map((m) => [`${m.kind}:${m.id}`, m.name]));
   const now = (await readInstalledPackages()).find((x) => x.id === r.record.id);
   return {
-    token, id: r.record.id, name: r.record.name, version: r.record.version, on: r.record.on, opens: opensWith(r),
+    token, id: r.record.id, name: r.record.name, version: r.record.version, on: r.record.on, opens: opensWith(r), wallpaper: offersWallpaper(r),
     replaces: r.replaced ? { version: r.replaced.version, on: now?.on ?? false } : null,
     members: r.members.map((m) => ({ kind: m.kind, id: m.id, name: m.name, permissions: m.permissions, runs: runsOf(m.kind) })),
     changes: r.changes.map((c) => ({ ...c, name: named.get(`${c.kind}:${c.id}`) ?? c.id, runs: runsOf(c.kind) })),
@@ -43,13 +49,13 @@ let offers: StartViewOffers | null = null;
 const startViewOffers = (): StartViewOffers =>
   (offers ??= new StartViewOffers(path.join(app.getPath("userData"), "start-view-offers.json")));
 
-/** Settings just installed `r` and offers its start view itself, as it does when the package is on:
- *  recorded, so no window asks again. Called before the refresh that tells the windows, since a
- *  window asks once it reloads its views. Never fails the install that worked: the record is best
- *  effort (start-view-offers.ts). */
+/** Settings just installed `r` and offers its start view and wallpaper itself, as it does when the
+ *  package is on: recorded, so no window asks again. Called before the refresh that tells the
+ *  windows, since a window asks once it reloads its views. Never fails the install that worked: the
+ *  record is best effort (start-view-offers.ts). */
 export async function offeredInSettings(r: InstalledPackage): Promise<void> {
-  if (!r.record.on || !r.startView) return;
-  await startViewOffers().offeredInSettings(r.record.id, r.record.version, r.startView)
+  if (!r.record.on || (!r.startView && !r.startWallpaper)) return;
+  await startViewOffers().offeredInSettings(r.record.id, r.record.version, { view: r.startView, wallpaper: r.startWallpaper })
     .catch((e: unknown) => console.warn("[start-view] could not record Settings' offer:", e));
 }
 
@@ -67,10 +73,10 @@ export function installPackagesIpc(): void {
   })));
   // A window asks once it has loaded its views: at start, and after each rescan (`hive plugins
   // install` and `enable` ask for one). Only the window the person is at is offered anything.
-  handle("plugins:start-view-offers", async (e, registered: unknown, showing: unknown) => {
+  handle("plugins:start-view-offers", async (e, registered: unknown, showing: unknown, background: unknown) => {
     if (appWindowOf(e.sender) !== userWindow()) return [];
-    if (!Array.isArray(registered) || registered.length > 1000 || (showing !== null && typeof showing !== "string")) throw new Error("not a list of views");
-    return await startViewOffers().next({ registered: registered.filter((v): v is string => typeof v === "string"), showing });
+    if (!Array.isArray(registered) || registered.length > 1000 || (showing !== null && typeof showing !== "string") || (background !== undefined && typeof background !== "string")) throw new Error("not a list of views");
+    return await startViewOffers().next({ registered: registered.filter((v): v is string => typeof v === "string"), showing, ...(background !== undefined ? { background } : {}) });
   }, { local: true });
   handleEffect("plugins:switch-package", (id, on) => ({ target: typeof id === "string" ? id : undefined, detail: on ? "on" : "off" }), async (_e, id: unknown, on: unknown) => {
     if (typeof id !== "string" || typeof on !== "boolean") throw new Error("not a package");

@@ -7,7 +7,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { Box } from "../../src/renderer/src/live/scene";
-import { Swarm, type JellySpec } from "../../src/renderer/src/live/jelly/swarm";
+import { bellOf, Swarm, type JellySpec } from "../../src/renderer/src/live/jelly/swarm";
 
 function seeded(seed: number) {
   let a = seed >>> 0;
@@ -130,4 +130,22 @@ test("the marine snow keeps falling, and as much of it stays in the water", () =
   assert.equal(s.snow.length, n);
   assert.ok(s.snow.every((m) => m.y > -10 && m.y < H + 10), "a speck left the water");
   assert.ok(s.snow.filter((m) => m.y < H / 3).length > n * 0.2, "the snow piled up at the bottom");
+});
+
+test("the jelly whose bell is at a point is its agent's, and open water or one swimming off is no one's", () => {
+  const s = sea([spec("a", "cruise"), spec("b", "hunt")], [], 3);
+  run(s, 4);
+  const a = s.jellies.find((j) => j.key === "a")!;
+  // Upright for the moment: its bell rises from its rim, its tentacles hang below.
+  a.tilt = 0;
+  const { h } = bellOf(a);
+  assert.equal(s.jellyAt(a.x, a.y - h * 0.5), "a", "the middle of its bell");
+  assert.equal(s.jellyAt(a.x, a.y + h * 1.2), null, "well down its tentacles");
+  // Leaning far over, its bell is beside its rim, not above it.
+  a.tilt = 1.4;
+  assert.equal(s.jellyAt(a.x + Math.sin(1.4) * h * 0.9, a.y - Math.cos(1.4) * h * 0.9), "a", "its bell's crown, leaning");
+  const far = s.jellies.every((j) => Math.hypot(j.x - 5, j.y - 5) > 300) ? [5, 5] : [W - 5, 5];
+  assert.equal(s.jellyAt(far[0]!, far[1]!), null);
+  s.setRoster([spec("b", "hunt")]);
+  assert.equal(s.jellyAt(a.x + Math.sin(a.tilt) * h * 0.5, a.y - Math.cos(a.tilt) * h * 0.5), null);
 });

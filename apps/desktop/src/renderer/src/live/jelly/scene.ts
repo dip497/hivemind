@@ -56,6 +56,10 @@ class JellyScene implements LiveScene {
     this.swarm.splash(x, y);
   }
 
+  creatureAt(x: number, y: number) {
+    return this.swarm.jellyAt(x, y);
+  }
+
   step(dt: number) {
     this.swarm.step(dt);
   }
