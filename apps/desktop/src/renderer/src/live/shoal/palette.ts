@@ -4,20 +4,13 @@
  * lagoon, its creatures drawn darker than the water as ink on paper, as the plain Shoal is.
  * The water is kept dark (or light) enough for the frosted panels' text over it (palette.test.ts).
  */
-import type { WaterLook } from "../backdrop";
 import type { Oklch } from "../colour";
-import type { SharkKind } from "./world";
+import type { SwimPalette } from "../swim";
+import type { SharkKind } from "./shapes";
 
-export interface ShoalPalette extends WaterLook {
-  /** Where every shark's ramp starts: its shadow on dark water, the water itself on light. */
-  shadow: Oklch;
-  /** Each kind's skin where the light is full on it (dark) or at its darkest ink (light). */
+/** Fish by species (species.ts): sardine, anchovy, silverside, mackerel, goby. */
+export interface ShoalPalette extends SwimPalette {
   kinds: Record<SharkKind, Oklch>;
-  /** By species (species.ts): sardine, anchovy, silverside, mackerel, goby. */
-  fish: Oklch[];
-  /** The wake's dots at their brightest, and a bite's flash. */
-  wake: Oklch;
-  flash: Oklch;
   /** Each part of the bed in its own colour: its characters in it, on a block of it half faded
    *  into the deep water (seabed.ts). Branching corals and sponges take the three corals. */
   seabed: {

@@ -7,11 +7,13 @@
  */
 import type { LiveSceneId } from "@hivemind/core/settings-schema";
 import type { Box, CreatureSpec, LiveScene, Look, SceneMode } from "./scene";
-import { ShoalScene } from "./shoal/scene";
+import { koiScene } from "./koi/scene";
+import { shoalScene } from "./shoal/scene";
 
 /** The scenes there are, by the id the settings keep. */
 const SCENES: Record<LiveSceneId, (canvas: OffscreenCanvas) => LiveScene> = {
-  shoal: (canvas) => new ShoalScene(canvas),
+  shoal: shoalScene,
+  koi: koiScene,
 };
 export type SceneId = LiveSceneId;
 

@@ -13,23 +13,21 @@
  * back later as new schools swimming in from the edges, which keeps the
  * population steady.
  *
- * Ported from stackedlol/ascii-sharks (MIT, see LICENSE here). What changed for Hivemind: each
+ * Ported from stackedlol/ascii-sharks (MIT, see shoal/LICENSE). What changed for Hivemind: each
  * shark is one of the workspace's agents (setRoster), and its agent's status sets its mood. It
  * swims in when the agent starts and off when it closes; the original kept four sharks for good
- * and steered them clear of a centred headline.
+ * and steered them clear of a centred headline. The same water holds Koi Pond's koi, which swim as
+ * the sharks do: a swimmer is either.
  */
-import { angleDiff, clamp, current, rand, randInt, TAU } from "../math";
-import type { Box, Mood } from "../scene";
-import { covered, openPoint, roomAt } from "../steer";
+import { angleDiff, clamp, current, rand, randInt, TAU } from "./math";
+import type { Box, Mood } from "./scene";
 import { pickSpecies, SPECIES, type Species } from "./species";
-
-export const SHARK_NODES = 20;
-
-export type SharkKind = "classic" | "hammerhead" | "zebra" | "tiger" | "greathammer" | "mako" | "thresher" | "nurse";
+import { SPINE_NODES } from "./spine";
+import { covered, openPoint, roomAt } from "./steer";
 
 /** One agent's creature (a shark here; a koi in Koi Pond, which swims the same water): `key` is its
  *  tile, `kind` is how the scene draws it, `size` is relative to the biggest. */
-export interface SharkSpec {
+export interface SwimmerSpec {
   key: string;
   kind: string;
   size: number;
@@ -38,10 +36,12 @@ export interface SharkSpec {
 
 export type { Box, Mood };
 
-/** What a World is made with. `fishCount` overrides the area-based population; `share` is the
- *  biggest creature's length as a share of the window's shorter side; `species` are the fish. */
+/** What a World is made with. `fishCount` overrides the area-based population, one fish to each
+ *  `fishArea` px² (4400); `share` is the biggest creature's length as a share of the window's
+ *  shorter side; `species` are the fish. */
 export interface WorldOptions {
   fishCount?: number;
+  fishArea?: number;
   share?: number;
   species?: Species[];
 }
@@ -75,7 +75,7 @@ export interface Fish {
   millDir: 1 | -1;
 }
 
-export interface Shark {
+export interface Swimmer {
   id: number;
   key: string;
   kind: string;
@@ -123,7 +123,8 @@ export class World {
   height = 0;
   time = 0;
   fish: Fish[] = [];
-  sharks: Shark[] = [];
+  /** The agents' creatures: Shoal's sharks, Koi Pond's koi. */
+  swimmers: Swimmer[] = [];
   events: WorldEvent[] = [];
   pointer = { x: 0, y: 0, active: false };
 
@@ -145,11 +146,13 @@ export class World {
   private tileBox = new Map<string, Box>();
 
   private fishCount: number | undefined;
+  private fishArea: number;
   private share: number;
   private species: Species[];
 
   constructor(options: WorldOptions = {}) {
     this.fishCount = options.fishCount;
+    this.fishArea = options.fishArea ?? 4400;
     this.share = options.share ?? 0.44;
     this.species = options.species ?? SPECIES;
   }
@@ -178,7 +181,7 @@ export class World {
    *  swim at once. */
   private unit() {
     let n = 0;
-    for (const s of this.sharks) if (!s.leaving) n++;
+    for (const s of this.swimmers) if (!s.leaving) n++;
     // Shoal's limits, 170 and 430 px at its share, scaled to the world's own share.
     const k = this.share / 0.44;
     return clamp(Math.min(this.width, this.height) * this.share, 170 * k, 430 * k) * (n > 4 ? Math.sqrt(4 / n) : 1);
@@ -186,7 +189,8 @@ export class World {
 
   seedFish() {
     const { width: W, height: H } = this;
-    const total = this.fishCount ?? clamp(Math.round((W * H) / 4400), 85, 340);
+    const k = 4400 / this.fishArea;
+    const total = this.fishCount ?? clamp(Math.round((W * H) / this.fishArea), Math.round(85 * k), Math.round(340 * k));
     this.fish = [];
     while (this.fish.length < total) {
       const species = pickSpecies(this.species);
@@ -221,10 +225,10 @@ export class World {
    *  take their new mood. `instant`, for a still picture: a missing one is gone at once, a new one
    *  is put straight into the open water, one that comes to need you is put beside its tile, and
    *  each is already as near as its mood has it; no other shark moves. */
-  setRoster(specs: SharkSpec[], instant = false) {
+  setRoster(specs: SwimmerSpec[], instant = false) {
     const want = new Map(specs.map((s) => [s.key, s]));
-    if (instant) this.sharks = this.sharks.filter((sh) => want.has(sh.key));
-    for (const sh of this.sharks) {
+    if (instant) this.swimmers = this.swimmers.filter((sh) => want.has(sh.key));
+    for (const sh of this.swimmers) {
       const s = want.get(sh.key);
       sh.leaving = !s;
       if (!s) continue;
@@ -241,14 +245,14 @@ export class World {
     for (const s of want.values()) {
       const sh = this.enter(s);
       if (instant) this.place(sh);
-      this.sharks.push(sh);
+      this.swimmers.push(sh);
     }
-    if (instant) this.sharks.sort((a, b) => a.depth - b.depth);
+    if (instant) this.swimmers.sort((a, b) => a.depth - b.depth);
   }
 
   /** Put a shark where its mood has it, at once: on the ring round its tile if it needs you and the
    *  tile is in sight, else in the open water (near the bottom if it rests). */
-  private place(sh: Shark) {
+  private place(sh: Swimmer) {
     const { width: W, height: H } = this;
     const L = (sh.length = this.unit() * sh.size * (0.8 + 0.3 * sh.depth));
     const tile = sh.mood === "surface" ? this.tileBox.get(sh.key) : undefined;
@@ -264,8 +268,8 @@ export class World {
       ({ x, y } = this.openPoint(sh.mood === "rest" ? 0.72 : 0.08, 0.92, { x: W / 2, y: H / 2 }));
       heading = rand(0, TAU);
     }
-    const seg = L / (SHARK_NODES - 1);
-    for (let n = 0; n < SHARK_NODES; n++) {
+    const seg = L / (SPINE_NODES - 1);
+    for (let n = 0; n < SPINE_NODES; n++) {
       sh.nodes[n * 2] = x - Math.cos(heading) * seg * n;
       sh.nodes[n * 2 + 1] = y - Math.sin(heading) * seg * n;
     }
@@ -297,7 +301,7 @@ export class World {
 
   /** Its agent finished a turn: the shark bites where it is, the fish near it scatter, and it is fed. */
   finished(key: string) {
-    const sh = this.sharks.find((s) => s.key === key && !s.leaving);
+    const sh = this.swimmers.find((s) => s.key === key && !s.leaving);
     if (!sh) return;
     sh.hunger = 0;
     this.events.push({ kind: "bite", x: sh.nodes[0]!, y: sh.nodes[1]! });
@@ -305,7 +309,7 @@ export class World {
   }
 
   /** A shark for `s`, just off a random edge, heading in. */
-  private enter(s: SharkSpec): Shark {
+  private enter(s: SwimmerSpec): Swimmer {
     const { width: W, height: H } = this;
     const length = this.unit() * s.size;
     const side = randInt(0, 3);
@@ -313,9 +317,9 @@ export class World {
     const x = side === 0 ? -length * 0.3 : side === 1 ? W + length * 0.3 : along * W;
     const y = side === 2 ? -length * 0.3 : side === 3 ? H + length * 0.3 : along * H;
     const heading = Math.atan2(H / 2 - y, W / 2 - x) + rand(-0.4, 0.4);
-    const nodes = new Float32Array(SHARK_NODES * 2);
-    const seg = length / (SHARK_NODES - 1);
-    for (let n = 0; n < SHARK_NODES; n++) {
+    const nodes = new Float32Array(SPINE_NODES * 2);
+    const seg = length / (SPINE_NODES - 1);
+    for (let n = 0; n < SPINE_NODES; n++) {
       nodes[n * 2] = x - Math.cos(heading) * seg * n;
       nodes[n * 2 + 1] = y - Math.sin(heading) * seg * n;
     }
@@ -371,7 +375,7 @@ export class World {
     this.stepSharks(dt);
     this.respawn();
     // Nearer sharks draw last, so they swim over the far ones.
-    this.sharks.sort((a, b) => a.depth - b.depth);
+    this.swimmers.sort((a, b) => a.depth - b.depth);
   }
 
   private rebuildHash() {
@@ -407,7 +411,7 @@ export class World {
   }
 
   private stepFish(dt: number) {
-    const { fish, sharks, pointer, width: W, height: H, time } = this;
+    const { fish, swimmers: sharks, pointer, width: W, height: H, time } = this;
     const R = this.perception;
     const R2 = R * R;
     const foreignSep = this.foreignSep;
@@ -618,7 +622,7 @@ export class World {
     const cyW = H / 2;
     const unit = this.unit();
 
-    for (const sh of this.sharks) {
+    for (const sh of this.swimmers) {
       const mood = MOODS[sh.mood];
       sh.depth += (mood.depth - sh.depth) * Math.min(1, dt * 0.6);
       // Seen from above, a shark that comes up grows and one that goes down shrinks.
@@ -733,9 +737,9 @@ export class World {
       // Give other sharks room. A shark whose agent needs you hardly gives way: the others do,
       // so it keeps to its tile.
       const room = sh.mood === "surface" ? 0.6 : 3;
-      for (const other of this.sharks) {
+      for (const other of this.swimmers) {
         if (other === sh) continue;
-        for (let k = 0; k < SHARK_NODES; k += 4) {
+        for (let k = 0; k < SPINE_NODES; k += 4) {
           const ox = hx - other.nodes[k * 2]!;
           const oy = hy - other.nodes[k * 2 + 1]!;
           const d = Math.hypot(ox, oy);
@@ -792,10 +796,10 @@ export class World {
 
       // Follow-the-leader spine, with a stiffness limit per joint so the
       // body bends into a C at most and never folds back on itself.
-      const seg = L / (SHARK_NODES - 1);
+      const seg = L / (SPINE_NODES - 1);
       const maxBend = 0.16;
       let prevAngle = sh.heading + Math.PI;
-      for (let k = 1; k < SHARK_NODES; k++) {
+      for (let k = 1; k < SPINE_NODES; k++) {
         const px = nodes[(k - 1) * 2]!;
         const py = nodes[(k - 1) * 2 + 1]!;
         let angle = Math.atan2(nodes[k * 2 + 1]! - py, nodes[k * 2]! - px);
@@ -823,19 +827,19 @@ export class World {
     }
 
     // A shark that has swum off is gone once all of it, snout to tail, is out of sight.
-    const gone = (sh: Shark) => {
+    const gone = (sh: Swimmer) => {
       const n = sh.nodes;
-      const t = (SHARK_NODES - 1) * 2;
+      const t = (SPINE_NODES - 1) * 2;
       return Math.min(n[0]!, n[t]!) > W + 20 || Math.max(n[0]!, n[t]!) < -20 || Math.min(n[1]!, n[t + 1]!) > H + 20 || Math.max(n[1]!, n[t + 1]!) < -20;
     };
-    if (this.sharks.some((sh) => sh.leaving && gone(sh))) this.sharks = this.sharks.filter((sh) => !(sh.leaving && gone(sh)));
+    if (this.swimmers.some((sh) => sh.leaving && gone(sh))) this.swimmers = this.swimmers.filter((sh) => !(sh.leaving && gone(sh)));
   }
 
   /**
    * Pick prey in the shark's forward cone, preferring close fish in sparse
    * buckets (stragglers) over fish buried in a dense school.
    */
-  private findPrey(sh: Shark): Fish | null {
+  private findPrey(sh: Swimmer): Fish | null {
     const range = sh.length * 0.9 + 160;
     const margin = sh.length * 0.3;
     const hx = sh.nodes[0]!;

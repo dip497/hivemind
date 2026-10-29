@@ -7,6 +7,7 @@
 import type { LiveSceneId } from "@hivemind/core/settings-schema";
 import type { WaterLook } from "./backdrop";
 import { css, rgbOf } from "./colour";
+import { KOI_PALETTE } from "./koi/palette";
 import { SHOAL_PALETTE } from "./shoal/palette";
 
 const luma = (c: number) => 0.2126 * ((c >> 16) & 255) + 0.7152 * ((c >> 8) & 255) + 0.0722 * (c & 255);
@@ -17,6 +18,7 @@ export const lightOf = (page: number, text: number) => luma(page) > luma(text);
 /** Each scene's water, on a dark theme and a light one. */
 export const WATERS: Record<LiveSceneId, { dark: WaterLook; light: WaterLook }> = {
   shoal: SHOAL_PALETTE,
+  koi: KOI_PALETTE,
 };
 
 /** The characters of a scene's swatch in Settings over its water: pale on dark water, deep on

@@ -21,7 +21,7 @@ import { DEFAULT_NOTIFICATION_SETTINGS, normalizeNotificationSettings, type Noti
 
 export type WallpaperId =
   | "none" | "aurora" | "ember" | "ice" | "mesh" | "sunset" | "forest" | "nebula" | "mono"
-  | "shoal" | "image" | "video";
+  | "shoal" | "koi" | "image" | "video";
 export type AccentId =
   | "graphite" | "indigo" | "volt" | "ember" | "ice" | "pulse" | "rose" | "emerald" | "amber" | "violet";
 export type MediaFit = "cover" | "contain" | "tile";
@@ -73,13 +73,14 @@ export const WALLPAPERS: { id: WallpaperId; label: string }[] = [
   { id: "nebula", label: "Nebula" },
   { id: "mono",   label: "Mono" },
   { id: "shoal",  label: "Shoal" },
+  { id: "koi",    label: "Koi Pond" },
   { id: "image",  label: "Photo" },
   { id: "video",  label: "Video" },
 ];
 
 /** The live wallpapers: scenes drawn in characters behind the canvas whose creatures are the agents
  *  (apps/desktop live/). A theme cannot name one yet: an app without it would refuse the theme. */
-export const LIVE_SCENES = ["shoal"] as const satisfies readonly WallpaperId[];
+export const LIVE_SCENES = ["shoal", "koi"] as const satisfies readonly WallpaperId[];
 export type LiveSceneId = (typeof LIVE_SCENES)[number];
 export const isLiveScene = (id: WallpaperId): id is LiveSceneId => (LIVE_SCENES as readonly WallpaperId[]).includes(id);
 

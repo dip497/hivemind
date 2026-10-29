@@ -7,7 +7,7 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { World, type Box, type SharkSpec } from "../../src/renderer/src/live/shoal/world";
+import { World, type Box, type SwimmerSpec } from "../../src/renderer/src/live/world";
 
 const W = 1440;
 const H = 900;
@@ -27,7 +27,7 @@ function seeded<T>(seed: number, run: () => T): T {
   try { return run(); } finally { Math.random = real; }
 }
 
-function water(sharks: SharkSpec[], boxes: Box[] = []): World {
+function water(sharks: SwimmerSpec[], boxes: Box[] = []): World {
   const w = new World();
   w.resize(W, H, 12, 17);
   w.setRoster(sharks);
@@ -35,8 +35,8 @@ function water(sharks: SharkSpec[], boxes: Box[] = []): World {
   return w;
 }
 const run = (w: World, secs: number) => { for (let i = 0; i < secs / STEP; i++) w.step(STEP); };
-const shark = (key: string, mood: SharkSpec["mood"]): SharkSpec => ({ key, kind: "classic", size: 1, mood });
-const sharkOf = (w: World, key: string) => w.sharks.find((s) => s.key === key)!;
+const shark = (key: string, mood: SwimmerSpec["mood"]): SwimmerSpec => ({ key, kind: "classic", size: 1, mood });
+const sharkOf = (w: World, key: string) => w.swimmers.find((s) => s.key === key)!;
 /** How far a point is outside a box (0 inside it). */
 const outside = (b: Box, x: number, y: number) => Math.hypot(Math.max(b.x0 - x, 0, x - b.x1), Math.max(b.y0 - y, 0, y - b.y1));
 
@@ -61,7 +61,7 @@ test("a shark whose agent needs you circles that agent's tile, and comes up near
     assert.ok(near / samples >= 0.95, `seed ${seed}: near its tile ${near} of ${samples} times`);
     assert.ok(under / samples <= 0.05, `seed ${seed}: under its tile ${under} of ${samples} times`);
     // Nearest of the two, so drawn last, over the other.
-    assert.equal(w.sharks.at(-1)!.key, "a");
+    assert.equal(w.swimmers.at(-1)!.key, "a");
     assert.ok(sharkOf(w, "a").depth > 0.95);
   });
 });
@@ -104,7 +104,7 @@ test("sharks in no hurry swim in long curves and never double back on themselves
     let most = 0;
     for (let i = 0; i < 120; i++) {
       run(w, 0.25);
-      for (const s of w.sharks) most = Math.max(most, bend(s));
+      for (const s of w.swimmers) most = Math.max(most, bend(s));
     }
     // Over 40 seeds the most any of three got was 2 radians; folded into a U, it is 2.9.
     assert.ok(most < 2.4, `seed ${seed}: bent ${most.toFixed(2)} radians`);
@@ -121,7 +121,7 @@ test("sharks in no hurry turn before the window's edge and stay in sight", () =>
     run(w, 10);
     for (let i = 0; i < 120; i++) {
       run(w, 0.25);
-      for (const s of w.sharks) for (let j = 0; j < s.nodes.length; j += 2) {
+      for (const s of w.swimmers) for (let j = 0; j < s.nodes.length; j += 2) {
         nodes++;
         if (s.nodes[j]! >= 0 && s.nodes[j]! <= 973 && s.nodes[j + 1]! >= 0 && s.nodes[j + 1]! <= 883) inside++;
       }
@@ -197,7 +197,7 @@ test("fish keep out from under the tiles, and snouts turn away before them", () 
         if (outside(box, f.x, f.y) === 0 && f.x > box.x0 + 10 && f.x < box.x1 - 10 && f.y > box.y0 + 10 && f.y < box.y1 - 10) fishUnder++;
       }
       // Well under it: a hunting shark's snout may dip under a tile's edge after a fish there.
-      for (const s of w.sharks) if (outside({ x0: box.x0 + s.length * 0.15, y0: box.y0 + s.length * 0.15, x1: box.x1 - s.length * 0.15, y1: box.y1 - s.length * 0.15 }, s.nodes[0]!, s.nodes[1]!) === 0) snoutsUnder++;
+      for (const s of w.swimmers) if (outside({ x0: box.x0 + s.length * 0.15, y0: box.y0 + s.length * 0.15, x1: box.x1 - s.length * 0.15, y1: box.y1 - s.length * 0.15 }, s.nodes[0]!, s.nodes[1]!) === 0) snoutsUnder++;
     }
     // The box is a fifth of the window: left alone, a fifth of the fish would be under it, and the
     // snouts a third of the time. Over 40 seeds: at most 3.4% of the fish, and the snouts 11%.
@@ -238,11 +238,11 @@ test("a closed agent's shark swims off before it is dropped, and one that comes 
     run(w, 0.5);
     assert.ok(sharkOf(w, "a").leaving, "it is still there, swimming off");
     run(w, 40);
-    assert.deepEqual(w.sharks.map((s) => s.key), ["b"]);
+    assert.deepEqual(w.swimmers.map((s) => s.key), ["b"]);
     w.setRoster([shark("b", "cruise"), shark("a", "hunt")]);
     w.setRoster([shark("b", "cruise")]);
     w.setRoster([shark("b", "cruise"), shark("a", "hunt")]);
-    assert.equal(w.sharks.filter((s) => s.key === "a" && !s.leaving).length, 1);
+    assert.equal(w.swimmers.filter((s) => s.key === "a" && !s.leaving).length, 1);
   });
 });
 
@@ -272,7 +272,7 @@ test("a still picture changes only what changed: a closed agent's shark goes at 
     const b = sharkOf(w, "b");
     const bWas = [...b.nodes];
     w.setRoster([shark("b", "cruise"), shark("c", "hunt")], true);
-    assert.deepEqual(w.sharks.map((s) => s.key).sort(), ["b", "c"]);
+    assert.deepEqual(w.swimmers.map((s) => s.key).sort(), ["b", "c"]);
     assert.deepEqual([...b.nodes], bWas, "the shark nothing happened to has not moved");
     const c = sharkOf(w, "c");
     assert.ok(c.nodes[0]! > 0 && c.nodes[0]! < W && c.nodes[1]! > 0 && c.nodes[1]! < H, "the new shark is in sight");
