@@ -64,6 +64,7 @@ async function drag(page: Page, from: { x: number; y: number }, by: { x: number;
 
 /** A new frame is flown to (400ms): wait until it sits in the middle of the canvas. */
 async function frameInView(page: Page) {
+  await expect(page.locator(".react-flow__node-frame")).toHaveCount(1);
   const at = () => page.evaluate(() => {
     const pane = document.querySelector(".react-flow")!.getBoundingClientRect();
     const r = document.querySelector(".react-flow__node-frame")!.getBoundingClientRect();
