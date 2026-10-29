@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Fixed: in a workspace opened on no folder, Add offers Code again for a project frame it holds, and opens it in that project. A frame without a folder is no longer offered for it.
 - Fixed: a terminal shown on two screens, your window and a browser tab, no longer jumps between their sizes as the mouse moves or a window gets focus over a program that hears them, such as Claude Code. Only typing or pasting takes the size.
 - Fixed: what a program copies, such as Claude Code's mouse selection, goes to the clipboard of the screen that made the selection. A selection made in a browser tab no longer replaces the host's clipboard.
 - Fixed: in a browser tab the app serves, Ctrl+V in a terminal pastes the tab's own clipboard, not the program's Ctrl+V, which reads the host's.
