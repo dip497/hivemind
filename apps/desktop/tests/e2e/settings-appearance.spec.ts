@@ -166,13 +166,13 @@ test("Copy JSON copies the look without the wallpaper's picture, and says so; Im
   await page.getByRole("button", { name: "Copy JSON" }).click();
   await expect(page.getByText("Left out the wallpaper picture")).toBeVisible();
   const copied = await app.evaluate(({ clipboard }) => clipboard.readText());
-  expect([JSON.parse(copied).wallpaper, copied.includes("alice")]).toEqual([{ kind: "image", brightness: 0.8, colour: false }, false]);
+  expect([JSON.parse(copied).wallpaper, copied.includes("alice")]).toEqual([{ kind: "image", brightness: 0.8 }, false]);
   // The file back, with other corners: the look changes and the picture stays.
   const file = JSON.stringify({ ...JSON.parse(copied), radius: 3 });
   await page.locator('input[type="file"][accept*="json"]').setInputFiles({ name: "theme.json", mimeType: "application/json", buffer: Buffer.from(file) });
   await expect(page.getByText("Imported theme.json")).toBeVisible();
   await expect.poll(() => onDisk().appearance.radius, { timeout: 5_000 }).toBe(3);
-  expect(onDisk().appearance.wallpaper).toEqual({ kind: "image", imageSrc: picture, brightness: 0.8, colour: false });
+  expect(onDisk().appearance.wallpaper).toEqual({ kind: "image", imageSrc: picture, brightness: 0.8 });
   await expect(page.locator(".hm-wp-image")).toHaveCount(1);
   // A package.json picked by mistake sets nothing of the look: refused, and the look stays.
   const before = onDisk().appearance;
@@ -241,7 +241,7 @@ test("an accent of your own that is hard to see on the panels says so, by the ru
   expect(hive("theme", "use", "signal").rescanned).toBe(true);
 });
 
-test("Shoal's Colour switch draws it in its own colours, a reef's water in place of the page, and back", async () => {
+test("Shoal is drawn in its own colours as soon as it is picked, a reef's water in place of the page, with no switch for it", async () => {
   const before = onDisk().appearance;
   /** A point of the canvas with nothing over it, and the colour of the window there. */
   const water = () => page.evaluate(() => {
@@ -268,18 +268,16 @@ test("Shoal's Colour switch draws it in its own colours, a reef's water in place
   /** How far toward teal: blue over red. Grey (the page's dark grey) is about 0. */
   const teal = async () => { const at = await water(); if (!at) return -1; const [r, , b] = await pixel(at); return b - r; };
   try {
+    // The page's own grey, with no background, is where the measure starts.
+    await page.evaluate(() => window.hive.settingsSet("appearance.wallpaper.kind", "none"));
+    await expect.poll(water).not.toBeNull();
+    const grey = await teal();
     await page.evaluate(() => window.hive.settingsSet("appearance.wallpaper.kind", "shoal"));
-    await expect.poll(teal, { message: "Shoal in the page's grey" }).toBeLessThan(8);
+    await expect.poll(teal, { timeout: 10_000, message: "Shoal's water in colour" }).toBeGreaterThan(grey + 12);
     await openSettings("appearance");
-    await page.getByRole("switch", { name: "Draw Shoal in its own colours" }).click();
-    await expect.poll(() => onDisk().appearance?.wallpaper?.colour).toBe(true);
+    await expect(page.locator("[data-settings-body]")).toContainText("Shoal behind your tools");
+    await expect(page.getByRole("switch", { name: /own colours/ })).toHaveCount(0);
     await closeSettings();
-    await expect.poll(teal, { timeout: 10_000, message: "Shoal's water in colour" }).toBeGreaterThan(15);
-    await openSettings("appearance");
-    await page.getByRole("switch", { name: "Draw Shoal in its own colours" }).click();
-    await expect.poll(() => onDisk().appearance?.wallpaper?.colour).toBe(false);
-    await closeSettings();
-    await expect.poll(teal, { timeout: 10_000, message: "back to the page's grey" }).toBeLessThan(8);
   } finally {
     await page.evaluate((a) => window.hive.settingsSet("appearance", a), before);
   }
@@ -292,7 +290,7 @@ test("over Shoal, See-through frosts the panels and the tools in one click, and 
     await openSettings("appearance");
     await page.getByRole("button", { name: "See-through" }).click();
     await expect.poll(() => onDisk().appearance?.glass).toMatchObject({ enabled: true, contentGlass: true, opacity: 0.5, blur: 14, contentOpacity: 0.45 });
-    await expect(page.locator("[data-settings-body]")).toContainText("They show through the frosted panels and tiles");
+    await expect(page.locator("[data-settings-body]")).toContainText("It shows through the frosted panels and tiles");
     await closeSettings();
     // Over another background the panel stops at 68% so its names stay legible; over Shoal its blur
     // does that, and it takes a third of the panel tint: clear glass, the sharks running on under it.
