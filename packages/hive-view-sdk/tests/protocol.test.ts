@@ -92,6 +92,18 @@ describe("parsePluginMessage", () => {
     const e = parsePluginMessage({ type: "error", message: "y".repeat(5000) });
     expect(e.ok && e.msg.type === "error" && e.msg.message.length).toBe(2000);
   });
+
+  // The reason reaches a person (the view's error card, the console): what the view chose to send
+  // in it is quoted short, never laid out whole or run in another direction.
+  test("a type or request it does not know is quoted short, its controls and bidi characters escaped", () => {
+    const evil = `\u202eevil${"x".repeat(5000)}`;
+    for (const r of [parsePluginMessage({ type: evil }), parsePluginMessage({ type: "request", requestId: 1, name: evil, args: [{}] }), parseHostMessage({ type: evil })]) {
+      expect(r.ok).toBe(false);
+      if (r.ok) continue;
+      expect(r.reason.length).toBeLessThan(80);
+      expect(r.reason).toContain("\\u202eevil");
+    }
+  });
 });
 
 describe("parseHostMessage", () => {

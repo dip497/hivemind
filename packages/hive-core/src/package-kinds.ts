@@ -12,6 +12,7 @@ import { readToolPackage } from "./tool-packages.js";
 import { widgetToInstall } from "./widgets.js";
 import { viewToInstall } from "./views.js";
 import { readThemeFolder } from "./theme-folder.js";
+import { readWallpaperFolder } from "./wallpaper-folder.js";
 import { HiveError } from "./storage.js";
 
 /** A member as its kind read it. */
@@ -73,6 +74,11 @@ export const MEMBER_KINDS: readonly MemberKind[] = [
   inFolders("theme", async (dir, given) => {
     const { id, theme } = await readThemeFolder(dir, given.package);
     return { id, name: theme.name, permissions: [] };
+  }),
+  // Sandboxed, as a view is, and told less: it asks for nothing.
+  inFolders("wallpaper", async (dir, given) => {
+    const { id, manifest } = await readWallpaperFolder(dir, given.package);
+    return { id, name: manifest.name, permissions: [] };
   }),
   {
     ...memberFormat("agent-preset")!,

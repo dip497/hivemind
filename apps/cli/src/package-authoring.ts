@@ -51,7 +51,7 @@ export const memberPath = (pkg: PackageFolder, k: AuthoredKind, dir: string): st
 };
 
 /** The folder a member's own check runs in: the one its entry names, or the one that builds it. */
-export const sourceOf = (k: AuthoredKind, full: string): string =>
+export const sourceOf = (k: Pick<AuthoredKind, "builtIn">, full: string): string =>
   k.builtIn && path.basename(full) === k.builtIn && fs.existsSync(path.join(path.dirname(full), "package.json")) ? path.dirname(full) : full;
 
 /** The id the plugin in `dir` installs as, read as an install reads it. */

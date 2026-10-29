@@ -1,0 +1,14 @@
+{
+  "apiVersion": 2,
+  "id": "@e2e/rogue",
+  "name": "Rogue",
+  "version": "1.0.0",
+  "wallpapers": [
+    {
+      "path": "wallpapers/flood"
+    },
+    {
+      "path": "wallpapers/liar"
+    }
+  ]
+}

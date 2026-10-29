@@ -12,7 +12,7 @@
 import { contrastRatio, cssColorToHex, cssColorToOklab, cssColorToRgb, parseCssColor } from "./css-color.js";
 import { diffContrastProblem } from "./diff-colours.js";
 import { FAMILY_RE, MAX_FACE_FILES, STYLE_RE, WEIGHT_RE, accentOf, isThemeColor, type AccentColors, type AppearanceExtra } from "./appearance-extra.js";
-import { ACCENTS, PALETTE_KEYS, WALLPAPERS, type AccentId, type Appearance, type Palette, type TerminalPalette, type WallpaperId } from "./settings-schema.js";
+import { ACCENTS, isLiveScene, isPluginWallpaper, PALETTE_KEYS, WALLPAPERS, type AccentId, type Appearance, type LiveSceneId, type Palette, type TerminalPalette, type WallpaperId } from "./settings-schema.js";
 
 /** The file that makes a folder a theme. */
 export const THEME_MANIFEST = "theme.json";
@@ -59,8 +59,11 @@ export type Moment = (typeof MOMENTS)[number];
 
 export interface ThemeFontFile { path: string; weight?: string; style?: string }
 export interface ThemeFace { family: string; files: ThemeFontFile[] }
+/** A built-in wallpaper a theme may name. Not a live scene (Shoal, Koi Pond …) yet: an app without
+ *  it refuses the whole theme. */
+type ThemeWallpaperKind = Exclude<WallpaperId, "image" | "video" | LiveSceneId>;
 export type ThemeWallpaper =
-  | { kind: Exclude<WallpaperId, "image" | "video">; brightness?: number }
+  | { kind: ThemeWallpaperKind; brightness?: number }
   | { image: string; brightness?: number }
   | { video: string; brightness?: number };
 
@@ -275,9 +278,9 @@ function wallpaperOf(v: unknown, files: readonly ThemeFolderFile[]): ThemeWallpa
   const b = brightness === undefined ? {} : { brightness };
   if (v.image !== undefined) return { image: fileIn(files, v.image, "wallpaper.image", IMAGE_EXT, "an image (.png, .jpg, .webp, .avif or .gif)", THEME_FILE_LIMITS.image), ...b };
   if (v.video !== undefined) return { video: fileIn(files, v.video, "wallpaper.video", VIDEO_EXT, "a video (.webm or .mp4)", THEME_FILE_LIMITS.video), ...b };
-  const kinds: WallpaperId[] = WALLPAPERS.map((w) => w.id).filter((k) => k !== "image" && k !== "video");
+  const kinds: WallpaperId[] = WALLPAPERS.map((w) => w.id).filter((k) => k !== "image" && k !== "video" && !isLiveScene(k));
   if (!kinds.includes(v.kind as WallpaperId)) refuse(`wallpaper.kind is one of ${kinds.join(", ")}`);
-  return { kind: v.kind as Exclude<WallpaperId, "image" | "video">, ...b };
+  return { kind: v.kind as ThemeWallpaperKind, ...b };
 }
 
 function themeOf(raw: unknown, files: readonly ThemeFolderFile[]): Theme {
@@ -376,7 +379,9 @@ export function themeSwatches(t: Pick<Theme, "palette" | "accent">): string[] {
  *  corners and a built-in wallpaper. Font files, a picture wallpaper and sounds are files the
  *  author adds to the folder and names. */
 export function themeFromLook(name: string, a: Appearance, extra: AppearanceExtra): Record<string, unknown> {
-  const media = a.wallpaper.kind === "image" || a.wallpaper.kind === "video";
+  // A picture, a video and a live scene, built in or a package's, are not a theme's to carry: the
+  // theme gets Mono in their place.
+  const media = a.wallpaper.kind === "image" || a.wallpaper.kind === "video" || isLiveScene(a.wallpaper.kind) || isPluginWallpaper(a.wallpaper.kind);
   return {
     format: THEME_FORMAT,
     name,

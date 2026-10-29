@@ -14,6 +14,7 @@ const unix = process.platform !== "win32";
 const dir = unix ? fs.realpathSync(fs.mkdtempSync("/tmp/hive-plugins-reload-")) : "";
 const sock = path.join(dir, "drive.sock");
 const view = path.join(dir, "board");
+const wallpapers = path.join(dir, "pond");
 const TOKEN = "t0k3n";
 const env = (s: string) => ({ XDG_CONFIG_HOME: dir, HIVE_SETTINGS: undefined, HIVEMIND_APP_DATA: path.join(dir, "hivemind"), HIVE_HCP_SOCK: path.join(dir, "no-app.sock"), HIVE_DRIVE_SOCK: s, HCP_TOKEN: TOKEN });
 let drive: DriveServer;
@@ -23,6 +24,10 @@ beforeAll(async () => {
   fs.mkdirSync(view);
   fs.writeFileSync(path.join(view, "index.html"), "<p>board</p>");
   fs.writeFileSync(path.join(view, "hivemind-view.json"), JSON.stringify({ id: "board", name: "Board", version: "1.0.0", entry: "index.html" }));
+  fs.mkdirSync(path.join(wallpapers, "wallpapers", "pond"), { recursive: true });
+  fs.writeFileSync(path.join(wallpapers, "hivemind-package.json"), JSON.stringify({ apiVersion: 2, id: "@ada/pond", name: "Pond", version: "1.0.0", wallpapers: [{ path: "wallpapers/pond" }] }));
+  fs.writeFileSync(path.join(wallpapers, "wallpapers", "pond", "hivemind-wallpaper.json"), JSON.stringify({ protocol: 1, name: "Pond", entry: "main.js" }));
+  fs.writeFileSync(path.join(wallpapers, "wallpapers", "pond", "main.js"), "");
   const refuse = () => { throw new Error("the views folder cannot be read"); };
   const server = new WorkspaceServer([{ answers: { "settings.reload": () => null, "tools.rescan": () => null, "widgets.rescan": () => null, "views.rescan": refuse }, effects: {} }], new Intents(new AuditLog({ file: path.join(dir, "audit.jsonl") })));
   drive = serveDrive(sock, { server, installToken: () => TOKEN, grants: new Grants(path.join(dir, "grants.json")), repos: () => [], workspaceOf: () => null, nameOf: () => "" });
@@ -47,5 +52,12 @@ describe.skipIf(!unix)("hive plugins install, telling the app", () => {
 
     const none = await hive(["plugins", "install", view], { env: env(path.join(dir, "no-drive.sock")), cwd: dir });
     expect(none.stdout).toContain("app not running");
+  }, 60_000);
+
+  test("a package of live wallpapers asks the app to read its views again, which reads its wallpapers, on install and on remove", async () => {
+    const installed = await hive(["plugins", "install", wallpapers], { env: env(sock), cwd: dir });
+    expect([installed.code, installed.stdout]).toEqual([0, expect.stringContaining("the views folder cannot be read")]);
+    const removed = await hive(["plugins", "remove", "@ada/pond"], { env: env(sock), cwd: dir });
+    expect([removed.code, removed.stdout]).toEqual([0, expect.stringContaining("the views folder cannot be read")]);
   }, 60_000);
 });

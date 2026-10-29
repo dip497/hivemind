@@ -15,6 +15,7 @@
     "./category": "./src/category.ts",
     "./commands": "./src/commands.ts",
     "./status": "./src/status.ts",
+    "./wallpaper": "./src/wallpaper.ts",
     "./testing": "./src/testing.ts"
   },
   "scripts": {

@@ -166,13 +166,13 @@ test("Copy JSON copies the look without the wallpaper's picture, and says so; Im
   await page.getByRole("button", { name: "Copy JSON" }).click();
   await expect(page.getByText("Left out the wallpaper picture")).toBeVisible();
   const copied = await app.evaluate(({ clipboard }) => clipboard.readText());
-  expect([JSON.parse(copied).wallpaper, copied.includes("alice")]).toEqual([{ kind: "image", brightness: 0.8 }, false]);
+  expect([JSON.parse(copied).wallpaper, copied.includes("alice")]).toEqual([{ kind: "image", brightness: 0.8, colour: false }, false]);
   // The file back, with other corners: the look changes and the picture stays.
   const file = JSON.stringify({ ...JSON.parse(copied), radius: 3 });
   await page.locator('input[type="file"][accept*="json"]').setInputFiles({ name: "theme.json", mimeType: "application/json", buffer: Buffer.from(file) });
   await expect(page.getByText("Imported theme.json")).toBeVisible();
   await expect.poll(() => onDisk().appearance.radius, { timeout: 5_000 }).toBe(3);
-  expect(onDisk().appearance.wallpaper).toEqual({ kind: "image", imageSrc: picture, brightness: 0.8 });
+  expect(onDisk().appearance.wallpaper).toEqual({ kind: "image", imageSrc: picture, brightness: 0.8, colour: false });
   await expect(page.locator(".hm-wp-image")).toHaveCount(1);
   // A package.json picked by mistake sets nothing of the look: refused, and the look stays.
   const before = onDisk().appearance;
@@ -239,4 +239,77 @@ test("an accent of your own that is hard to see on the panels says so, by the ru
   await expect(note).toHaveCount(0);
   await closeSettings();
   expect(hive("theme", "use", "signal").rescanned).toBe(true);
+});
+
+test("Shoal's Colour switch draws it in its own colours, a reef's water in place of the page, and back", async () => {
+  const before = onDisk().appearance;
+  /** A point of the canvas with nothing over it, and the colour of the window there. */
+  const water = () => page.evaluate(() => {
+    for (let y = window.innerHeight * 0.3; y < window.innerHeight * 0.95; y += 23) {
+      for (let x = window.innerWidth * 0.35; x < window.innerWidth * 0.95; x += 31) {
+        if (document.elementFromPoint(x, y)?.classList.contains("react-flow__pane")) return { x, y };
+      }
+    }
+    return null;
+  });
+  const pixel = (p: { x: number; y: number }) => app.evaluate(async ({ BrowserWindow }, at) => {
+    const w = BrowserWindow.getAllWindows()[0]!;
+    const img = await w.webContents.capturePage();
+    const scale = img.getSize().width / w.getContentBounds().width;
+    const b = img.toBitmap();
+    // The middle of a 9-pixel square: a dot or a fish in it does not decide it.
+    const px: number[][] = [];
+    for (let dy = -4; dy <= 4; dy += 4) for (let dx = -4; dx <= 4; dx += 4) {
+      const i = (Math.round((at.y + dy) * scale) * img.getSize().width + Math.round((at.x + dx) * scale)) * 4;
+      px.push([b[i + 2]!, b[i + 1]!, b[i]!]);
+    }
+    return [0, 1, 2].map((k) => px.map((p) => p[k]!).sort((a, z) => a - z)[4]!);
+  }, p);
+  /** How far toward teal: blue over red. Grey (the page's dark grey) is about 0. */
+  const teal = async () => { const at = await water(); if (!at) return -1; const [r, , b] = await pixel(at); return b - r; };
+  try {
+    await page.evaluate(() => window.hive.settingsSet("appearance.wallpaper.kind", "shoal"));
+    await expect.poll(teal, { message: "Shoal in the page's grey" }).toBeLessThan(8);
+    await openSettings("appearance");
+    await page.getByRole("switch", { name: "Draw Shoal in its own colours" }).click();
+    await expect.poll(() => onDisk().appearance?.wallpaper?.colour).toBe(true);
+    await closeSettings();
+    await expect.poll(teal, { timeout: 10_000, message: "Shoal's water in colour" }).toBeGreaterThan(15);
+    await openSettings("appearance");
+    await page.getByRole("switch", { name: "Draw Shoal in its own colours" }).click();
+    await expect.poll(() => onDisk().appearance?.wallpaper?.colour).toBe(false);
+    await closeSettings();
+    await expect.poll(teal, { timeout: 10_000, message: "back to the page's grey" }).toBeLessThan(8);
+  } finally {
+    await page.evaluate((a) => window.hive.settingsSet("appearance", a), before);
+  }
+});
+
+test("over Shoal, See-through frosts the panels and the tools in one click, and the Layers panel is clear glass", async () => {
+  const before = onDisk().appearance;
+  try {
+    await page.evaluate(() => window.hive.settingsSet("appearance.wallpaper.kind", "shoal"));
+    await openSettings("appearance");
+    await page.getByRole("button", { name: "See-through" }).click();
+    await expect.poll(() => onDisk().appearance?.glass).toMatchObject({ enabled: true, contentGlass: true, opacity: 0.5, blur: 14, contentOpacity: 0.45 });
+    await expect(page.locator("[data-settings-body]")).toContainText("They show through the frosted panels and tiles");
+    await closeSettings();
+    // Over another background the panel stops at 68% so its names stay legible; over Shoal its blur
+    // does that, and it takes a third of the panel tint: clear glass, the sharks running on under it.
+    const alpha = () => page.locator(".hm-layers").first().evaluate((el) => {
+      const m = /\/\s*([\d.]+)\)\s*$/.exec(getComputedStyle(el).backgroundColor);
+      return m ? Number(m[1]) : 1;
+    });
+    await expect.poll(alpha).toBeCloseTo(0.5 / 3, 2);
+    // Asked for less transparency, it is solid over Shoal too.
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-transparency", value: "reduce" }] });
+    await expect.poll(alpha).toBe(1);
+    await cdp.send("Emulation.setEmulatedMedia", { features: [] });
+    await expect.poll(alpha).toBeCloseTo(0.5 / 3, 2);
+    await page.evaluate(() => window.hive.settingsSet("appearance.wallpaper.kind", "mono"));
+    await expect.poll(alpha).toBeCloseTo(0.68, 2);
+  } finally {
+    await page.evaluate((a) => window.hive.settingsSet("appearance", a), before);
+  }
 });

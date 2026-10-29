@@ -8,6 +8,7 @@ import { handleEffect } from "./app-ipc.js";
 import { reloadSettings } from "./settings-store.js";
 import { widgetsChanged } from "./widgets.js";
 import { toolsChanged } from "./tool-packages.js";
+import { wallpapersChanged } from "./wallpaper-packages.js";
 
 const KINDS = ["view", "widget", "tool"] as const;
 
@@ -18,5 +19,6 @@ export function installPluginSwitchIpc(): void {
     await reloadSettings();
     widgetsChanged();
     toolsChanged();
+    wallpapersChanged();
   });
 }

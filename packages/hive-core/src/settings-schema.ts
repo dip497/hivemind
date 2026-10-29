@@ -20,7 +20,8 @@ import { DEFAULT_NOTIFICATION_SETTINGS, normalizeNotificationSettings, type Noti
 // ── appearance ────────────────────────────────────────────────────────────────
 
 export type WallpaperId =
-  | "none" | "aurora" | "ember" | "ice" | "mesh" | "sunset" | "forest" | "nebula" | "mono" | "image" | "video";
+  | "none" | "aurora" | "ember" | "ice" | "mesh" | "sunset" | "forest" | "nebula" | "mono"
+  | "shoal" | "koi" | "jellyfish" | "fireflies" | "image" | "video";
 export type AccentId =
   | "graphite" | "indigo" | "volt" | "ember" | "ice" | "pulse" | "rose" | "emerald" | "amber" | "violet";
 export type MediaFit = "cover" | "contain" | "tile";
@@ -71,9 +72,29 @@ export const WALLPAPERS: { id: WallpaperId; label: string }[] = [
   { id: "forest", label: "Forest" },
   { id: "nebula", label: "Nebula" },
   { id: "mono",   label: "Mono" },
+  { id: "shoal",  label: "Shoal" },
+  { id: "koi",    label: "Koi Pond" },
+  { id: "jellyfish", label: "Jellyfish" },
+  { id: "fireflies", label: "Fireflies" },
   { id: "image",  label: "Photo" },
   { id: "video",  label: "Video" },
 ];
+
+/** The live wallpapers: scenes drawn in characters behind the canvas whose creatures are the agents
+ *  (apps/desktop live/). A theme cannot name one yet: an app without it would refuse the theme. */
+export const LIVE_SCENES = ["shoal", "koi", "jellyfish", "fireflies"] as const satisfies readonly WallpaperId[];
+export type LiveSceneId = (typeof LIVE_SCENES)[number];
+export const isLiveScene = (id: WallpaperKind): id is LiveSceneId => (LIVE_SCENES as readonly WallpaperKind[]).includes(id);
+
+/** A live wallpaper a package holds (its `wallpapers`, `hivemind-wallpaper.json`), by its id:
+ *  `@owner/package/<folder>`, as a theme's is. */
+export type PluginWallpaperId = `@${string}/${string}/${string}`;
+export const PLUGIN_WALLPAPER_ID_RE = /^@[a-z0-9][a-z0-9-]{0,38}\/[a-z0-9][a-z0-9-]{0,63}\/[a-z0-9][a-z0-9-]{0,63}$/;
+export const isPluginWallpaper = (kind: unknown): kind is PluginWallpaperId => typeof kind === "string" && PLUGIN_WALLPAPER_ID_RE.test(kind);
+/** What `appearance.wallpaper.kind` holds: a built-in wallpaper, or a package's live wallpaper.
+ *  One that is not installed (or its package is off) draws as the default does. */
+export type WallpaperKind = WallpaperId | PluginWallpaperId;
+const isWallpaperKind = (v: unknown): v is WallpaperKind => WALLPAPERS.some((x) => x.id === v) || isPluginWallpaper(v);
 
 /** The `--color-*` tokens a preset sets. Values are CSS colours (oklch or hex). */
 export const PALETTE_KEYS = ["bg", "bg2", "bg3", "bg4", "line", "line2", "fg", "fg2", "fg3", "select", "ok", "warn", "err"] as const;
@@ -113,12 +134,14 @@ export interface Appearance {
     animate: boolean;
   };
   wallpaper: {
-    kind: WallpaperId;
+    kind: WallpaperKind;
     /** hm-media:// source for kind "video" / "image". */
     videoSrc?: string;
     imageSrc?: string;
     /** Video brightness 0.4–1.1. */
     brightness: number;
+    /** A live scene in its own colours (water, coral, koi), not the theme's page and text. */
+    colour: boolean;
   };
   terminal: TerminalPalette;
   /** Surfaces docked inside a World / community scene: "theme" renders them
@@ -132,7 +155,7 @@ export interface Appearance {
   lookBefore?: LookBefore;
 }
 
-export interface LookBefore { glass: boolean; wallpaper: WallpaperId; radius: number }
+export interface LookBefore { glass: boolean; wallpaper: WallpaperKind; radius: number }
 
 export interface ThemePreset {
   id: string;
@@ -354,7 +377,7 @@ export const DEFAULT_APPEARANCE: Appearance = {
   uiFont: UI_FONT,
   monoFont: MONO_FONT,
   glass: { enabled: true, contentGlass: false, opacity: 0.72, blur: 18, contentOpacity: 0.25, animate: true },
-  wallpaper: { kind: "mono", brightness: 0.85 },
+  wallpaper: { kind: "mono", brightness: 0.85, colour: false },
   terminal: { ...SIGNAL.terminal, ansi: [...SIGNAL.terminal.ansi] },
   pluginSurfaces: "theme",
   overlayMedia: [],
@@ -593,8 +616,8 @@ function mediaLayer(p: unknown, i: number): MediaLayer | null {
 const THEME_KEYS = new Set(Object.keys(DEFAULT_APPEARANCE));
 
 function lookBeforeOf(v: unknown): LookBefore | undefined {
-  if (!isObj(v) || typeof v.glass !== "boolean" || !WALLPAPERS.some((x) => x.id === v.wallpaper)) return undefined;
-  return { glass: v.glass, wallpaper: v.wallpaper as WallpaperId, radius: clamp(v.radius, 0, 24, DEFAULT_APPEARANCE.radius) };
+  if (!isObj(v) || typeof v.glass !== "boolean" || !isWallpaperKind(v.wallpaper)) return undefined;
+  return { glass: v.glass, wallpaper: v.wallpaper, radius: clamp(v.radius, 0, 24, DEFAULT_APPEARANCE.radius) };
 }
 
 export function mergeAppearance(raw: unknown, base: Appearance = DEFAULT_APPEARANCE): Appearance {
@@ -627,10 +650,11 @@ export function mergeAppearance(raw: unknown, base: Appearance = DEFAULT_APPEARA
       animate: bool(g.animate, base.glass.animate),
     },
     wallpaper: {
-      kind: WALLPAPERS.some((x) => x.id === w.kind) ? (w.kind as WallpaperId) : base.wallpaper.kind,
+      kind: isWallpaperKind(w.kind) ? w.kind : base.wallpaper.kind,
       videoSrc: srcOk(w.videoSrc),
       imageSrc: srcOk(w.imageSrc),
       brightness: clamp(w.brightness, 0.4, 1.1, base.wallpaper.brightness),
+      colour: bool(w.colour, base.wallpaper.colour),
     },
     terminal: {
       background: color(t.background, base.terminal.background),
@@ -646,13 +670,14 @@ export function mergeAppearance(raw: unknown, base: Appearance = DEFAULT_APPEARA
 }
 
 /** A host's look as a guest shows it, from anything (a peer's message is untrusted): checked as
- *  settings are, with nothing that names a file on the host's disk. A picture or video wallpaper
- *  becomes the default one, and overlays go: their media is the host's alone. Fonts are not the
+ *  settings are, with nothing that names a file on the host's disk. A picture or video wallpaper,
+ *  or a package's live wallpaper, becomes the default one, and overlays go: their media, and the
+ *  package, are the host's alone. Fonts are not the
  *  look: a guest reads in their own, so the host's are not sent. Each field is named: a field
  *  added later, or one a newer build wrote, reaches guests only when it is added here. */
 export function sharedAppearance(raw: unknown): SharedAppearance {
   const a = mergeAppearance(raw);
-  const media = a.wallpaper.kind === "image" || a.wallpaper.kind === "video";
+  const media = a.wallpaper.kind === "image" || a.wallpaper.kind === "video" || isPluginWallpaper(a.wallpaper.kind);
   // The custom accent (a theme's colours), as `lookForGuests` adds it: a colour, never a file.
   const accentCustom = accentColorsOf((raw as { accentCustom?: unknown } | null)?.accentCustom);
   return {
@@ -665,7 +690,7 @@ export function sharedAppearance(raw: unknown): SharedAppearance {
     uiFont: DEFAULT_APPEARANCE.uiFont,
     monoFont: DEFAULT_APPEARANCE.monoFont,
     glass: a.glass,
-    wallpaper: { kind: media ? DEFAULT_APPEARANCE.wallpaper.kind : a.wallpaper.kind, brightness: a.wallpaper.brightness },
+    wallpaper: { kind: media ? DEFAULT_APPEARANCE.wallpaper.kind : a.wallpaper.kind, brightness: a.wallpaper.brightness, colour: a.wallpaper.colour },
     terminal: a.terminal,
     pluginSurfaces: a.pluginSurfaces,
     overlayMedia: [],
@@ -701,7 +726,7 @@ export function exportAppearance(a: Appearance, extra?: Pick<AppearanceExtra, "a
   return {
     theme: {
       preset: a.preset, mode: a.mode, palette: a.palette, accent: a.accent, radius: a.radius, uiFont: a.uiFont, monoFont: a.monoFont,
-      glass: a.glass, wallpaper: { kind: a.wallpaper.kind, brightness: a.wallpaper.brightness }, terminal: a.terminal, pluginSurfaces: a.pluginSurfaces,
+      glass: a.glass, wallpaper: { kind: a.wallpaper.kind, brightness: a.wallpaper.brightness, colour: a.wallpaper.colour }, terminal: a.terminal, pluginSurfaces: a.pluginSurfaces,
       // The custom accent, which wins over `accent` while set; an older build reads the id.
       ...(extra?.accent ? { accentCustom: extra.accent } : {}),
     },
@@ -954,8 +979,10 @@ const AGENT_KEY_RE = /^[a-z0-9][a-z0-9-]{0,31}$/;
 // settings.json keeps the nested one. Two pure moves, round-trip tested.
 
 export interface FlatTheme {
-  glass: boolean; blur: number; opacity: number; wallpaper: WallpaperId; accent: AccentId;
+  glass: boolean; blur: number; opacity: number; wallpaper: WallpaperKind; accent: AccentId;
   videoSrc?: string; imageSrc?: string; videoBrightness?: number; animate: boolean;
+  /** `wallpaper.colour`: a live scene in its own colours. */
+  wallpaperColour: boolean;
   contentGlass: boolean; contentOpacity: number; overlayMedia: MediaLayer[];
   preset: string; mode: "dark" | "light"; palette: Palette; radius: number; uiFont: string; monoFont: string;
   terminal: TerminalPalette; pluginSurfaces: "theme" | "opaque"; lookBefore?: LookBefore;
@@ -970,7 +997,7 @@ export function flattenAppearance(a: Appearance, extra?: Pick<AppearanceExtra, "
   return {
     accentCustom: extra?.accent, fontFaces: extra?.fontFaces, themeId: extra?.theme?.id,
     glass: a.glass.enabled, blur: a.glass.blur, opacity: a.glass.opacity, contentGlass: a.glass.contentGlass, contentOpacity: a.glass.contentOpacity, animate: a.glass.animate,
-    wallpaper: a.wallpaper.kind, videoSrc: a.wallpaper.videoSrc, imageSrc: a.wallpaper.imageSrc, videoBrightness: a.wallpaper.brightness,
+    wallpaper: a.wallpaper.kind, videoSrc: a.wallpaper.videoSrc, imageSrc: a.wallpaper.imageSrc, videoBrightness: a.wallpaper.brightness, wallpaperColour: a.wallpaper.colour,
     accent: a.accent, overlayMedia: a.overlayMedia,
     preset: a.preset, mode: a.mode, palette: a.palette, radius: a.radius, uiFont: a.uiFont, monoFont: a.monoFont, terminal: a.terminal, pluginSurfaces: a.pluginSurfaces,
     lookBefore: a.lookBefore,
@@ -988,7 +1015,7 @@ export function nestAppearance(f: FlatTheme): Appearance {
   return {
     preset: f.preset, mode: f.mode, palette: f.palette, accent: f.accent, radius: f.radius, uiFont: f.uiFont, monoFont: f.monoFont,
     glass: { enabled: f.glass, contentGlass: f.contentGlass, opacity: f.opacity, blur: f.blur, contentOpacity: f.contentOpacity, animate: f.animate },
-    wallpaper: { kind: f.wallpaper, videoSrc: f.videoSrc, imageSrc: f.imageSrc, brightness: f.videoBrightness ?? DEFAULT_APPEARANCE.wallpaper.brightness },
+    wallpaper: { kind: f.wallpaper, videoSrc: f.videoSrc, imageSrc: f.imageSrc, brightness: f.videoBrightness ?? DEFAULT_APPEARANCE.wallpaper.brightness, colour: f.wallpaperColour },
     terminal: f.terminal, pluginSurfaces: f.pluginSurfaces, overlayMedia: f.overlayMedia,
     // Always named, undefined too: the store writes the sections that changed, a forgotten one included.
     lookBefore: f.lookBefore,

@@ -22,6 +22,8 @@
     "./appearance-extra": "./src/appearance-extra.ts",
     "./theme-format": "./src/theme-format.ts",
     "./theme-folder": "./src/theme-folder.ts",
+    "./wallpaper-folder": "./src/wallpaper-folder.ts",
+    "./wallpaper-format": "./src/wallpaper-format.ts",
     "./theme-apply": "./src/theme-apply.ts",
     "./font-names": "./src/font-names.ts",
     "./notification-settings": "./src/notification-settings.ts",

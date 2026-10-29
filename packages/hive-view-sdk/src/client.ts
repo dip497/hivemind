@@ -183,11 +183,14 @@ export interface ConnectOptions {
 
 export function connect(opts: ConnectOptions = {}): Promise<ViewClient> {
   const target = opts.target ?? window;
+  // Framed, as it always is in the app, the host is the page it is framed in: a frame of its own
+  // is not it. (Unframed, it is a test's window, handed the port by a fake host.)
+  const from = opts.target || window.parent === window ? null : window.parent;
   return new Promise<ViewClient>((resolve, reject) => {
     const timer = setTimeout(() => { target.removeEventListener("message", onWindow); reject(new Error("hivemind: no host handshake")); }, opts.timeoutMs ?? 10_000);
     const onWindow = (e: MessageEvent) => {
       const port = e.ports?.[0];
-      if (!port || !e.data || (e.data as { type?: unknown }).type !== PORT_HANDSHAKE) return;
+      if (!port || !e.data || (e.data as { type?: unknown }).type !== PORT_HANDSHAKE || (from && e.source !== from)) return;
       target.removeEventListener("message", onWindow);
       clearTimeout(timer);
       new Client(port).whenReady().then(resolve, reject);

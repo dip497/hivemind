@@ -6,11 +6,15 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { readToolPackage, TOOL_MANIFEST } from "@hivemind/core/tool-packages";
 import { readWidget } from "@hivemind/core/widgets";
+import { THEME_MANIFEST } from "@hivemind/core/theme-format";
 import { MANIFEST_FILE as VIEW_MANIFEST, validateViewManifest } from "@hivemind/view-sdk/manifest";
+import { validateWallpaperManifest, WALLPAPER_MANIFEST } from "@hivemind/view-sdk/wallpaper";
+import type { CheckedKind } from "./check/check.js";
 import type { Problem } from "./check/problem.js";
 import type { InPackage } from "./plugin-brief.js";
 import { TOOL_TYPE_SETUP, toolStarter, WIDGET_TYPE_SETUP, widgetStarter } from "./starters.js";
 import { starterFiles as viewStarter, VIEW_TYPE_SETUP } from "./view-starter.js";
+import { WALLPAPER_TYPE_SETUP } from "./wallpaper-starter.js";
 import type { TypeSetup } from "./check/types.js";
 import { WIDGET_TYPES } from "@hivemind/core/widget-api";
 import { declaration, typeSources } from "./type-files.js";
@@ -114,3 +118,45 @@ export const KINDS: readonly AuthoredKind[] = [
 ];
 
 export const kindNamed = (kind: string): AuthoredKind | undefined => KINDS.find((k) => k.kind === kind);
+
+/** A kind only a package holds: `hive plugins new <kind>` starts one in a package (`--in`), or a
+ *  live wallpaper in a package of its own, and it is installed, switched and removed with it. */
+export interface PackageOnlyKind {
+  kind: "theme" | "wallpaper";
+  noun: string;
+  /** The file that makes a folder one of these. */
+  manifest: string;
+  guide: string;
+  /** What a running app is asked, in order, to load them again. */
+  rescan: string[];
+  /** Its code's own check, for a kind with code, beside the package's reading of it. */
+  check?: CheckedKind;
+}
+
+const WALLPAPER = { kind: "wallpaper", noun: "live wallpaper", manifest: WALLPAPER_MANIFEST } as const;
+
+export const PACKAGE_ONLY: readonly PackageOnlyKind[] = [
+  // Data, which reading it checks whole; `hive theme use` puts it on.
+  { kind: "theme", noun: "theme", manifest: THEME_MANIFEST, guide: `${GUIDE}/packages/#themes`, rescan: [] },
+  // The app reads its live wallpapers again when it reads its views again.
+  {
+    ...WALLPAPER, guide: `${GUIDE}/live-wallpapers/`, rescan: ["views.rescan"],
+    check: {
+      ...WALLPAPER,
+      types: WALLPAPER_TYPE_SETUP,
+      validate: async (dir) => {
+        try {
+          const m = validateWallpaperManifest(JSON.parse(await readFile(path.join(dir, WALLPAPER_MANIFEST), "utf8")));
+          return m.ok ? [] : m.errors;
+        } catch (e) { return why(e); }
+      },
+      drawHere: async (dir) => (await import("./check/wallpaper-draw.js")).drawWallpaper(dir),
+      drawNote: "A live wallpaper's code ran in headless Chromium, in a sandboxed frame with no network, as the app runs it.",
+    },
+  },
+];
+
+export const packageOnly = (kind: string): PackageOnlyKind | undefined => PACKAGE_ONLY.find((k) => k.kind === kind);
+
+/** What a running app is asked, in order, to load members of `kind` again. */
+export const rescanOf = (kind: string): readonly string[] => kindNamed(kind)?.rescan ?? packageOnly(kind)?.rescan ?? [];

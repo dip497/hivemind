@@ -116,6 +116,32 @@ describe("hive plugins, packages", () => {
     expect(run("install", kit()).stdout).not.toContain("opens with the view");
   }, 60_000);
 
+  test("a package that offers a live wallpaper says so with the command that uses it; --json carries startWallpaper, in no step of next; the list shows its wallpapers with the package", () => {
+    const harbour = path.join(tmp, "harbour");
+    const files: Record<string, string> = {
+      "hivemind-package.json": JSON.stringify({ apiVersion: 2, id: "@acme/harbour", name: "Harbour", version: "1.0.0", wallpapers: [{ path: "wallpapers/tide" }, { path: "wallpapers/fog" }], startup: { wallpaper: "@acme/harbour/tide" } }),
+      "wallpapers/tide/hivemind-wallpaper.json": JSON.stringify({ protocol: 1, name: "Tide", entry: "main.js" }),
+      "wallpapers/tide/main.js": "",
+      "wallpapers/fog/hivemind-wallpaper.json": JSON.stringify({ protocol: 1, name: "Fog", entry: "main.js" }),
+      "wallpapers/fog/main.js": "",
+    };
+    for (const [f, text] of Object.entries(files)) {
+      fs.mkdirSync(path.dirname(path.join(harbour, f)), { recursive: true });
+      fs.writeFileSync(path.join(harbour, f), text);
+    }
+    const use = "hive config set appearance.wallpaper.kind '\"@acme/harbour/tide\"'";
+    expect(run("install", harbour).stdout).toContain(`It offers its live wallpaper Tide as the background: the app asks whether to use it. \`${use}\` uses it now.`);
+    const r = run("install", harbour, "--json");
+    expect(r.json).toMatchObject({ on: true, startWallpaper: { id: "@acme/harbour/tide", name: "Tide", use }, next: [] });
+    expect(run("list").stdout).toMatch(/^on \s+wallpaper:@acme\/harbour\/tide\s+Tide\s+\[@acme\/harbour 1\.0\.0\]$/m);
+    expect((run("list", "--kind", "wallpaper", "--json").json as { plugins: unknown[] }).plugins).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: "wallpaper:@acme/harbour/fog", name: "Fog", enabled: true, problem: null, package: expect.objectContaining({ id: "@acme/harbour" }) }),
+    ]));
+    // One that offers none says nothing of one.
+    expect(run("install", kit(), "--json").json).toMatchObject({ startWallpaper: null });
+    expect(run("install", kit()).stdout).not.toContain("live wallpaper");
+  }, 60_000);
+
   test("a package listed on HiveHub installs whole by its id, every file checked; a listing whose manifest names another package is refused", () => {
     const root = kit();
     const files = (dir: string, rel = ""): string[] => fs.readdirSync(path.join(dir, rel), { withFileTypes: true })

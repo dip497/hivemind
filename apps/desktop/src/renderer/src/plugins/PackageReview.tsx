@@ -5,7 +5,7 @@
  * only says them.
  */
 import { useState } from "react";
-import { Blocks, Bot, ChevronDown, ChevronRight, LayoutGrid, Palette, PanelsTopLeft, Wrench } from "../components/icons";
+import { Blocks, Bot, ChevronDown, ChevronRight, LayoutGrid, Palette, PanelsTopLeft, Sparkles, Wrench } from "../components/icons";
 import { runsWithoutTrust } from "@hivemind/hub";
 import { permissionWords } from "@hivemind/view-sdk/protocol";
 import type { ReactNode } from "react";
@@ -14,11 +14,11 @@ import type { PackageReview as Review } from "../../../shared/ipc";
 type Runs = Review["members"][number]["runs"];
 type Change = Review["changes"][number];
 
-export const MEMBER_KIND: Record<string, string> = { tool: "Tool", widget: "Widget", view: "View", "agent-preset": "Agent preset", theme: "Theme" };
+export const MEMBER_KIND: Record<string, string> = { tool: "Tool", widget: "Widget", view: "View", "agent-preset": "Agent preset", theme: "Theme", wallpaper: "Live wallpaper" };
 export const RUNS_LABEL: Record<Runs, string> = { sandboxed: "Sandboxed", "in the app": "Runs in the app", "as an agent's instructions": "Agent instructions", "nothing: it is data": "No code" };
 
 export function MemberIcon({ kind, size = 16 }: { kind: string; size?: number }) {
-  const Icon = kind === "tool" ? Wrench : kind === "widget" ? LayoutGrid : kind === "view" ? PanelsTopLeft : kind === "agent-preset" ? Bot : kind === "theme" ? Palette : Blocks;
+  const Icon = kind === "tool" ? Wrench : kind === "widget" ? LayoutGrid : kind === "view" ? PanelsTopLeft : kind === "agent-preset" ? Bot : kind === "theme" ? Palette : kind === "wallpaper" ? Sparkles : Blocks;
   return <Icon size={size} />;
 }
 

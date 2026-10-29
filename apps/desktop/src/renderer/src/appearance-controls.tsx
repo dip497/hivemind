@@ -24,14 +24,17 @@ import { Input } from "./components/ui/input";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "./components/ui/select";
 import { computerFonts, type ComputerFont } from "./computer-fonts";
 import { Switch as SwitchPrimitive } from "./components/ui/switch";
-import { PRESETS, type TerminalPalette } from "@hivemind/core/settings-schema";
+import { isLiveScene, isPluginWallpaper, PRESETS, type LiveSceneId, type TerminalPalette } from "@hivemind/core/settings-schema";
 import { NAMED_FONTS, fontNameOf, fontStack, type FontSlot } from "@hivemind/core/font-names";
 import { cssColorToHex } from "@hivemind/core/css-color";
 import { accentOf } from "@hivemind/core/appearance-extra";
 import { ACCENT_CONTRAST, accentMark, themeSwatches } from "@hivemind/core/theme-format";
+import { lightOf, swatchInk, waterCss } from "./live/palette";
+import { usableWallpaper, wallpaperOffBecause, useWallpapers } from "./live/wallpaper-store";
+import { cssColorToHex as hexOf } from "./workspace/css-color";
 import { useSettings } from "./settings-store";
 import {
-  ACCENTS, ANCHORS, CINEMATIC, WALLPAPERS, addOverlay, chooseAccent, chooseAccentColours, choosePreset, removeOverlay, setTheme, updateOverlay, wallpaperDrawn,
+  ACCENTS, ANCHORS, CINEMATIC, SEE_THROUGH, WALLPAPERS, addOverlay, chooseAccent, chooseAccentColours, choosePreset, removeOverlay, setTheme, updateOverlay, wallpaperDrawn,
   type AccentId, type MediaAnchor, type MediaFit, type MediaLayer, type ThemeState, type WallpaperId,
 } from "./theme-store";
 
@@ -250,6 +253,15 @@ export function ShapeAndTypeControls({ t }: { t: ThemeState }) {
 
 // ── background ──────────────────────────────────────────────────────────────
 
+/** Each live scene's swatch, a creature in the characters it is drawn in, as text (no live
+ *  preview), and what its creatures are called. */
+const SCENES: Record<LiveSceneId, { mark: string; creatures: string }> = {
+  shoal: { mark: "   .;%.\n-:t%S8@8%>\n   ';t'", creatures: "Sharks" },
+  koi: { mark: "   .%%.\n><%S@S%o)\n   '%%'", creatures: "Koi" },
+  jellyfish: { mark: " .-~~-.\n(:o@o:)\n )|(|( ", creatures: "Jellies" },
+  fireflies: { mark: "  .   \\/   *\n     .@#   .\n'v|/'|l'Y'v|", creatures: "Fireflies" },
+};
+
 /** Filename of a picked media URL, for the "currently using" line. */
 function mediaName(src?: string): string | null {
   if (!src) return null;
@@ -268,7 +280,18 @@ export function BackgroundControls({ t }: { t: ThemeState }) {
     else setTheme({ wallpaper: "image", imageSrc: r.url });
   };
   const isMedia = t.wallpaper === "video" || t.wallpaper === "image";
-  const current = WALLPAPERS.find((w) => w.id === t.wallpaper)?.label ?? "None";
+  // The live wallpapers installed packages hold, after the app's own.
+  const { wallpapers, loaded } = useWallpapers();
+  const installed = wallpapers.filter((w) => w.url && !w.error);
+  const pluginId = isPluginWallpaper(t.wallpaper) ? t.wallpaper : null;
+  const plugin = pluginId ? usableWallpaper(wallpapers, pluginId) : null;
+  const current = pluginId ? wallpapers.find((w) => w.id === pluginId)?.name ?? pluginId.slice(pluginId.lastIndexOf("/") + 1) : WALLPAPERS.find((w) => w.id === t.wallpaper)?.label ?? "None";
+  const live = isLiveScene(t.wallpaper) ? t.wallpaper : null;
+  // A live scene's swatch in its own colours when Colour is on, else on the page as it draws.
+  const light = lightOf(hexOf(t.palette.bg), hexOf(t.palette.fg));
+  const liveSwatch = (id: LiveSceneId) => t.wallpaperColour
+    ? { background: waterCss(id, light), color: swatchInk(id, light) }
+    : undefined;
   return (
     <>
       {/* The picker is a disclosure: eleven scenes are a rare choice, and an
@@ -283,16 +306,31 @@ export function BackgroundControls({ t }: { t: ThemeState }) {
               : () => setTheme({ wallpaper: w.id });
             return (
               <button key={w.id} type="button" className="settings-wallpaper" role="radio" aria-checked={sel} aria-label={w.label} data-wallpaper-option={w.id} onClick={onClick}>
-                <span className="settings-wallpaper-preview" aria-hidden data-scene={w.id}>
+                <span className="settings-wallpaper-preview" aria-hidden data-scene={w.id} data-live={isLiveScene(w.id) || undefined} style={isLiveScene(w.id) ? liveSwatch(w.id) : undefined}>
                   {w.id === "video" && <Film size={13} />}
                   {w.id === "image" && <ImageIcon size={13} />}
+                  {isLiveScene(w.id) && <span className="settings-live-mark">{SCENES[w.id].mark}</span>}
                 </span>
                 <span className="settings-wallpaper-name">{w.label}</span>
               </button>
             );
           })}
+          {installed.map((w) => (
+            <button key={w.id} type="button" className="settings-wallpaper" role="radio" aria-checked={t.wallpaper === w.id} aria-label={w.name} title={w.description ?? `${w.name}, from ${w.package.name}`} data-wallpaper-option={w.id} onClick={() => setTheme({ wallpaper: w.id as ThemeState["wallpaper"] })}>
+              <span className="settings-wallpaper-preview" aria-hidden data-live data-plugin style={w.preview ? { backgroundImage: `url("${w.preview}")` } : undefined}>
+                {!w.preview && <span className="settings-live-mark">{w.name.slice(0, 2)}</span>}
+              </span>
+              <span className="settings-wallpaper-name">{w.name}</span>
+            </button>
+          ))}
         </div>
       </details>
+      {pluginId && !plugin && loaded && (
+        <p className="settings-note" role="status">
+          {wallpaperOffBecause(pluginId) ? `${current} was turned off: ${wallpaperOffBecause(pluginId)}. ` : `${current} is not installed, or its package is off. `}
+          The plain background shows instead.
+        </p>
+      )}
 
       {isMedia && (
         <div className="settings-row">
@@ -316,6 +354,27 @@ export function BackgroundControls({ t }: { t: ThemeState }) {
       </div>
       {t.wallpaper !== "none" && !wallpaperDrawn(t) && (
         <p className="settings-note">The background shows behind your tools when glass is on.</p>
+      )}
+      {(live || plugin?.colour) && (
+        <div className="settings-row">
+          <div><label>Colour</label><p>{live ? "In its own colours: the water, what lives in it, the light coming down." : "In its own colours."} Off, it is drawn in your theme's page and text colours.</p></div>
+          <Switch on={t.wallpaperColour} onChange={(v) => setTheme({ wallpaperColour: v })} label={`Draw ${current} in its own colours`} />
+        </div>
+      )}
+      {(live || plugin) && (
+        <div className="settings-row">
+          <div>
+            <label>{live ? SCENES[live].creatures : "Its creatures"} behind your tools</label>
+            <p>
+              {!t.glass
+                ? `Panels and tiles are solid over ${current}.`
+                : !t.contentGlass
+                  ? "They show through the frosted panels. Frost tool content to see them behind your agents too."
+                  : "They show through the frosted panels and tiles, softened behind the text."}
+            </p>
+          </div>
+          <Button variant="outline" title={`Thin frosted panels and tiles, so the ${live ? SCENES[live].creatures.toLowerCase() : "creatures"} show behind your agents`} onClick={() => setTheme(SEE_THROUGH)}>See-through</Button>
+        </div>
       )}
     </>
   );

@@ -12,7 +12,7 @@ import { searchPlugins } from "@hivemind/core/plugin-search";
 import { rowsInKindTab, TAB_LABEL, type PluginTab } from "./plugins/kinds";
 import { MemberIcon, MEMBER_KIND, RUNS_LABEL, askedFor } from "./plugins/PackageReview";
 import { catalogKey, cleanError, useCatalogInstall, useInstalledVersion, type CatalogEntry } from "./plugins/catalog-install";
-import { OpenStartView, startViewOf } from "./plugins/open-start-view";
+import { OpenStartView, startViewOf, startWallpaperOf } from "./plugins/open-start-view";
 import { memberFormat } from "@hivemind/hub";
 import { CategoryGroups, KindTabs, PluginRow, type ListedRow } from "./plugins/PluginList";
 import { useSettingsNavigate } from "./settings-navigate";
@@ -102,9 +102,10 @@ export function BrowsePlugins({ query, tab, onTab }: { query: string; tab: Plugi
   }), tab);
 
   const opens = done?.review.type === "package" ? startViewOf(done.review) : null;
+  const background = done?.review.type === "package" ? startWallpaperOf(done.review) : null;
   return <div className="settings-stack">
     {done && <div role="status" className="settings-message catalog-done">
-      {opens ? <OpenStartView installed={done.entry.name} view={opens} /> : <span>{done.entry.name} is installed.</span>}
+      {opens || background ? <OpenStartView installed={done.entry.name} view={opens} wallpaper={background} /> : <span>{done.entry.name} is installed.</span>}
       {done.review.type === "package" ? null
         : done.entry.type === "view"
         ? <Button onClick={() => { setViewMode(done.entry.id); go(`plugin:view:${done.entry.id}`); }}>Use this view</Button>

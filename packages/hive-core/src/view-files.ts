@@ -98,7 +98,12 @@ export function newNonce(): string {
 /** A `.html` entry is loaded as-is; a `.js` entry through a generated page. The host is the
  *  view's own origin: its id, or `owner--name` for `@owner/name`, which a hostname cannot hold. */
 export function entryUrl(id: string, entry: string): string {
-  const host = viewHost(id);
+  return entryUrlAt(viewHost(id), entry);
+}
+
+/** The address of a page whose entry is `entry`, served from origin `host` (a view's, or a live
+ *  wallpaper's, whose id is no hostname). */
+export function entryUrlAt(host: string, entry: string): string {
   return entry.endsWith(".js") ? `${VIEW_SCHEME}://${host}/${ENTRY_PAGE}?js=${encodeURIComponent(entry)}` : `${VIEW_SCHEME}://${host}/${entry}`;
 }
 
