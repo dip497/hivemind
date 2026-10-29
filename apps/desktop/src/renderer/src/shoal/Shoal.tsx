@@ -23,12 +23,15 @@ const lessMotion = mediaStore("(prefers-reduced-motion: reduce)");
 const moreContrast = mediaStore("(prefers-contrast: more)");
 const lessTransparency = mediaStore("(prefers-reduced-transparency: reduce)");
 
-/** What the scene keeps out from under: the canvas's tiles (not its frames, which are zones the
- *  water shows through), the Layers panel and the toolbars. */
-const SOLID = '.react-flow__node:not(.react-flow__node-frame)[data-id], aside[aria-label="Layers"], .hm-island';
-function boxesOnPage(): Box[] {
+/** What the scene keeps out from under, and draws no shark under: the canvas's tiles (not its
+ *  frames, which are zones the water shows through), and the Layers panel and the toolbars unless
+ *  they are glass. A frosted panel shows a shark through it, softened, as it passes under; a tile
+ *  stays solid, so its text never runs over one. */
+const TILES = ".react-flow__node:not(.react-flow__node-frame)[data-id]";
+const PANELS = 'aside[aria-label="Layers"], .hm-island';
+function boxesOnPage(frosted: boolean): Box[] {
   const out: Box[] = [];
-  for (const el of document.querySelectorAll<HTMLElement>(SOLID)) {
+  for (const el of document.querySelectorAll<HTMLElement>(frosted ? TILES : `${TILES}, ${PANELS}`)) {
     const r = el.getBoundingClientRect();
     if (r.width > 0 && r.height > 0) out.push({ x0: r.left, y0: r.top, x1: r.right, y1: r.bottom, ...(el.dataset.id ? { key: el.dataset.id } : {}) });
   }
@@ -37,13 +40,15 @@ function boxesOnPage(): Box[] {
 
 const rosterKey = (sharks: SharkSpec[]) => sharks.map((s) => `${s.key}:${s.kind}:${s.size}:${s.mood}`).join("|");
 
-export function Shoal({ agents, paused, animate, page, text, monoFont }: {
+export function Shoal({ agents, paused, animate, frosted, page, text, monoFont }: {
   /** The workspace's agents, the same array until one comes, goes or falls asleep. */
   agents: readonly ShoalAgent[];
   /** The window is hidden, unfocused or idle, or something covers the workspace. */
   paused: boolean;
   /** The person's Animation switch. */
   animate: boolean;
+  /** Glass is on: the panels over the scene are frosted, and the sharks swim under them. */
+  frosted: boolean;
   /** The theme's page and text colours (CSS). */
   page: string;
   text: string;
@@ -72,12 +77,12 @@ export function Shoal({ agents, paused, animate, page, text, monoFont }: {
   // frame, never while it is held. Read from the page's canvas view, the only one it runs behind.
   useEffect(() => {
     if (!engine) return;
-    if (mode !== "hold") engine.setBoxes(boxesOnPage());
+    if (mode !== "hold") engine.setBoxes(boxesOnPage(frosted));
     engine.setMode(mode);
     if (mode !== "run") return;
-    const id = setInterval(() => engine.setBoxes(boxesOnPage()), 1000);
+    const id = setInterval(() => engine.setBoxes(boxesOnPage(frosted)), 1000);
     return () => clearInterval(id);
-  }, [engine, mode]);
+  }, [engine, mode, frosted]);
 
   // The sharks again whenever an agent comes, goes or changes to a status that changes its shark;
   // a turn that ends well is its shark's bite.

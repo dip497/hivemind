@@ -321,8 +321,12 @@ export function BackgroundControls({ t }: { t: ThemeState }) {
       {t.wallpaper !== "none" && !wallpaperDrawn(t) && (
         <p className="settings-note">The background shows behind your tools when glass is on.</p>
       )}
-      {t.wallpaper === "shoal" && t.glass && (
-        <p className="settings-note">Over Shoal, panels and tiles stay solid, glass or not.</p>
+      {t.wallpaper === "shoal" && (
+        <p className="settings-note">
+          {t.glass
+            ? "The sharks show through the frosted panels. Tiles stay solid, so their text never runs over one."
+            : "Panels and tiles stay solid over Shoal. Turn glass on to see the sharks through the panels."}
+        </p>
       )}
     </>
   );

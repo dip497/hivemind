@@ -90,7 +90,7 @@ export function Wallpaper({ embedded = false, covering = false, agents = NO_AGEN
     if (wallpaper === "shoal") {
       return (
         <div className={`hm-wallpaper${cls}`} data-scene="shoal" aria-hidden="true">
-          {!embedded && live && <Shoal agents={agents} paused={paused} animate={animate} page={palette.bg} text={palette.fg} monoFont={monoFont} />}
+          {!embedded && live && <Shoal agents={agents} paused={paused} animate={animate} frosted={glass} page={palette.bg} text={palette.fg} monoFont={monoFont} />}
         </div>
       );
     }

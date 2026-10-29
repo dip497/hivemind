@@ -81,16 +81,15 @@ export function isWallpaperActive(): boolean { return fullWallpaper; }
 /** Whether the wallpaper is drawn: behind glass, which is the person's, or a theme's without it.
  *  A theme's wallpaper is part of its look, so it shows whether or not glass is on. */
 export function wallpaperDrawn(t: Pick<ThemeState, "glass" | "wallpaper" | "themeId"> = state): boolean {
-  // Shoal shows without glass too: it pictures the agents between the tools.
+  // Shoal shows without glass too: it pictures the agents between the tools. With glass, its
+  // sharks show through the frosted panels (shoal/Shoal.tsx).
   return t.wallpaper !== "none" && (t.glass || !!t.themeId || t.wallpaper === "shoal");
 }
 /** Glass as it applies right now. */
 export function effectiveGlass(t: ThemeState = state): boolean {
   // Nothing behind the glass means nothing to see through it: a translucent panel over the
   // page's own background only washes out the colour the theme picked.
-  // Over Shoal the panels stay solid too: its sharp characters change every frame, and through a
-  // panel's tint they would run through the names on it.
-  return t.glass && t.wallpaper !== "none" && t.wallpaper !== "shoal" && (!pluginScene || t.pluginSurfaces === "theme");
+  return t.glass && t.wallpaper !== "none" && (!pluginScene || t.pluginSurfaces === "theme");
 }
 /** A host-placed slot in a scene paints the wallpaper behind itself (clipped
  *  to the slot) when the theme wants it there and nothing full-window does. */
