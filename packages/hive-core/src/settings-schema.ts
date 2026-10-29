@@ -80,8 +80,8 @@ export const WALLPAPERS: { id: WallpaperId; label: string }[] = [
   { id: "video",  label: "Video" },
 ];
 
-/** The live wallpapers: scenes drawn in characters behind the canvas whose creatures are the agents
- *  (apps/desktop live/). A theme cannot name one yet: an app without it would refuse the theme. */
+/** The live wallpapers: scenes drawn in characters behind the canvas, worlds whose life moves by
+ *  itself and plays with the pointer (apps/desktop live/). A theme cannot name one yet: an app without it would refuse the theme. */
 export const LIVE_SCENES = ["shoal", "koi", "jellyfish", "fireflies"] as const satisfies readonly WallpaperId[];
 export type LiveSceneId = (typeof LIVE_SCENES)[number];
 export const isLiveScene = (id: WallpaperKind): id is LiveSceneId => (LIVE_SCENES as readonly WallpaperKind[]).includes(id);

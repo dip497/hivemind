@@ -285,7 +285,8 @@ export function BackgroundControls({ t }: { t: ThemeState }) {
   const installed = wallpapers.filter((w) => w.url && !w.error);
   const pluginId = isPluginWallpaper(t.wallpaper) ? t.wallpaper : null;
   const plugin = pluginId ? usableWallpaper(wallpapers, pluginId) : null;
-  const current = pluginId ? wallpapers.find((w) => w.id === pluginId)?.name ?? pluginId.slice(pluginId.lastIndexOf("/") + 1) : WALLPAPERS.find((w) => w.id === t.wallpaper)?.label ?? "None";
+  const listed = pluginId ? wallpapers.find((w) => w.id === pluginId) : undefined;
+  const current = pluginId ? listed?.name ?? pluginId.slice(pluginId.lastIndexOf("/") + 1) : WALLPAPERS.find((w) => w.id === t.wallpaper)?.label ?? "None";
   const live = isLiveScene(t.wallpaper) ? t.wallpaper : null;
   // A live scene's swatch in its own colours, light or dark as the scene draws by the theme's.
   const light = lightOf(hexOf(t.palette.bg), hexOf(t.palette.fg));
@@ -325,7 +326,9 @@ export function BackgroundControls({ t }: { t: ThemeState }) {
       </details>
       {pluginId && !plugin && loaded && (
         <p className="settings-note" role="status">
-          {wallpaperOffBecause(pluginId) ? `${current} was turned off: ${wallpaperOffBecause(pluginId)}. ` : `${current} is not installed, or its package is off. `}
+          {wallpaperOffBecause(pluginId)
+            ? `${current} was turned off: ${wallpaperOffBecause(pluginId)}. `
+            : listed?.error ? `${current} cannot be used: ${listed.error}. ` : `${current} is not installed, or its package is off. `}
           The plain background shows instead.
         </p>
       )}

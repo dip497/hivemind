@@ -84,8 +84,8 @@ export function isWallpaperActive(): boolean { return fullWallpaper; }
 /** Whether the wallpaper is drawn: behind glass, which is the person's, or a theme's without it.
  *  A theme's wallpaper is part of its look, so it shows whether or not glass is on. */
 export function wallpaperDrawn(t: Pick<ThemeState, "glass" | "wallpaper" | "themeId"> = state): boolean {
-  // A live scene, the app's or a package's, shows without glass too: it pictures the agents between
-  // the tools. With glass, its creatures show through the frosted panels (live/LiveWallpaper.tsx).
+  // A live scene, the app's or a package's, shows without glass too: it is the world between the
+  // tools. With glass, it shows through the frosted panels (live/LiveWallpaper.tsx).
   return t.wallpaper !== "none" && (t.glass || !!t.themeId || isLiveScene(t.wallpaper) || isPluginWallpaper(t.wallpaper));
 }
 /** Glass as it applies right now. */

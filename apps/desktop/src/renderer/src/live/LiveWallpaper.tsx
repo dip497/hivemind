@@ -29,7 +29,7 @@ const lessTransparency = mediaStore("(prefers-reduced-transparency: reduce)");
 export function LiveWallpaper({ scene, paused, animate, page, text, dark, monoFont }: {
   /** One of the app's scenes, or a package's live wallpaper. */
   scene: SceneId | PluginWallpaper;
-  /** The window is hidden, unfocused or idle, or something covers the workspace. */
+  /** The window is hidden or unfocused, or something covers the workspace. */
   paused: boolean;
   /** The person's Animation switch. */
   animate: boolean;

@@ -33,7 +33,7 @@ export const WALLPAPER_MANIFEST = "hivemind-wallpaper.json";
  *  fallback. */
 export interface WallpaperLook { page: string; text: string; dark: boolean; mono: string }
 
-/** `run`: animate. `hold`: keep the last frame (the window is hidden, idle or covered). `still`:
+/** `run`: animate. `hold`: keep the last frame (the window is hidden, not focused or covered). `still`:
  *  motion is off; show one settled frame, and draw again only when something changes. */
 export type WallpaperMode = "run" | "hold" | "still";
 
