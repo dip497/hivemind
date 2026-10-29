@@ -53,12 +53,11 @@ export const SPECIES: Species[] = [
   },
 ];
 
-const TOTAL_WEIGHT = SPECIES.reduce((sum, s) => sum + s.weight, 0);
-
-export function pickSpecies() {
-  let r = Math.random() * TOTAL_WEIGHT;
-  for (let i = 0; i < SPECIES.length; i++) {
-    r -= SPECIES[i]!.weight;
+/** A species of `list` by their odds: its index. */
+export function pickSpecies(list: readonly Species[] = SPECIES) {
+  let r = Math.random() * list.reduce((sum, s) => sum + s.weight, 0);
+  for (let i = 0; i < list.length; i++) {
+    r -= list[i]!.weight;
     if (r <= 0) return i;
   }
   return 0;

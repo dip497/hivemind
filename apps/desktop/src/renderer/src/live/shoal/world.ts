@@ -18,23 +18,32 @@
  * swims in when the agent starts and off when it closes; the original kept four sharks for good
  * and steered them clear of a centred headline.
  */
-import { angleDiff, clamp, current, rand, randInt, TAU } from "./math";
-import { pickSpecies, SPECIES } from "./species";
+import { angleDiff, clamp, current, rand, randInt, TAU } from "../math";
+import type { Box, Mood } from "../scene";
+import { covered, openPoint, roomAt } from "../steer";
+import { pickSpecies, SPECIES, type Species } from "./species";
 
 export const SHARK_NODES = 20;
 
 export type SharkKind = "classic" | "hammerhead" | "zebra" | "tiger" | "greathammer" | "mako" | "thresher" | "nurse";
 
-/** What a shark does, from its agent: hunt (at work), cruise (ready), come up close (it needs
- *  you) or rest on the bottom (stopped, failed or asleep). */
-export type Mood = "hunt" | "cruise" | "surface" | "rest";
-
-/** One agent's shark: `key` is its tile, `size` is relative to the biggest. */
+/** One agent's creature (a shark here; a koi in Koi Pond, which swims the same water): `key` is its
+ *  tile, `kind` is how the scene draws it, `size` is relative to the biggest. */
 export interface SharkSpec {
   key: string;
-  kind: SharkKind;
+  kind: string;
   size: number;
   mood: Mood;
+}
+
+export type { Box, Mood };
+
+/** What a World is made with. `fishCount` overrides the area-based population; `share` is the
+ *  biggest creature's length as a share of the window's shorter side; `species` are the fish. */
+export interface WorldOptions {
+  fishCount?: number;
+  share?: number;
+  species?: Species[];
 }
 
 /** Per mood: how near the shark swims (0 far and dim, 1 near and bright; nearer is bigger, as
@@ -69,7 +78,7 @@ export interface Fish {
 export interface Shark {
   id: number;
   key: string;
-  kind: SharkKind;
+  kind: string;
   size: number;
   mood: Mood;
   /** Its agent closed: it swims off and is dropped once out of sight. */
@@ -101,15 +110,6 @@ export interface WorldEvent {
   kind: "eat" | "splash" | "bite";
   x: number;
   y: number;
-}
-
-/** A box on the screen the scene keeps its life out from under: a tile or a panel. `key` is a tile's id. */
-export interface Box {
-  x0: number;
-  y0: number;
-  x1: number;
-  y1: number;
-  key?: string;
 }
 
 const FISH_SEPARATION_K = 420;
@@ -144,16 +144,23 @@ export class World {
   private boxes: Box[] = [];
   private tileBox = new Map<string, Box>();
 
-  /** fishCount overrides the area-based population. */
-  constructor(private fishCount?: number) {}
+  private fishCount: number | undefined;
+  private share: number;
+  private species: Species[];
+
+  constructor(options: WorldOptions = {}) {
+    this.fishCount = options.fishCount;
+    this.share = options.share ?? 0.44;
+    this.species = options.species ?? SPECIES;
+  }
 
   resize(width: number, height: number, cellW: number, cellH: number) {
     const first = this.width === 0;
     this.width = width;
     this.height = height;
     // Spacing is set in grid cells so every fish lands in its own cell.
-    this.sepX = SPECIES.map((sp) => sp.spacing[0] * cellW);
-    this.sepY = SPECIES.map((sp) => sp.spacing[1] * cellH);
+    this.sepX = this.species.map((sp) => sp.spacing[0] * cellW);
+    this.sepY = this.species.map((sp) => sp.spacing[1] * cellH);
     this.perception = Math.max(cellH * 3, cellW * 5.5);
     this.foreignSep = cellW * 3;
 
@@ -172,7 +179,9 @@ export class World {
   private unit() {
     let n = 0;
     for (const s of this.sharks) if (!s.leaving) n++;
-    return clamp(Math.min(this.width, this.height) * 0.44, 170, 430) * (n > 4 ? Math.sqrt(4 / n) : 1);
+    // Shoal's limits, 170 and 430 px at its share, scaled to the world's own share.
+    const k = this.share / 0.44;
+    return clamp(Math.min(this.width, this.height) * this.share, 170 * k, 430 * k) * (n > 4 ? Math.sqrt(4 / n) : 1);
   }
 
   seedFish() {
@@ -180,8 +189,8 @@ export class World {
     const total = this.fishCount ?? clamp(Math.round((W * H) / 4400), 85, 340);
     this.fish = [];
     while (this.fish.length < total) {
-      const species = pickSpecies();
-      const sp = SPECIES[species]!;
+      const species = pickSpecies(this.species);
+      const sp = this.species[species]!;
       const size = Math.min(randInt(sp.schoolSize[0], sp.schoolSize[1]), total - this.fish.length);
       const millDir: 1 | -1 = Math.random() < 0.5 ? 1 : -1;
       const cx = rand(W * 0.06, W * 0.94);
@@ -275,55 +284,15 @@ export class World {
   }
 
   private covered(x: number, y: number, pad: number) {
-    for (const b of this.boxes) if (x > b.x0 - pad && x < b.x1 + pad && y > b.y0 - pad && y < b.y1 + pad) return true;
-    return false;
+    return covered(this.boxes, x, y, pad);
   }
 
-  /** A point in the open water between `top` and `bottom` (shares of the height), and one the
-   *  shark at `from` can swim to without passing under a tile if there is one: of a few tries, the
-   *  one with the least of its way covered and, given the shark's heading, the least turn to it,
-   *  at least `reach` away, so it swims on in long curves instead of doubling back. On a canvas
-   *  too full for any try to be clear of the tiles, the try with the most room round it. */
   private openPoint(top: number, bottom: number, from: { x: number; y: number; heading?: number; reach?: number }) {
-    const { width: W, height: H } = this;
-    let best = { x: W / 2, y: H / 2 };
-    let bestCover = Infinity;
-    let fallback = best;
-    let fallbackRoom = -Infinity;
-    const ahead = from.heading !== undefined;
-    for (let i = 0; i < 16; i++) {
-      const x = rand(W * 0.08, W * 0.92);
-      const y = rand(H * top, H * bottom);
-      if (this.covered(x, y, 60)) {
-        const room = this.roomAt(x, y);
-        if (room > fallbackRoom) {
-          fallback = { x, y };
-          fallbackRoom = room;
-        }
-        continue;
-      }
-      let cover = 0;
-      for (let k = 1; k < 8; k++) if (this.covered(from.x + ((x - from.x) * k) / 8, from.y + ((y - from.y) * k) / 8, 30)) cover++;
-      // A covered step outweighs any turn; a point too near counts as a half turn more.
-      if (ahead) cover = cover * 4 + Math.abs(angleDiff(from.heading!, Math.atan2(y - from.y, x - from.x))) + (Math.hypot(x - from.x, y - from.y) < from.reach! ? Math.PI : 0);
-      if (cover < bestCover) {
-        best = { x, y };
-        bestCover = cover;
-        if (cover === 0) break;
-      }
-    }
-    return bestCover < Infinity ? best : fallback;
+    return openPoint(this.boxes, this.width, this.height, top, bottom, from);
   }
 
-  /** How far a point is from the nearest box or the window's edge; less than 0 under a box, by how
-   *  far it is in from that box's nearest side. */
   private roomAt(x: number, y: number) {
-    let room = Math.min(x, this.width - x, y, this.height - y);
-    for (const b of this.boxes) {
-      const inside = x > b.x0 && x < b.x1 && y > b.y0 && y < b.y1;
-      room = Math.min(room, inside ? -Math.min(x - b.x0, b.x1 - x, y - b.y0, b.y1 - y) : Math.hypot(Math.max(b.x0 - x, 0, x - b.x1), Math.max(b.y0 - y, 0, y - b.y1)));
-    }
-    return room;
+    return roomAt(this.boxes, this.width, this.height, x, y);
   }
 
   /** Its agent finished a turn: the shark bites where it is, the fish near it scatter, and it is fed. */
@@ -454,7 +423,7 @@ export class World {
     for (let i = 0; i < fish.length; i++) {
       const f = fish[i]!;
       if (!f.alive) continue;
-      const sp = SPECIES[f.species]!;
+      const sp = this.species[f.species]!;
       // Alarmed fish want more room: the school flashes apart around a
       // shark and closes back up once the threat fades.
       const spread = 1 + 1.8 * f.alarm;
@@ -914,8 +883,8 @@ export class World {
     const x = side === 0 ? -20 : side === 1 ? W + 20 : along * W;
     const y = side === 2 ? -20 : side === 3 ? H + 20 : along * H;
     const inward = Math.atan2(H / 2 - y, W / 2 - x) + rand(-0.5, 0.5);
-    const species = pickSpecies();
-    const sp = SPECIES[species]!;
+    const species = pickSpecies(this.species);
+    const sp = this.species[species]!;
     const millDir: 1 | -1 = Math.random() < 0.5 ? 1 : -1;
     for (const f of due.slice(0, sp.schoolSize[1])) {
       f.alive = true;

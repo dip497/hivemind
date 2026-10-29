@@ -1,11 +1,11 @@
 /**
- * Shoal's drawing (shoal/render, coveredCells): no shark is drawn under a tile or a panel, nor in a
- * seam between two tiles narrower than a cell, so a shark passing under a block of tiles does not
- * show through as a strip. A wider gap is open water, where it shows.
+ * A live scene's drawing (live/cells, coveredCells): no creature is drawn under a tile or a panel,
+ * nor in a seam between two tiles narrower than a cell, so a shark passing under a block of tiles
+ * does not show through as a strip. A wider gap is open water, where it shows.
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { coveredCells } from "../../src/renderer/src/shoal/render";
+import { coveredCells } from "../../src/renderer/src/live/cells";
 
 const CW = 8;
 const CH = 12;

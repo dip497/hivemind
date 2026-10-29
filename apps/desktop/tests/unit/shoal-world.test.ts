@@ -7,7 +7,7 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { World, type Box, type SharkSpec } from "../../src/renderer/src/shoal/world";
+import { World, type Box, type SharkSpec } from "../../src/renderer/src/live/shoal/world";
 
 const W = 1440;
 const H = 900;
@@ -115,7 +115,7 @@ test("sharks in no hurry turn before the window's edge and stay in sight", () =>
   let inside = 0;
   let nodes = 0;
   for (const seed of [61, 62, 63, 64, 65, 66, 67, 68]) seeded(seed, () => {
-    const w = new World(0);
+    const w = new World({ fishCount: 0 });
     w.resize(973, 883, 8, 12);
     w.setRoster([shark("a", "cruise"), { ...shark("b", "cruise"), size: 0.9 }, { ...shark("c", "cruise"), size: 0.84 }]);
     run(w, 10);
@@ -136,7 +136,7 @@ test("a hunting shark does not go after a fish under a tile or at the window's e
   seeded(72, () => {
     /** The shark's target with it at (x, 450) heading right and the one fish at `fish`. */
     const targetWith = (x: number, fish: { x: number; y: number }, boxes: Box[] = []) => {
-      const w = new World(1);
+      const w = new World({ fishCount: 1 });
       w.resize(W, H, 12, 17);
       w.setRoster([shark("a", "hunt")], true);
       w.setBoxes(boxes);
@@ -161,7 +161,7 @@ test("a roaming shark swims on to somewhere ahead of it, not back where it came 
   let picks = 0;
   for (const seed of [51, 52, 53, 54, 55, 56, 57, 58]) seeded(seed, () => {
     // No fish: a roaming shark swims past them, and the water is quicker without.
-    const w = new World(0);
+    const w = new World({ fishCount: 0 });
     w.resize(W, H, 12, 17);
     w.setRoster([shark("a", "cruise")]);
     const a = sharkOf(w, "a");

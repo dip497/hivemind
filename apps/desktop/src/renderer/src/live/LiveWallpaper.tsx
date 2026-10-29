@@ -1,11 +1,11 @@
-/** The Shoal wallpaper: fish and sharks drawn in characters behind the canvas, one shark per agent,
- *  in the theme's page and text colours. */
+/** A live wallpaper: a scene drawn in characters behind the canvas (Shoal's sharks, Koi Pond's koi
+ *  …), one creature per agent, in the theme's page and text colours or the scene's own. */
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { statusOf, subscribeStatus } from "../agent-status-bus";
 import { cssColorToHex } from "../workspace/css-color";
-import { ShoalEngine, type ShoalMode } from "./engine";
-import { roster, turnEnded, type ShoalAgent } from "./roster";
-import type { Box, SharkSpec } from "./world";
+import { LiveEngine, type SceneId } from "./engine";
+import { roster, turnEnded, type SceneAgent } from "./roster";
+import type { Box, CreatureSpec, SceneMode } from "./scene";
 
 /** A media query as a store, for useSyncExternalStore. */
 function mediaStore(query: string) {
@@ -23,10 +23,10 @@ const lessMotion = mediaStore("(prefers-reduced-motion: reduce)");
 const moreContrast = mediaStore("(prefers-contrast: more)");
 const lessTransparency = mediaStore("(prefers-reduced-transparency: reduce)");
 
-/** What the scene keeps out from under, and draws no shark under: the canvas's tiles (not its
+/** What the scene keeps out from under, and draws no creature under: the canvas's tiles (not its
  *  frames, which are zones the water shows through), and the Layers panel and the toolbars unless
- *  they are glass. A frosted panel shows a shark through it, softened, as it passes under; a tile
- *  stays solid, so its text never runs over one. */
+ *  they are glass. A frosted panel shows a creature through it, softened, as it passes under; a
+ *  tile stays solid unless it is see-through, so its text never runs over one. */
 const TILES = ".react-flow__node:not(.react-flow__node-frame)[data-id]";
 const PANELS = 'aside[aria-label="Layers"], .hm-island';
 function boxesOnPage(frosted: boolean): Box[] {
@@ -38,18 +38,21 @@ function boxesOnPage(frosted: boolean): Box[] {
   return out;
 }
 
-const rosterKey = (sharks: SharkSpec[]) => sharks.map((s) => `${s.key}:${s.kind}:${s.size}:${s.mood}`).join("|");
+const rosterKey = (creatures: CreatureSpec[]) => creatures.map((s) => `${s.key}:${s.variant}:${s.size}:${s.mood}`).join("|");
 
-export function Shoal({ agents, paused, animate, frosted, seeThrough, page, text, monoFont }: {
+export function LiveWallpaper({ scene, colour, agents, paused, animate, frosted, seeThrough, page, text, monoFont }: {
+  scene: SceneId;
+  /** Drawn in the scene's own colours, not the theme's page and text. */
+  colour: boolean;
   /** The workspace's agents, the same array until one comes, goes or falls asleep. */
-  agents: readonly ShoalAgent[];
+  agents: readonly SceneAgent[];
   /** The window is hidden, unfocused or idle, or something covers the workspace. */
   paused: boolean;
   /** The person's Animation switch. */
   animate: boolean;
-  /** Glass is on: the panels over the scene are frosted, and the sharks swim under them. */
+  /** Glass is on: the panels over the scene are frosted, and the creatures swim under them. */
   frosted: boolean;
-  /** Tool content is frosted too: a shark under a tile shows through it, soft. */
+  /** Tool content is frosted too: a creature under a tile shows through it, soft. */
   seeThrough: boolean;
   /** The theme's page and text colours (CSS). */
   page: string;
@@ -58,21 +61,22 @@ export function Shoal({ agents, paused, animate, frosted, seeThrough, page, text
   monoFont: string;
 }): React.ReactElement {
   const hostRef = useRef<HTMLDivElement>(null);
-  const [engine, setEngine] = useState<ShoalEngine | null>(null);
+  const [engine, setEngine] = useState<LiveEngine | null>(null);
   const reduced = useSyncExternalStore(lessMotion.watch, lessMotion.now, lessMotion.now);
   const contrast = useSyncExternalStore(moreContrast.watch, moreContrast.now, moreContrast.now);
   const solid = useSyncExternalStore(lessTransparency.watch, lessTransparency.now, lessTransparency.now);
   const shown = !contrast && !solid;
-  const mode: ShoalMode = !animate || reduced ? "still" : paused ? "hold" : "run";
+  const mode: SceneMode = !animate || reduced ? "still" : paused ? "hold" : "run";
 
+  // A scene of its own for each: a canvas is handed to one worker only once.
   useEffect(() => {
     if (!shown) return;
-    const e = new ShoalEngine(hostRef.current!);
+    const e = new LiveEngine(hostRef.current!, scene);
     setEngine(e);
     return () => { e.destroy(); setEngine(null); };
-  }, [shown]);
+  }, [shown, scene]);
 
-  useEffect(() => { engine?.setColours(cssColorToHex(page), cssColorToHex(text)); }, [engine, page, text]);
+  useEffect(() => { engine?.setLook({ page: cssColorToHex(page), text: cssColorToHex(text), colour }); }, [engine, page, text, colour]);
   useEffect(() => { engine?.fontChanged(); }, [engine, monoFont]);
 
   // Where the tiles and panels are: read once a second while the scene runs, once for a still
@@ -105,18 +109,18 @@ export function Shoal({ agents, paused, animate, frosted, seeThrough, page, text
     return () => { clearInterval(id); moved.disconnect(); };
   }, [engine, mode, frosted, seeThrough]);
 
-  // The sharks again whenever an agent comes, goes or changes to a status that changes its shark;
-  // a turn that ends well is its shark's bite.
+  // The creatures again whenever an agent comes, goes or changes to a status that changes its
+  // creature; a turn that ends well its creature shows.
   useEffect(() => {
     if (!engine) return;
     const last = new Map(agents.map((a) => [a.tileId, statusOf(a.tileId)]));
     let sent = "";
     const send = () => {
-      const sharks = roster(agents, statusOf);
-      const key = rosterKey(sharks);
+      const creatures = roster(agents, statusOf);
+      const key = rosterKey(creatures);
       if (key === sent) return;
       sent = key;
-      engine.setRoster(sharks);
+      engine.setRoster(creatures);
     };
     send();
     let replaying = true;
@@ -132,5 +136,5 @@ export function Shoal({ agents, paused, animate, frosted, seeThrough, page, text
     return off;
   }, [engine, agents]);
 
-  return <div ref={hostRef} className="hm-shoal" />;
+  return <div ref={hostRef} className="hm-live" />;
 }

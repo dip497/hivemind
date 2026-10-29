@@ -1,15 +1,15 @@
 /**
- * The page's side of the Shoal. It puts a canvas in its host, hands it to the scene's worker
- * (scene.ts), where the simulation and its drawing run, and tells it what changes. What stays on
+ * The page's side of a live wallpaper. It puts a canvas in its host, hands it to the scene's worker
+ * (worker.ts), where the simulation and its drawing run, and tells it what changes. What stays on
  * the page is cheap: the canvas's size and pixel ratio, the font, the pointer over empty canvas (at
  * most once a frame, and only while it is there), a click on the water, and what the component
  * passes on. Each engine makes its own canvas: one can be handed to a worker only once.
  */
-import ShoalWorker from "./scene?worker";
-import type { FaceSource, ShoalMessage, ShoalMode } from "./scene";
-import type { Box, SharkSpec } from "./world";
+import SceneWorker from "./worker?worker";
+import type { Box, CreatureSpec, Look, SceneMode } from "./scene";
+import type { FaceSource, SceneId, SceneMessage } from "./worker";
 
-export type { ShoalMode };
+export type { SceneId };
 
 /** Empty canvas: the pane itself, not a tile, a frame or a panel over it. */
 const overWater = (e: PointerEvent) => e.target instanceof Element && e.target.classList.contains("react-flow__pane");
@@ -42,8 +42,8 @@ function facesOf(stack: string): FaceSource[] {
   return (at600.length ? at600 : all).map(({ bold: _bold, ...f }) => f);
 }
 
-export class ShoalEngine {
-  private worker = new ShoalWorker();
+export class LiveEngine {
+  private worker = new SceneWorker();
   private canvas = document.createElement("canvas");
   private font: string;
   private resizeObserver: ResizeObserver;
@@ -52,11 +52,11 @@ export class ShoalEngine {
   private pointerQueued = false;
   private stopRatio = () => {};
 
-  constructor(private host: HTMLElement) {
+  constructor(private host: HTMLElement, scene: SceneId) {
     host.appendChild(this.canvas);
     this.font = getComputedStyle(host).fontFamily;
     const offscreen = this.canvas.transferControlToOffscreen();
-    this.post({ type: "start", canvas: offscreen, font: this.font, faces: facesOf(this.font) }, [offscreen]);
+    this.post({ type: "start", scene, canvas: offscreen, font: this.font, faces: facesOf(this.font) }, [offscreen]);
     this.resizeObserver = new ResizeObserver(() => this.resize());
     this.resizeObserver.observe(this.canvas);
     window.addEventListener("pointermove", this.onPointerMove, { passive: true });
@@ -86,12 +86,12 @@ export class ShoalEngine {
     this.post({ type: "font", font, faces: facesOf(font) });
   }
 
-  setColours(page: number, text: number) {
-    this.post({ type: "colours", page, text });
+  setLook(look: Look) {
+    this.post({ type: "look", look });
   }
 
-  setRoster(sharks: SharkSpec[]) {
-    this.post({ type: "roster", sharks });
+  setRoster(creatures: CreatureSpec[]) {
+    this.post({ type: "roster", creatures });
   }
 
   /** Where the tiles and panels are on the screen, and whether the tiles are see-through. */
@@ -99,17 +99,17 @@ export class ShoalEngine {
     this.post({ type: "boxes", boxes, seeThrough });
   }
 
-  /** An agent finished a turn: its shark bites. */
+  /** An agent finished a turn: its creature shows it. */
   finished(key: string) {
     this.post({ type: "finished", key });
   }
 
-  setMode(mode: ShoalMode) {
+  setMode(mode: SceneMode) {
     this.running = mode === "run";
     this.post({ type: "mode", mode });
   }
 
-  private post(m: ShoalMessage, transfer: Transferable[] = []) {
+  private post(m: SceneMessage, transfer: Transferable[] = []) {
     this.worker.postMessage(m, transfer);
   }
 

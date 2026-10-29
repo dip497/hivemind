@@ -100,8 +100,8 @@ function themedLook(cur: Settings, theme: Theme, urls: Map<string, string>): { a
   const a = cur.appearance;
   const w = theme.wallpaper;
   const wallpaper: Appearance["wallpaper"] = !w ? a.wallpaper
-    : "image" in w ? { kind: "image", imageSrc: urls.get(w.image), videoSrc: a.wallpaper.videoSrc, brightness: w.brightness ?? a.wallpaper.brightness }
-    : "video" in w ? { kind: "video", videoSrc: urls.get(w.video), imageSrc: a.wallpaper.imageSrc, brightness: w.brightness ?? a.wallpaper.brightness }
+    : "image" in w ? { ...a.wallpaper, kind: "image", imageSrc: urls.get(w.image), brightness: w.brightness ?? a.wallpaper.brightness }
+    : "video" in w ? { ...a.wallpaper, kind: "video", videoSrc: urls.get(w.video), brightness: w.brightness ?? a.wallpaper.brightness }
     : { ...a.wallpaper, kind: w.kind, brightness: w.brightness ?? a.wallpaper.brightness };
   const { ui, mono } = theme.fonts ?? {};
   const fontFaces: FontFaces = { ...(ui ? { ui: faceSet(ui, urls) } : {}), ...(mono ? { mono: faceSet(mono, urls) } : {}) };

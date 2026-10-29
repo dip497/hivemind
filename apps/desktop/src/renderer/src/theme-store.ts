@@ -15,7 +15,7 @@
  */
 import { useSyncExternalStore } from "react";
 import {
-  ACCENTS, ANCHORS, PALETTE_KEYS, WALLPAPERS, flattenAppearance, getPath, guestTheme, nestAppearance,
+  ACCENTS, ANCHORS, PALETTE_KEYS, WALLPAPERS, flattenAppearance, getPath, guestTheme, isLiveScene, nestAppearance,
   type AccentId, type Appearance, type FlatTheme, type MediaAnchor, type MediaFit, type MediaLayer, type ThemePreset, type WallpaperId,
 } from "@hivemind/core/settings-schema";
 import { accentOf, presetPaths, withPreset, type AccentColors, type FontFaces } from "@hivemind/core/appearance-extra";
@@ -30,8 +30,8 @@ export type ThemeState = FlatTheme;
 
 /** Legible-over-video defaults (one preset of glass settings, not a theme). */
 export const CINEMATIC: Partial<ThemeState> = { glass: true, blur: 20, opacity: 0.78, videoBrightness: 0.55, contentGlass: false, animate: true };
-/** Shoal seen through the tools (another preset of glass settings): thin frosted panels and tool
- *  content frosted too, so the sharks show behind both, softened behind the text. */
+/** A live scene seen through the tools (another preset of glass settings): thin frosted panels and
+ *  tool content frosted too, so its creatures show behind both, softened behind the text. */
 export const SEE_THROUGH: Partial<ThemeState> = { glass: true, blur: 14, opacity: 0.5, contentGlass: true, contentOpacity: 0.45 };
 
 /** The person's own theme, as their settings say. */
@@ -84,9 +84,9 @@ export function isWallpaperActive(): boolean { return fullWallpaper; }
 /** Whether the wallpaper is drawn: behind glass, which is the person's, or a theme's without it.
  *  A theme's wallpaper is part of its look, so it shows whether or not glass is on. */
 export function wallpaperDrawn(t: Pick<ThemeState, "glass" | "wallpaper" | "themeId"> = state): boolean {
-  // Shoal shows without glass too: it pictures the agents between the tools. With glass, its
-  // sharks show through the frosted panels (shoal/Shoal.tsx).
-  return t.wallpaper !== "none" && (t.glass || !!t.themeId || t.wallpaper === "shoal");
+  // A live scene shows without glass too: it pictures the agents between the tools. With glass,
+  // its creatures show through the frosted panels (live/LiveWallpaper.tsx).
+  return t.wallpaper !== "none" && (t.glass || !!t.themeId || isLiveScene(t.wallpaper));
 }
 /** Glass as it applies right now. */
 export function effectiveGlass(t: ThemeState = state): boolean {
@@ -208,6 +208,8 @@ function paintTheme(t: ThemeState): void {
   root.style.setProperty("--wp-brightness", String(t.videoBrightness ?? 0.85));
   root.style.setProperty("--content-opacity", `${Math.round(t.contentOpacity * 100)}%`);
   root.dataset.wallpaper = t.wallpaper;
+  // A live scene, whose side panel is clear glass (styles.css).
+  root.classList.toggle("live-wallpaper", isLiveScene(t.wallpaper));
   // Palette tokens. The CSS carries the signal values as its fallbacks, so the
   // default preset is a no-op; another preset recolours every surface at once.
   // bg2/3/4 are NOT written here: they derive from --surface-* in CSS, so glass mode can

@@ -24,11 +24,13 @@ import { Input } from "./components/ui/input";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "./components/ui/select";
 import { computerFonts, type ComputerFont } from "./computer-fonts";
 import { Switch as SwitchPrimitive } from "./components/ui/switch";
-import { PRESETS, type TerminalPalette } from "@hivemind/core/settings-schema";
+import { isLiveScene, PRESETS, type LiveSceneId, type TerminalPalette } from "@hivemind/core/settings-schema";
 import { NAMED_FONTS, fontNameOf, fontStack, type FontSlot } from "@hivemind/core/font-names";
 import { cssColorToHex } from "@hivemind/core/css-color";
 import { accentOf } from "@hivemind/core/appearance-extra";
 import { ACCENT_CONTRAST, accentMark, themeSwatches } from "@hivemind/core/theme-format";
+import { lightOf, swatchInk, waterCss } from "./live/palette";
+import { cssColorToHex as hexOf } from "./workspace/css-color";
 import { useSettings } from "./settings-store";
 import {
   ACCENTS, ANCHORS, CINEMATIC, SEE_THROUGH, WALLPAPERS, addOverlay, chooseAccent, chooseAccentColours, choosePreset, removeOverlay, setTheme, updateOverlay, wallpaperDrawn,
@@ -250,8 +252,11 @@ export function ShapeAndTypeControls({ t }: { t: ThemeState }) {
 
 // ── background ──────────────────────────────────────────────────────────────
 
-/** Shoal's swatch: a shark in the characters the scene draws it in, as text (no live preview). */
-const SHOAL_MARK = "   .;%.\n-:t%S8@8%>\n   ';t'";
+/** Each live scene's swatch, a creature in the characters it is drawn in, as text (no live
+ *  preview), and what its creatures are called. */
+const SCENES: Record<LiveSceneId, { mark: string; creatures: string }> = {
+  shoal: { mark: "   .;%.\n-:t%S8@8%>\n   ';t'", creatures: "Sharks" },
+};
 
 /** Filename of a picked media URL, for the "currently using" line. */
 function mediaName(src?: string): string | null {
@@ -272,6 +277,12 @@ export function BackgroundControls({ t }: { t: ThemeState }) {
   };
   const isMedia = t.wallpaper === "video" || t.wallpaper === "image";
   const current = WALLPAPERS.find((w) => w.id === t.wallpaper)?.label ?? "None";
+  const live = isLiveScene(t.wallpaper) ? t.wallpaper : null;
+  // A live scene's swatch in its own colours when Colour is on, else on the page as it draws.
+  const light = lightOf(hexOf(t.palette.bg), hexOf(t.palette.fg));
+  const liveSwatch = (id: LiveSceneId) => t.wallpaperColour
+    ? { background: waterCss(id, light), color: swatchInk(id, light) }
+    : undefined;
   return (
     <>
       {/* The picker is a disclosure: eleven scenes are a rare choice, and an
@@ -286,10 +297,10 @@ export function BackgroundControls({ t }: { t: ThemeState }) {
               : () => setTheme({ wallpaper: w.id });
             return (
               <button key={w.id} type="button" className="settings-wallpaper" role="radio" aria-checked={sel} aria-label={w.label} data-wallpaper-option={w.id} onClick={onClick}>
-                <span className="settings-wallpaper-preview" aria-hidden data-scene={w.id}>
+                <span className="settings-wallpaper-preview" aria-hidden data-scene={w.id} data-live={isLiveScene(w.id) || undefined} style={isLiveScene(w.id) ? liveSwatch(w.id) : undefined}>
                   {w.id === "video" && <Film size={13} />}
                   {w.id === "image" && <ImageIcon size={13} />}
-                  {w.id === "shoal" && <span className="settings-shoal-mark">{SHOAL_MARK}</span>}
+                  {isLiveScene(w.id) && <span className="settings-live-mark">{SCENES[w.id].mark}</span>}
                 </span>
                 <span className="settings-wallpaper-name">{w.label}</span>
               </button>
@@ -321,19 +332,25 @@ export function BackgroundControls({ t }: { t: ThemeState }) {
       {t.wallpaper !== "none" && !wallpaperDrawn(t) && (
         <p className="settings-note">The background shows behind your tools when glass is on.</p>
       )}
-      {t.wallpaper === "shoal" && (
+      {live && (
+        <div className="settings-row">
+          <div><label>Colour</label><p>In its own colours: the water, what lives in it, the light coming down. Off, it is drawn in your theme's page and text colours.</p></div>
+          <Switch on={t.wallpaperColour} onChange={(v) => setTheme({ wallpaperColour: v })} label={`Draw ${current} in its own colours`} />
+        </div>
+      )}
+      {live && (
         <div className="settings-row">
           <div>
-            <label>Sharks behind your tools</label>
+            <label>{SCENES[live].creatures} behind your tools</label>
             <p>
               {!t.glass
-                ? "Panels and tiles are solid over Shoal."
+                ? `Panels and tiles are solid over ${current}.`
                 : !t.contentGlass
                   ? "They show through the frosted panels. Frost tool content to see them behind your agents too."
                   : "They show through the frosted panels and tiles, softened behind the text."}
             </p>
           </div>
-          <Button variant="outline" title="Thin frosted panels and tiles, so the sharks show behind your agents" onClick={() => setTheme(SEE_THROUGH)}>See-through</Button>
+          <Button variant="outline" title={`Thin frosted panels and tiles, so the ${SCENES[live].creatures.toLowerCase()} show behind your agents`} onClick={() => setTheme(SEE_THROUGH)}>See-through</Button>
         </div>
       )}
     </>

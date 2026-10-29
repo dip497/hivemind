@@ -1,22 +1,26 @@
 /** Workspace decoration. Its media and CSS motion pause when covered by Settings. */
 import { useEffect, useRef, useState } from "react";
+import { isLiveScene } from "@hivemind/core/settings-schema";
 import { useTheme, wallpaperDrawn } from "./theme-store";
 import { useWorkspaceOccluded } from "./workspace-occlusion";
-import { Shoal } from "./shoal/Shoal";
-import type { ShoalAgent } from "./shoal/roster";
+import { LiveWallpaper } from "./live/LiveWallpaper";
+import { lightOf, waterCss } from "./live/palette";
+import { cssColorToHex } from "./workspace/css-color";
+import type { SceneAgent } from "./live/roster";
 
-const NO_AGENTS: readonly ShoalAgent[] = [];
+const NO_AGENTS: readonly SceneAgent[] = [];
 
 /**
  * `embedded` renders the SAME scene as an absolute fill (position:absolute,
  * z-index:0) of its positioned parent instead of the default fixed full-window
  * layer — used by the terminal fit-to-screen overlay so the fullscreen terminal
  * sits over a clean copy of the live wallpaper (not the canvas + other tiles).
- * `agents` are the workspace's agents, for a scene that draws them (Shoal). `live` is false behind
- * a plugin view, which paints its own scene: Shoal shows its water's colour there and runs nothing.
+ * `agents` are the workspace's agents, for a live scene, which draws them (Shoal). `live` is false
+ * behind a plugin view, which paints its own scene: a live scene shows its water there and runs
+ * nothing.
  */
-export function Wallpaper({ embedded = false, covering = false, agents = NO_AGENTS, live = true }: { embedded?: boolean; covering?: boolean; agents?: readonly ShoalAgent[]; live?: boolean } = {}): React.ReactElement | null {
-  const { glass, contentGlass, wallpaper, videoSrc, imageSrc, themeId, animate, palette, monoFont } = useTheme();
+export function Wallpaper({ embedded = false, covering = false, agents = NO_AGENTS, live = true }: { embedded?: boolean; covering?: boolean; agents?: readonly SceneAgent[]; live?: boolean } = {}): React.ReactElement | null {
+  const { glass, contentGlass, wallpaper, wallpaperColour, videoSrc, imageSrc, themeId, animate, palette, monoFont } = useTheme();
   const cls = embedded ? " embedded" : "";
   const [inactive, setInactive] = useState(false);
   const occluded = useWorkspaceOccluded();
@@ -84,13 +88,13 @@ export function Wallpaper({ embedded = false, covering = false, agents = NO_AGEN
   const sceneEl: React.ReactElement | null = (() => {
     if (!wallpaperDrawn({ glass, wallpaper, themeId })) return null;
 
-    // Shoal: drawn live on a canvas in the theme's own colours, its sharks the agents. Only the
-    // full-window copy behind the app's own views runs it; a copy behind a fullscreen tile or a
-    // docked slot is covered by the tile, so it shows the water's colour alone.
-    if (wallpaper === "shoal") {
+    // A live scene (Shoal, Koi Pond …): drawn on a canvas in the theme's colours or its own, its
+    // creatures the agents. Only the full-window copy behind the app's own views runs it; a copy
+    // behind a fullscreen tile or a docked slot is covered by the tile, so it shows the water alone.
+    if (isLiveScene(wallpaper)) {
       return (
-        <div className={`hm-wallpaper${cls}`} data-scene="shoal" aria-hidden="true">
-          {!embedded && live && <Shoal agents={agents} paused={paused} animate={animate} frosted={glass} seeThrough={contentGlass} page={palette.bg} text={palette.fg} monoFont={monoFont} />}
+        <div className={`hm-wallpaper${cls}`} data-scene={wallpaper} style={{ background: wallpaperColour ? waterCss(wallpaper, lightOf(cssColorToHex(palette.bg), cssColorToHex(palette.fg))) : "var(--color-bg)" }} aria-hidden="true">
+          {!embedded && live && <LiveWallpaper scene={wallpaper} colour={wallpaperColour} agents={agents} paused={paused} animate={animate} frosted={glass} seeThrough={contentGlass} page={palette.bg} text={palette.fg} monoFont={monoFont} />}
         </div>
       );
     }

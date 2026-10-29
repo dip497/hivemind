@@ -14,14 +14,23 @@
  *
  * On a dark theme a shark is light on the dark water, as in the original. On a light one it is
  * ink on paper: mid-grey blocks with darker characters in them, its edges fading to the page.
+ *
+ * With Colour on, the same tones are steps of the scene's own colours (palette.ts) in place of
+ * the page and the text: a reef's water with light coming down through it, a sea bed, fish in
+ * their colours and each kind of shark in its skin's.
  */
-import { clamp, hash3, smoothstep } from "./math";
-import { SHARK_NODES, type Box, type Shark, type SharkKind, type World } from "./world";
+import { paintWater, Shafts, waterOf, type Water } from "../backdrop";
+import { CellRenderer, paintGrid } from "../cells";
+import { css, mix, ramp as rampOf, RAMP, rgbOf, type Oklch } from "../colour";
+import { clamp, hash3, smoothstep } from "../math";
+import { lightOf } from "../palette";
+import type { Box, Look } from "../scene";
+import { SHOAL_PALETTE, type ShoalPalette } from "./palette";
+import { Seabed, type BedColour } from "./seabed";
+import { SHARK_NODES, type Shark, type SharkKind, type World } from "./world";
 
 const ALPHA_LEVELS = 6;
 const FISH_LEVELS = [0.28, 0.42, 0.58, 0.74, 0.9];
-/** Steps from the page colour (0) to the text colour (RAMP). */
-const RAMP = 64;
 /** How far toward the text colour the wake's dots go at their brightest. */
 const WAKE_REACH = 0.5;
 /**
@@ -37,6 +46,10 @@ const INK = {
   edge: 0.05, edgeSpan: 0.12, edgeGlyph: 0.14,
   fish: 0.36, wake: 0.32, grid: 0.015,
 };
+/** Dark water in the scene's own colours is lighter than black, and a shark drawn at the plain
+ *  levels sank into it: its skin is lifted to `base + span` of its levels, its eyes and markings
+ *  kept dark on it. */
+const LIFT = { base: 0.28, span: 0.8 };
 /** How far toward the text a shark under a see-through tile goes, against one in open water: it
  *  is seen through the tile's tint, softened, behind the tile's text. */
 const SOFT = 0.55;
@@ -267,53 +280,7 @@ function inTriangle(
   return !(neg && pos);
 }
 
-/** Which cells (`cols` by `rows`, each `cw` by `ch`) are under a tile or a panel, or in a gap
- *  narrower than a cell between two: a cell whose centre is within half a cell of a box. A shark is
- *  not drawn there, so one passing under a block of tiles does not show through its seams. */
-export function coveredCells(boxes: readonly Box[], cols: number, rows: number, cw: number, ch: number): Uint8Array<ArrayBuffer> {
-  const out = new Uint8Array(cols * rows);
-  for (const b of boxes) {
-    const c0 = Math.max(0, Math.ceil(b.x0 / cw - 1));
-    const c1 = Math.min(cols - 1, Math.floor(b.x1 / cw));
-    const r0 = Math.max(0, Math.ceil(b.y0 / ch - 1));
-    const r1 = Math.min(rows - 1, Math.floor(b.y1 / ch));
-    for (let r = r0; r <= r1; r++) out.fill(1, r * cols + c0, r * cols + c1 + 1);
-  }
-  return out;
-}
-
-/** A faint cell grid, snapped to device pixels. */
-function paintGrid(g: OffscreenCanvasRenderingContext2D, W: number, H: number, cw: number, ch: number, dpr: number, stroke: string) {
-  g.setTransform(1, 0, 0, 1, 0, 0);
-  g.strokeStyle = stroke;
-  g.lineWidth = 1;
-  g.beginPath();
-  for (let c = 0; c <= Math.ceil(W / cw); c++) {
-    const x = Math.round(c * cw * dpr) + 0.5;
-    g.moveTo(x, 0);
-    g.lineTo(x, H * dpr);
-  }
-  for (let r = 0; r <= Math.ceil(H / ch); r++) {
-    const y = Math.round(r * ch * dpr) + 0.5;
-    g.moveTo(0, y);
-    g.lineTo(W * dpr, y);
-  }
-  g.stroke();
-}
-
-export class AsciiRenderer {
-  private ctx: OffscreenCanvasRenderingContext2D;
-  /** The page colour and its grid, painted once per size and theme and copied in each frame. */
-  private bg = new OffscreenCanvas(1, 1);
-  private dpr = 1;
-  private width = 0;
-  private height = 0;
-  private cw = 12;
-  private ch = 18;
-  private cols = 0;
-  private rows = 0;
-  private fontFamily = "ui-monospace, Menlo, monospace";
-
+export class AsciiRenderer extends CellRenderer {
   private energy = new Float32Array(0);
   private energyTmp = new Float32Array(0);
   private heat = new Float32Array(0);
@@ -335,23 +302,6 @@ export class AsciiRenderer {
   private sharkKey = new Uint32Array(0);
   private sharkDepth = new Float32Array(0);
   private sharkKind = new Uint8Array(0);
-  /** The tiles and panels as last told, and the cells they cover (`coveredCells`). */
-  private boxes: readonly Box[] = [];
-  private cover = new Uint8Array(0);
-  /** The tiles are see-through: a shark under one is drawn soft, not left out. */
-  private seeThrough = false;
-  /** One pixel a cell, what is under the see-through tiles this frame, drawn scaled up and smoothed
-   *  over them: a shark behind frosted glass. */
-  private soft = new OffscreenCanvas(1, 1);
-  private softCtx: OffscreenCanvasRenderingContext2D | null = null;
-  private softData: ImageData | null = null;
-  private softPixels = new Uint32Array(0);
-  private softAny = false;
-  /** The cells this frame's soft pixels span, so only that much is drawn scaled up. */
-  private softC0 = 0;
-  private softC1 = 0;
-  private softR0 = 0;
-  private softR1 = 0;
   private spine = new Float32Array(SHARK_NODES * 2);
   private arc = new Float32Array(SHARK_NODES);
   private arcTotal = 1;
@@ -379,20 +329,75 @@ export class AsciiRenderer {
   /** Cells holding a fish this frame (frame stamp); dots skip them. */
   private fishStamp = new Uint32Array(0);
   private frameId = 0;
-  /** Fish cells bucketed by brightness, so each bucket is one fillStyle. */
+  /** Fish cells bucketed by species (in colour) and brightness, so each bucket is one fillStyle. */
   private fishBuckets: number[][] = FISH_LEVELS.map(() => []);
   private fishStyles: string[] = [];
 
-  constructor(private canvas: OffscreenCanvas) {
-    const ctx = canvas.getContext("2d", { alpha: false });
-    if (!ctx) throw new Error("2D canvas unavailable");
-    this.ctx = ctx;
+  /** Drawn in the scene's own colours (`setLook`): its palette, and the water it makes. */
+  private colour: ShoalPalette | null = null;
+  private water: Water | null = null;
+  private shafts = new Shafts();
+  private seabed = new Seabed();
+  /** The bed's still cells, drawn once into a layer the height of the bed, and drawn again only
+   *  when the grid, the look or the cells the tiles cover change. */
+  private bed = new OffscreenCanvas(1, 1);
+  private bedTop = 0;
+  private bedFresh = false;
+  /** Each part of the bed's block and character. */
+  private bedStyles = {} as Record<BedColour, { block: string; glyph: string }>;
+  private weedStyles: { block: string; glyph: string }[] = [];
+
+  constructor(canvas: OffscreenCanvas) {
+    super(canvas);
     this.setColours(0x000000, 0xffffff);
+  }
+
+  /** The theme's page and text colours, and whether the scene is drawn in its own instead. */
+  setLook(look: Look) {
+    if (!look.colour) {
+      this.colour = null;
+      this.water = null;
+      this.shafts.setLook(null);
+      this.setColours(look.page, look.text);
+      return;
+    }
+    this.light = lightOf(look.page, look.text);
+    const p = (this.colour = SHOAL_PALETTE[this.light ? "light" : "dark"]);
+    this.water = waterOf(p);
+    this.shafts.setLook(this.water.shafts);
+    // The middle of the water: what a fish, the wake and a flash fade into.
+    const mid = rgbOf(p.water[1]!);
+    const shadow = rgbOf(p.shadow);
+    const kinds = KIND_LIST.map((k) => rampOf(shadow, rgbOf(p.kinds[k])));
+    this.kindRamps = kinds.map((k) => k.styles);
+    this.kindPixels = kinds.map((k) => k.pixels);
+    this.ramp = rampOf(mid, rgbOf(p.flash)).styles;
+    const wake = rampOf(mid, rgbOf(p.wake)).styles;
+    const reach = this.light ? INK.wake : WAKE_REACH;
+    this.wakeStyles = Array.from({ length: ALPHA_LEVELS }, (_, l) => this.tone((reach * (l + 1)) / ALPHA_LEVELS, wake));
+    this.fishStyles = p.fish.flatMap((c) => {
+      const r = rampOf(mid, rgbOf(c)).styles;
+      return FISH_LEVELS.map((a) => this.tone(0.3 + 0.7 * a, r));
+    });
+    this.fishBuckets = this.fishStyles.map(() => []);
+    const bed = p.seabed;
+    // A part's block is its colour half faded into the deep water it stands in: its characters
+    // stand out on it, as a shark's do.
+    const deep = rgbOf(p.water[p.water.length - 1]!);
+    const style = (c: Oklch, k = 0.5) => ({ block: css(mix(deep, rgbOf(c), k)), glyph: css(rgbOf(c)) });
+    this.bedStyles = {
+      // The sand less faded: half into blue water it went grey.
+      sand: style(bed.sand, 0.75), rock: style(bed.rock), fan: style(bed.fan), brain: style(bed.brain),
+      coral0: style(bed.corals[0]!), coral1: style(bed.corals[1]!), coral2: style(bed.corals[2]!),
+    };
+    this.weedStyles = bed.weeds.map((c) => style(c));
+    this.bedFresh = false;
+    if (this.cols) this.repaintBackground();
   }
 
   /** The theme's page and text colours, as 0xRRGGBB. Every colour the scene draws is a step
    *  between them, so a theme change is one call and a frame never builds a colour string. */
-  setColours(page: number, text: number) {
+  private setColours(page: number, text: number) {
     const ch = (c: number, k: number) => (c >> k) & 255;
     const hex = (n: number) => `#${n.toString(16).padStart(6, "0")}`;
     const luma = (c: number) => 0.2126 * ch(c, 16) + 0.7152 * ch(c, 8) + 0.0722 * ch(c, 0);
@@ -418,7 +423,8 @@ export class AsciiRenderer {
     const wake = this.light ? INK.wake : WAKE_REACH;
     this.wakeStyles = Array.from({ length: ALPHA_LEVELS }, (_, l) => this.tone((wake * (l + 1)) / ALPHA_LEVELS));
     this.fishStyles = FISH_LEVELS.map((a) => this.tone(a * (this.light ? INK.fish : 0.9)));
-    if (this.cols) this.paintBackground();
+    this.fishBuckets = FISH_LEVELS.map(() => []);
+    if (this.cols) this.repaintBackground();
   }
 
   /** The step `t` (0 page … 1 text) of a ramp, the plain one by default. */
@@ -426,75 +432,42 @@ export class AsciiRenderer {
     return ramp[clamp(Math.round(t * RAMP), 0, RAMP)]!;
   }
 
-  get cellWidth() {
-    return this.cw;
-  }
-
-  get cellHeight() {
-    return this.ch;
-  }
-
-  setFontFamily(family: string) {
-    if (family) this.fontFamily = family;
+  protected allocate(n: number) {
+    this.energy = new Float32Array(n);
+    this.energyTmp = new Float32Array(n);
+    this.heat = new Float32Array(n);
+    this.bucketOf = new Uint8Array(n);
+    this.bucketOrder = new Int32Array(n);
+    this.sharkFlag = new Uint8Array(n);
+    this.sharkShade = new Float32Array(n);
+    this.sharkKey = new Uint32Array(n);
+    this.sharkDepth = new Float32Array(n);
+    this.sharkKind = new Uint8Array(n);
+    this.fishStamp = new Uint32Array(n);
+    this.seabed.build(this.cols, this.rows);
+    this.bedFresh = false;
   }
 
   resize(width: number, height: number, dpr: number) {
-    const prevCols = this.cols;
-    const prevRows = this.rows;
-    this.width = width;
-    this.height = height;
-    this.dpr = dpr;
-    // Cells from the shorter side, as the sharks are: a shark is some 48 cells long, as in the
-    // original's demo, on any shape of window (from the width alone, a wide one drew it coarser).
-    this.cw = clamp(Math.round(Math.min(width, height) / 110), 7, 13);
-    this.ch = Math.round(this.cw * 1.45);
-    this.cols = Math.ceil(width / this.cw);
-    this.rows = Math.ceil(height / this.ch);
-
-    this.canvas.width = Math.round(width * dpr);
-    this.canvas.height = Math.round(height * dpr);
-    this.bg.width = this.canvas.width;
-    this.bg.height = this.canvas.height;
-
-    const n = this.cols * this.rows;
-    if (this.cols !== prevCols || this.rows !== prevRows) {
-      this.energy = new Float32Array(n);
-      this.energyTmp = new Float32Array(n);
-      this.heat = new Float32Array(n);
-      this.bucketOf = new Uint8Array(n);
-      this.bucketOrder = new Int32Array(n);
-      this.sharkFlag = new Uint8Array(n);
-      this.sharkShade = new Float32Array(n);
-      this.sharkKey = new Uint32Array(n);
-      this.sharkDepth = new Float32Array(n);
-      this.sharkKind = new Uint8Array(n);
-      this.fishStamp = new Uint32Array(n);
-      this.soft = new OffscreenCanvas(this.cols, this.rows);
-      this.softCtx = this.soft.getContext("2d");
-      this.softData = this.softCtx?.createImageData(this.cols, this.rows) ?? null;
-      this.softPixels = this.softData ? new Uint32Array(this.softData.data.buffer) : new Uint32Array(0);
-    }
-    this.cover = coveredCells(this.boxes, this.cols, this.rows, this.cw, this.ch);
-    this.paintBackground();
+    super.resize(width, height, dpr);
+    this.shafts.resize(width, height);
+    this.bedFresh = false;
   }
 
-  /** Where the tiles and panels are on the screen, and whether the tiles are see-through: a shark
-   *  under a solid one is not drawn, one under a see-through one is drawn soft. Told once a second,
-   *  and each frame while the canvas moves; the cells are worked out again only when one has moved. */
   setBoxes(boxes: readonly Box[], seeThrough: boolean) {
-    const same = boxes.length === this.boxes.length && boxes.every((b, i) => {
-      const o = this.boxes[i]!;
-      return b.x0 === o.x0 && b.y0 === o.y0 && b.x1 === o.x1 && b.y1 === o.y1;
-    });
-    this.boxes = boxes;
-    this.seeThrough = seeThrough;
-    if (!same && this.cols) this.cover = coveredCells(boxes, this.cols, this.rows, this.cw, this.ch);
+    const moved = super.setBoxes(boxes, seeThrough);
+    if (moved) this.bedFresh = false;
+    return moved;
   }
 
-  private paintBackground() {
+  protected paintBackground() {
     const g = this.bg.getContext("2d");
     if (!g) return;
     const { width: W, height: H, dpr, cw, ch } = this;
+    if (this.water) {
+      paintWater(g, W, H, cw, ch, dpr, this.water);
+      return;
+    }
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
     g.fillStyle = this.tone(0);
     g.fillRect(0, 0, W, H);
@@ -512,7 +485,8 @@ export class AsciiRenderer {
     this.diffuse(dt);
 
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.drawImage(this.bg, 0, 0);
+    ctx.drawImage(this.colour ? this.shafts.backdrop(this.bg, this.bgVersion, t, dpr) : this.bg, 0, 0);
+    if (this.colour) this.drawBed(t);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
     this.markFish(world);
@@ -529,56 +503,80 @@ export class AsciiRenderer {
     this.drawHeat();
   }
 
-  /** What is under the see-through tiles, one pixel a cell, scaled up smoothly over them: soft,
-   *  with no characters for the tile's own text to run through. */
-  private drawSoft() {
-    const { ctx, soft, softCtx, softData, cols, rows, cw, ch } = this;
-    this.softAny = false;
-    if (!softCtx || !softData) return;
-    // Only the cells the soft pixels span, and one more round them for the smoothing to fade into.
-    const c0 = Math.max(0, this.softC0 - 1);
-    const r0 = Math.max(0, this.softR0 - 1);
-    const w = Math.min(cols, this.softC1 + 2) - c0;
-    const h = Math.min(rows, this.softR1 + 2) - r0;
-    softCtx.putImageData(softData, 0, 0, c0, r0, w, h);
-    ctx.save();
-    ctx.beginPath();
-    for (const b of this.boxes) ctx.rect(b.x0 - cw / 2, b.y0 - ch / 2, b.x1 - b.x0 + cw, b.y1 - b.y0 + ch);
-    ctx.clip();
-    ctx.imageSmoothingEnabled = true;
-    // Plain bilinear: softer than the "high" filter, which rings round a dark fin, and a quarter
-    // of its cost (2.3 against 6 ms a frame at 1440×900 in software, 7 against 26 at 2×).
-    ctx.imageSmoothingQuality = "low";
-    ctx.drawImage(soft, c0, r0, w, h, c0 * cw, r0 * ch, w * cw, h * ch);
-    ctx.restore();
-    for (let r = r0; r < r0 + h; r++) this.softPixels.fill(0, r * cols + c0, r * cols + c0 + w);
+  /** The sea bed: its still cells from their layer, drawn again first if anything changed, and
+   *  the weed where it has swayed to. Nothing of it under a tile: like the fish, it is water. */
+  private drawBed(t: number) {
+    const { ctx, dpr, cols, rows, cw, ch, cover, seabed } = this;
+    if (!this.bedFresh) this.paintBed();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.drawImage(this.bed, 0, Math.round(this.bedTop * ch * dpr));
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.font = `600 ${Math.round(ch * 0.74)}px ${this.fontFamily}`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    for (const w of seabed.weeds) {
+      const style = this.weedStyles[w.colour]!;
+      let below = 0;
+      for (let k = 0; k < w.height; k++) {
+        const r = w.foot - k;
+        const off = Seabed.sway(w, k, t);
+        const c = w.c + off;
+        const lean = off - below;
+        below = off;
+        if (r < 0 || c < 0 || c >= cols || r >= rows || cover[r * cols + c]) continue;
+        const x = c * cw;
+        const y = r * ch;
+        // A thin blade: its foot a block, the rest bare characters.
+        if (k < 2) {
+          ctx.fillStyle = style.block;
+          ctx.fillRect(x + 1, y + 1, cw - 1, ch - 1);
+        }
+        ctx.fillStyle = style.glyph;
+        const glyph = k === w.height - 1 ? "'" : lean < 0 ? "\\" : lean > 0 ? "/" : Math.sin(t * 0.7 + w.phase - k * 0.42) >= 0 ? ")" : "(";
+        ctx.fillText(glyph, x + cw / 2, y + ch / 2 + 1);
+      }
+    }
+  }
+
+  private paintBed() {
+    const { dpr, cols, cw, ch, cover, seabed } = this;
+    this.bedFresh = true;
+    let top = this.rows;
+    for (const b of seabed.cells) top = Math.min(top, b.r);
+    this.bedTop = top;
+    const w = Math.max(1, Math.round(cols * cw * dpr));
+    const h = Math.max(1, Math.round((this.rows - top) * ch * dpr));
+    if (this.bed.width !== w || this.bed.height !== h) {
+      this.bed.width = w;
+      this.bed.height = h;
+    }
+    const g = this.bed.getContext("2d");
+    if (!g) return;
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.clearRect(0, 0, w, h);
+    g.setTransform(dpr, 0, 0, dpr, 0, -top * ch * dpr);
+    g.font = `600 ${Math.round(ch * 0.74)}px ${this.fontFamily}`;
+    g.textAlign = "center";
+    g.textBaseline = "middle";
+    for (const b of seabed.cells) {
+      if (cover[b.r * cols + b.c]) continue;
+      const style = this.bedStyles[b.colour];
+      if (b.block) {
+        g.fillStyle = style.block;
+        g.fillRect(b.c * cw + 1, b.r * ch + 1, cw - 1, ch - 1);
+      }
+      if (b.glyph === " ") continue;
+      g.fillStyle = style.glyph;
+      g.fillText(b.glyph, b.c * cw + cw / 2, b.r * ch + ch / 2 + 1);
+    }
   }
 
   /** A shark's cell under a see-through tile, `t` toward the text as it would be drawn. */
   private softCell(i: number, t: number, kind: number) {
-    this.softPixels[i] = this.kindPixels[kind]![clamp(Math.round(t * SOFT * RAMP), 0, RAMP)]!;
-    const c = i % this.cols;
-    const r = (i / this.cols) | 0;
-    if (!this.softAny) {
-      this.softAny = true;
-      this.softC0 = this.softC1 = c;
-      this.softR0 = this.softR1 = r;
-      return;
-    }
-    if (c < this.softC0) this.softC0 = c;
-    else if (c > this.softC1) this.softC1 = c;
-    if (r < this.softR0) this.softR0 = r;
-    else if (r > this.softR1) this.softR1 = r;
+    this.softPixel(i, this.kindPixels[kind]![clamp(Math.round(t * SOFT * RAMP), 0, RAMP)]!);
   }
 
   // ── simulation → field ──────────────────────────────────────────────
-
-  private cellIndex(x: number, y: number) {
-    const c = Math.floor(x / this.cw);
-    const r = Math.floor(y / this.ch);
-    if (c < 0 || r < 0 || c >= this.cols || r >= this.rows) return -1;
-    return r * this.cols + c;
-  }
 
   private stamp(field: Float32Array, x: number, y: number, radius: number, amount: number) {
     const c0 = Math.floor(x / this.cw);
@@ -827,7 +825,7 @@ export class AsciiRenderer {
       const N = SHARK_NODES;
       const n = sh.nodes;
       const swim = clamp(sh.speed / 60, 0.4, 1.4);
-      this.shape = SHAPES[sh.kind];
+      this.shape = SHAPES[sh.kind as SharkKind];
       this.sharkId = sh.id;
 
       // Travelling body wave, growing toward the tail.
@@ -937,7 +935,7 @@ export class AsciiRenderer {
           const key = (hash3(Math.round(s * 52), Math.round(v / (cw * 0.9)), sh.id) * 4294967295) >>> 0;
           sharkKey[i] = key;
           sharkDepth[i] = sh.depth;
-          sharkKind[i] = KIND_INDEX[sh.kind];
+          sharkKind[i] = KIND_INDEX[sh.kind as SharkKind];
 
           if (centerHit && coverage >= 0.6) {
             sharkFlag[i] = flag;
@@ -1023,7 +1021,7 @@ export class AsciiRenderer {
           ink = roll < 0.04 ? Math.max(0, block - INK.glint) : block + INK.glyph;
         }
       } else {
-        block = lit;
+        block = this.colour && flag !== FLAG_EYE && flag !== FLAG_MARK ? LIFT.base + LIFT.span * lit : lit;
         if (flag === FLAG_EYE) ink = 0.62;
         else if (flag === FLAG_MARK) ink = 0.27;
         else if (roll < 0.05) ink = 1;
@@ -1059,7 +1057,8 @@ export class AsciiRenderer {
         fishStamp[i] = frame;
         const glint = clamp(Math.abs(f.turn) / 3.5, 0, 1);
         const v = 0.3 + (0.4 * (f.depth - 0.55)) / 0.45 + 0.3 * Math.max(glint, f.alarm);
-        fishBuckets[clamp(Math.floor(v * FISH_LEVELS.length), 0, FISH_LEVELS.length - 1)]!.push(i);
+        const level = clamp(Math.floor(v * FISH_LEVELS.length), 0, FISH_LEVELS.length - 1);
+        fishBuckets[(this.colour ? f.species * FISH_LEVELS.length : 0) + level]!.push(i);
       }
     }
   }
