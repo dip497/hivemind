@@ -9,6 +9,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+## [2026.10.8] — 2026-10-30
+
 - Fixed: on light themes other than Clean Light, such as Tokyo Night Day, Gruvbox Light and Catppuccin Latte, an issue's state on its state picker and its assignee's initial were a little too faint to read; they are darker now.
 - Fixed: an update installed while Hivemind is open waits for a restart. Opening Hivemind again no longer swaps the files under the open window, and an app whose files were already swapped offers "Restart to finish" instead of the same update again.
 - Added: **live wallpapers anyone can make**. A package can now hold live wallpapers (`wallpapers`, each a folder with a `hivemind-wallpaper.json`): a scene of your own drawn behind the canvas, one creature for each of your agents, as Shoal's sharks are. It runs in a sandboxed frame like a view, told only each agent's creature (never a name, a folder or what a terminal shows), where the tiles are, the colours and whether to run, and it can do nothing to your workspace. Settings → Appearance → Background lists installed ones after the built-in scenes; `appearance.wallpaper.kind` takes its id (`@owner/package/name`). A package's `startup.wallpaper` is offered once after install ("Use Dots as your background?"), beside its view when it opens with one. `hive plugins new wallpaper <name>` starts a package holding a working one (`--in <package>` adds one to a package you have), with a PROMPT.md and two skills for your coding agent: **hivemind-live-wallpaper** (building, checking, packaging and publishing one) and **ascii-character-animation** (the craft of drawing in characters). `hive plugins check` draws it in a headless browser against a pretend app, as it does a view; `hive plugins install --json` names `startWallpaper`, with the command to use it; `hive plugins list --kind wallpaper` lists them. A wallpaper that misbehaves (a flood of messages, a busy core, taking the keyboard) is turned off until Hivemind starts again, and the plain background shows. Like a view, its frame can still open a WebRTC connection, which no page policy stops: install them, as views, from people you trust. Guide: [Make a live wallpaper](https://hivemind.griiken.com/guide/live-wallpapers/). HiveHub lists a package that holds one as needing this release.
@@ -2186,7 +2188,8 @@ World, and sandboxed community views), and the e2e/perf harnesses gate every cha
 - **install.sh** — single script for both fresh install and in-place upgrade. Downloads prebuilt binaries from GitHub Releases by default; `--dev` flag clones and builds from source.
 - **GitHub Actions** — `release.yml` (tag-driven build + publish on `v*.*.*`), `ci.yml` (typecheck + build + unit tests on every push / PR).
 
-[Unreleased]: https://github.com/dip497/hivemind/compare/v2026.10.7...HEAD
+[Unreleased]: https://github.com/dip497/hivemind/compare/v2026.10.8...HEAD
+[2026.10.8]: https://github.com/dip497/hivemind/releases/tag/v2026.10.8
 [2026.10.7]: https://github.com/dip497/hivemind/releases/tag/v2026.10.7
 [2026.10.6]: https://github.com/dip497/hivemind/releases/tag/v2026.10.6
 [2026.10.5]: https://github.com/dip497/hivemind/releases/tag/v2026.10.5
