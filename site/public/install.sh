@@ -104,8 +104,9 @@ if [ "\${1:-}" = "uninstall" ]; then
 fi
 # Apply a staged upgrade: when the installer ran while the app was live it could
 # not replace these files in place, so it extracted the new version beside this
-# one. Swap it in now, before launch (this process is the fresh start).
-if [ -d "${appdir}.staged" ]; then
+# one. Swap it in now, before launch, unless the app still runs from these files: started again
+# while open, this hands over to that window, and the swap waits for a real restart.
+if [ -d "${appdir}.staged" ] && ! ps -e -o args= 2>/dev/null | HIVEMIND_PATTERN="$appdir/" awk 'index(\$0, ENVIRON["HIVEMIND_PATTERN"]) && !/pty-daemon\.js/ { found = 1 } END { exit !found }'; then
   rm -rf "$appdir" && mv "${appdir}.staged" "$appdir" && echo "hivemind: applied staged upgrade" >&2
   # The version is only installed once it is the one that starts.
   [ -f "$APP_DIR/.staged-version" ] && mv "$APP_DIR/.staged-version" "$APP_DIR/.installed-version"
