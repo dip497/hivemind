@@ -122,14 +122,14 @@ The mode decides what runs:
 
 | Mode | When | The clock |
 |---|---|---|
-| `run` | the window is in front, the person busy or resting their hands | steps and draws |
-| `hold` | the window is hidden, not in front, or covered | nothing on its own. It draws one frame again, without stepping, only when the size, the look, the creatures or the tiles change |
+| `run` | the window can be seen, in front or not, the person busy or resting their hands | steps and draws |
+| `hold` | the window is minimised or hidden, or the workspace is covered (Settings, a full-screen tile) | nothing on its own. It draws one frame again, without stepping, only when the size, the look, the creatures or the tiles change |
 | `still` | the person turned off **Animate the background**, or the system asks for reduced motion | `settle()` and one draw; the same again on each change |
 
 The first frame is drawn at once in every mode, so a held wallpaper still shows something.
 
 **Why held means you draw nothing of your own.** The app holds the scene because nobody is
-looking: the window is hidden, behind another, or covered. Every frame drawn then is battery spent
+looking: the window is minimised or hidden, or the workspace is covered. Every frame drawn then is battery spent
 on a picture no one sees, on a laptop that thought it was resting. A `setInterval` that "keeps the
 water moving" while held is exactly that. The clock already redraws when something the person
 could see changes.

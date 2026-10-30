@@ -1,9 +1,10 @@
 // A package's live wallpaper in the built app: installed while the app was closed, it is offered
 // once as the background and Use draws it, in its sandboxed frame, told each agent's creature and
 // where their tiles are, by handles that are not the tiles' ids; the pointer over a creature names
-// its agent and a click there goes to its tile; it runs on while the person is idle; its Colour
-// switch reaches it, and See-through leaves the Layers panel clear glass over it. A wallpaper that
-// names creatures it was never sent is turned off for the session, the plain background showing instead;
+// its agent and a click there goes to its tile; it runs on while the person is idle or in another
+// window, as a video does, and stops only while the window is hidden; its Colour switch reaches it,
+// and See-through leaves the Layers panel clear glass over it. A wallpaper that names creatures it
+// was never sent is turned off for the session, the plain background showing instead;
 // one that says a creature is under the pointer while the pointer is over a tile is not heard; one
 // that takes the keyboard is turned off, what had the keyboard getting it back; a package switched
 // off stops its wallpaper in every window; and a view the repository ships named like a wallpaper's
@@ -234,15 +235,41 @@ test("a package switched off stops its wallpaper in every window, not only the o
   await page.evaluate(() => window.hive.switchPackage("@e2e/pond", true));
 });
 
-test("someone resting their hands does not stop it: with no input for over 30 seconds it still runs", async () => {
+test("resting your hands or working in another window does not stop it, nor a video: only a hidden window does", async () => {
   await page.evaluate(() => window.hive.settingsSet("appearance.wallpaper.kind", "@e2e/pond/dots"));
   const frame = await wallpaperFrame("@e2e/pond/dots");
   const mode = () => frame.evaluate(() => (window as unknown as { seen: { modes: string[] } }).seen.modes.at(-1));
   await page.bringToFront();
   await expect.poll(mode).toBe("run");
-  // The app counts a person idle after 30 seconds without input; a video or a photo's pan stops then.
+  // Another window in front, as the page sees it (the private X display has no window manager to move
+  // focus), and over 30 seconds with no input: the window is still in sight.
+  await page.evaluate(() => { document.hasFocus = () => false; window.dispatchEvent(new Event("blur")); });
   await page.waitForTimeout(33_000);
   expect(await mode()).toBe("run");
+  // A video background plays on the same way.
+  const glassWas = await page.evaluate(() => window.hive.settingsGet().then((s) => s.appearance.glass.enabled));
+  const file = path.resolve("tests/fixtures/settings-motion.webm");
+  await app.evaluate(({ dialog }, selected) => { dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [selected] }); }, file);
+  await page.evaluate(async () => {
+    const media = await window.hive.pickMedia("background");
+    if (!media) throw new Error("No test media");
+    await window.hive.settingsSet("appearance.glass.enabled", true);
+    await window.hive.settingsSet("appearance.wallpaper", { kind: "video", videoSrc: media.url });
+  });
+  const video = page.locator("video.hm-wp-video");
+  const playedTo = () => video.evaluate((v: HTMLVideoElement) => v.paused ? -1 : v.currentTime);
+  await expect.poll(playedTo).toBeGreaterThan(0);
+  const at = await playedTo();
+  await expect.poll(playedTo).not.toBe(at);
+  expect(await page.evaluate(() => document.hasFocus())).toBe(false);
+  // Hidden, it stops; shown again, it plays.
+  await page.evaluate(() => { Object.defineProperty(document, "hidden", { configurable: true, get: () => true }); document.dispatchEvent(new Event("visibilitychange")); });
+  await expect.poll(() => video.evaluate((v: HTMLVideoElement) => v.paused)).toBe(true);
+  await page.evaluate(() => { delete (document as { hidden?: boolean }).hidden; document.dispatchEvent(new Event("visibilitychange")); });
+  await expect.poll(playedTo).toBeGreaterThan(0);
+  await page.evaluate(() => { delete (document as { hasFocus?: () => boolean }).hasFocus; });
+  await page.evaluate((was) => Promise.all([window.hive.settingsSet("appearance.wallpaper.kind", "@e2e/pond/dots"), window.hive.settingsSet("appearance.glass.enabled", was)]), glassWas);
+  await page.bringToFront();
 });
 
 test("its Colour switch reaches it, and See-through frosts the panels and the tools in one click, the Layers panel clear glass over it", async () => {

@@ -224,8 +224,8 @@ The mode decides what runs:
 
 | Mode | When | What the clock does |
 |---|---|---|
-| `run` | the window is in front, the person busy or resting their hands | steps and draws |
-| `hold` | the window is hidden, not in front, or covered | nothing. It draws one frame again only when something it shows changes: the size, the look, the creatures or the tiles |
+| `run` | the window can be seen, in front or not, the person busy or resting their hands | steps and draws |
+| `hold` | the window is minimised or hidden, or the workspace is covered (Settings, a full-screen tile) | nothing. It draws one frame again only when something it shows changes: the size, the look, the creatures or the tiles |
 | `still` | the person turned off **Animate the background**, or the computer asks for reduced motion | one settled frame: `settle()` and one draw. Again only when something it shows changes |
 
 Its first frame is drawn at once, whatever the mode. Never start a timer or a

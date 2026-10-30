@@ -53,7 +53,7 @@ export interface WallpaperTile { x0: number; y0: number; x1: number; y1: number;
  *  be on this computer, so give it a fallback. */
 export interface WallpaperLook { page: string; text: string; attention: string; dark: boolean; colour: boolean; mono: string }
 
-/** `run`: animate. `hold`: keep the last frame (the window is hidden, not in front, or covered). `still`:
+/** `run`: animate. `hold`: keep the last frame (the window is minimised or hidden, or the workspace covered). `still`:
  *  motion is off; show one settled frame, and draw again only when something changes. */
 export type WallpaperMode = "run" | "hold" | "still";
 

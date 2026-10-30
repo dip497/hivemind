@@ -27,14 +27,12 @@ export function Wallpaper({ embedded = false, covering = false, agents = NO_AGEN
   const { glass, contentGlass, wallpaper, wallpaperColour, videoSrc, imageSrc, themeId, animate, palette, monoFont, mode } = useTheme();
   const { wallpapers } = useWallpapers();
   const cls = embedded ? " embedded" : "";
-  // Away: the window is hidden or not focused. Idle: no input for a while, which pauses a video and
-  // a photo's pan, but not a live wallpaper, which someone resting their hands is there to watch.
-  const [away, setAway] = useState(false);
-  const [idle, setIdle] = useState(false);
+  // It runs while it can be seen, whether or not the person is typing or the window has focus, and
+  // pauses only while no one can see it: the window minimised or hidden, or the workspace covered.
+  const [away, setAway] = useState(() => document.hidden);
   const occluded = useWorkspaceOccluded();
   // `covering`: this copy is what covers the workspace, so occlusion is not about it.
-  const hidden = away || (occluded && !covering);
-  const paused = hidden || idle;
+  const paused = away || (occluded && !covering);
   // A clip that can't decode (e.g. HEVC/H.265, which Chromium doesn't bundle)
   // fires <video> onError → we fall back to a gradient instead of a black void.
   const [videoFailed, setVideoFailed] = useState(false);
@@ -52,29 +50,15 @@ export function Wallpaper({ embedded = false, covering = false, agents = NO_AGEN
     return () => v.removeEventListener("playing", ok);
   }, [videoSrc]);
 
-  // Pause the wallpaper (video decoder + bloom animations) when the window is
-  // hidden/blurred, and a video or photo pan also when the user has been idle for a
-  // while: it composites every frame, so this reclaims continuous GPU + decode CPU.
-  // Resumes within ~1s of any input. `bump` only writes a number (no React, no
-  // per-event timer churn); a 1Hz tick computes the state, and each set no-ops
-  // when unchanged.
+  // Pause the wallpaper (video decoder, bloom animations, a live wallpaper's clock) while the window
+  // is hidden: it composites every frame, so this gives back the GPU and decode CPU no one is looking at.
   useEffect(() => {
-    let last = Date.now();
-    const IDLE_MS = 30_000;
-    const bump = () => { last = Date.now(); };
-    const evs = ["mousemove", "keydown", "wheel", "pointerdown", "touchstart"] as const;
-    for (const e of evs) window.addEventListener(e, bump, { passive: true });
-    const tick = setInterval(() => {
-      setAway(document.hidden || !document.hasFocus());
-      setIdle(Date.now() - last > IDLE_MS);
-    }, 1000);
-    return () => {
-      clearInterval(tick);
-      for (const e of evs) window.removeEventListener(e, bump);
-    };
+    const seen = () => setAway(document.hidden);
+    document.addEventListener("visibilitychange", seen);
+    return () => document.removeEventListener("visibilitychange", seen);
   }, []);
 
-  // Stop the video decoder entirely when the window is backgrounded — zero GPU.
+  // Stop the video decoder entirely while the window is hidden — zero GPU.
   useEffect(() => {
     const v = videoRef.current;
     if (!v) return;
@@ -101,7 +85,7 @@ export function Wallpaper({ embedded = false, covering = false, agents = NO_AGEN
     // installed, whose package is off or that was turned off for misbehaving draws as Mono does.
     // Only the full-window copy behind the app's own views runs it; a copy behind a fullscreen tile
     // or a docked slot is covered by the tile, so it shows the page colour alone.
-    const shared = { colour: wallpaperColour, agents, paused: hidden, animate, frosted: glass, seeThrough: contentGlass, page: palette.bg, text: palette.fg, attention: palette.warn, dark: mode !== "light", monoFont, nameOf, onOpen };
+    const shared = { colour: wallpaperColour, agents, paused, animate, frosted: glass, seeThrough: contentGlass, page: palette.bg, text: palette.fg, attention: palette.warn, dark: mode !== "light", monoFont, nameOf, onOpen };
     const plugin = isPluginWallpaper(wallpaper) ? usableWallpaper(wallpapers, wallpaper) : null;
     if (plugin) {
       return (
