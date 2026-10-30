@@ -1,6 +1,7 @@
 import * as SettingsDialog from "@radix-ui/react-dialog";
 import { ThemePanel } from "./ThemePanel";
 import { QuitDialog } from "./QuitDialog";
+import { WhatsNew, showWhatsNew } from "./WhatsNew";
 import { QuitSetting } from "./quit-setting";
 import { RecentProjects } from "./RecentProjects";
 import { WorkspaceActions } from "./multiplayer/workspace-actions";
@@ -346,6 +347,7 @@ export function App() {
 
         <FolderPathDialog />
         <QuitDialog />
+        <WhatsNew />
         <StatusAnnouncer />
         <RecentProjects
           open={!!recentOpen}
@@ -520,6 +522,7 @@ function SettingsModal({
             <div className="flex items-baseline gap-2">
               <span className="text-row font-semibold text-[var(--color-fg)]">hivemind</span>
               <span className="text-count font-mono text-[var(--color-fg2)]">{version ? `v${version}` : "version…"}</span>
+              {version && window.hive.releaseNotes && <NotesLink version={version} label="What's new" />}
             </div>
             <a
               href={REPO_URL}
@@ -547,6 +550,7 @@ function SettingsModal({
                   <span className="size-2 rounded-full bg-[var(--color-warn)]" aria-hidden />
                   Update available{update.latest ? ` — v${update.latest}` : ""}
                 </span>
+                {update.latest && window.hive.releaseNotes && <NotesLink version={update.latest} label="What's in it" />}
                 <Button onClick={onUpgrade} size="xs" title="Download the latest release">Update</Button>
               </>
             ) : update?.off ? (
@@ -599,3 +603,19 @@ function SettingsModal({
   );
 }
 
+
+/** Opens what `version` changed; says so when it cannot be read (a newer one is read from GitHub). */
+function NotesLink({ version, label }: { version: string; label: string }) {
+  const [state, setState] = useState<"idle" | "busy" | "none">("idle");
+  const open = () => {
+    setState("busy");
+    void window.hive.releaseNotes!(version).then((n) => {
+      if (n.length) { setState("idle"); showWhatsNew(n); } else setState("none");
+    }, () => setState("none"));
+  };
+  return (
+    <button type="button" className="settings-link text-count" onClick={open} disabled={state === "busy"} data-release-notes={version}>
+      {state === "none" ? "No notes found" : state === "busy" ? "Reading…" : label}
+    </button>
+  );
+}
