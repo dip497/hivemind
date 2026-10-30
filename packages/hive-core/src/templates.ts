@@ -119,7 +119,7 @@ resolves automatically.
 - \`hive ctl add-comment <id> "…"\` · \`hive ctl mark-acceptance <id> <index>\` (0-based; \`--undone\` reopens)
 - \`hive update <id> --title … --assignee claude --assignee-type agent\` · \`hive new "Title" --parent <id>\`
 - \`hive ctl delete-issue <id>\` — destructive; only on an explicit ask.
-- \`hive review list --json\` · \`hive review show <id>\` — comments the person left on a diff and notes on a page (\`--on page\`); answer with \`hive review seen|resolve --summary …|dismiss --reason …|reply <id> "…"\`.
+- \`hive ctl notes list --json\` · \`hive ctl notes show <id>\` — notes the person left on a page in a Browser tile; answer with \`hive ctl notes seen|done --summary …|dismiss --reason …|reply <id> "…"\`. Comments on a diff: \`hive review list|show|resolve\`.
 
 ### Execution contract (REQUIRED)
 

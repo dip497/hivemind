@@ -19,6 +19,7 @@
  *     request: 30 s in the window, the host and this CLI each waiting longer
  *     than the hop within, so the reason printed is the innermost one.
  */
+import { notesCmd } from "./review.js";
 import path from "node:path";
 import { defineCommand, type ArgsDef, type ParsedArgs } from "citty";
 import fs from "node:fs";
@@ -840,6 +841,6 @@ export const ctlCmd = defineCommand({
     whoami, agents, tiles, frames, frame, "open-tool": openTool, spawn, sessions, send, keys, read, stream, workflow, approve, approval, report, inbox, "open-review": openReview,
     focus, close, sleep, wake, rename, connect, disconnect, view, plugin, tile,
     "set-state": setState, "add-comment": addComment, "mark-acceptance": markAcceptance,
-    "delete-issue": deleteIssueCmd, "list-workspaces": listWorkspacesCmd,
+    "delete-issue": deleteIssueCmd, "list-workspaces": listWorkspacesCmd, notes: notesCmd,
   },
 });

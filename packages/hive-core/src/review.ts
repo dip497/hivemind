@@ -267,6 +267,6 @@ export function pageNotesMessage(notes: readonly PageComment[], root: string): s
     `${n} note${n === 1 ? "" : "s"} on a page to address:`,
     "",
     ...notes.flatMap((c) => [pageNoteText(c, root), ""]),
-    "Mark each with `hive review seen <id>` when you start on it, then `hive review resolve <id> --summary \"…\"` or `hive review dismiss <id> --reason \"…\"`; answer a question with `hive review reply <id> \"…\"`.",
+    "Mark each with `hive ctl notes seen <id>` when you start on it, then `hive ctl notes done <id> --summary \"…\"` or `hive ctl notes dismiss <id> --reason \"…\"`; answer a question with `hive ctl notes reply <id> \"…\"`.",
   ].join("\n");
 }

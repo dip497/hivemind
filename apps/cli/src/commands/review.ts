@@ -62,8 +62,9 @@ const detail = (c: ReviewComment, root: string): string => onPage(c)
 const onArg = { on: { type: "string", description: "page | diff: only notes on a page, or only comments on a diff" } } as const;
 const onOf = (v: unknown): "page" | "diff" | undefined => (v === "page" || v === "diff" ? v : undefined);
 
-const listCmd = defineCommand({
-  meta: { name: "list", description: "List review comments (open by default)" },
+/** `on`: only comments on a page, or only on a diff, whatever the caller asks. */
+const listOf = (on?: "page" | "diff") => defineCommand({
+  meta: { name: "list", description: on === "page" ? "List the notes left on pages (open by default)" : "List review comments (open by default)" },
   args: {
     file: { type: "string", description: "only this path" },
     status: { type: "string", description: "open | resolved | all (default open; open includes seen, resolved includes dismissed)" },
@@ -74,7 +75,7 @@ const listCmd = defineCommand({
     const ctx = { json: !!args.json };
     try {
       const status = args.status === "resolved" || args.status === "all" ? args.status : "open";
-      const list = await listComments(await storeRoot(), { file: args.file || undefined, status, on: onOf(args.on) });
+      const list = await listComments(await storeRoot(), { file: args.file || undefined, status, on: on ?? onOf(args.on) });
       return ok(ctx, { comments: list }, () =>
         list.length === 0 ? "no comments" : list.map(oneLine).join("\n"));
     } catch (e) { return fail(ctx, e, "list_failed"); }
@@ -172,8 +173,8 @@ const WATCH_DEFAULT_S = 300;
 /** Block until a comment appears that was not there when we started. This is
  *  what makes a review a loop: the agent waits for the human instead of
  *  being re-prompted. Exit 4 on timeout, like `hive ctl read`. */
-const watchCmd = defineCommand({
-  meta: { name: "watch", description: "Wait for the next review comment (exit 4 on timeout)" },
+const watchOf = (on?: "page" | "diff") => defineCommand({
+  meta: { name: "watch", description: on === "page" ? "Wait for the next note on a page (exit 4 on timeout)" : "Wait for the next review comment (exit 4 on timeout)" },
   args: {
     timeout: { type: "string", description: `seconds to wait (default ${WATCH_DEFAULT_S})` },
     file: { type: "string", description: "only this path" },
@@ -184,7 +185,7 @@ const watchCmd = defineCommand({
     const ctx = { json: !!args.json };
     try {
       const root = await storeRoot();
-      const filter = { file: args.file || undefined, status: "open" as const, on: onOf(args.on) };
+      const filter = { file: args.file || undefined, status: "open" as const, on: on ?? onOf(args.on) };
       const seen = new Set((await listComments(root, filter)).map((c) => c.id));
       const seconds = Number.parseInt(String(args.timeout ?? ""), 10);
       const deadline = Date.now() + (Number.isFinite(seconds) && seconds > 0 ? seconds : WATCH_DEFAULT_S) * 1000;
@@ -204,7 +205,17 @@ const watchCmd = defineCommand({
 export const reviewCmd = defineCommand({
   meta: { name: "review", description: "Review comments left on a diff, and notes left on a page" },
   subCommands: {
-    list: listCmd, show: showCmd, reply: replyCmd, seen: seenCmd,
-    resolve: resolveCmd, dismiss: dismissCmd, reopen: reopenCmd, watch: watchCmd,
+    list: listOf(), show: showCmd, reply: replyCmd, seen: seenCmd,
+    resolve: resolveCmd, dismiss: dismissCmd, reopen: reopenCmd, watch: watchOf(),
+  },
+});
+
+/** `hive ctl notes`: the notes left on a page in a Browser tile, which are review comments on a
+ *  page, answered the same way. */
+export const notesCmd = defineCommand({
+  meta: { name: "notes", description: "Notes left on a page in a Browser tile: list, read and answer them" },
+  subCommands: {
+    list: listOf("page"), show: showCmd, seen: seenCmd, done: resolveCmd, dismiss: dismissCmd,
+    reply: replyCmd, reopen: reopenCmd, watch: watchOf("page"),
   },
 });

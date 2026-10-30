@@ -42,3 +42,17 @@ test("an agent lists the notes on a page, reads one with its picture, and answer
   expect(again.code).not.toBe(0);
   expect(JSON.stringify(again.json)).toContain("REVIEW_STATE");
 });
+
+test("hive ctl notes lists only the notes on pages, and answers one: seen, done, reopened, dismissed", async () => {
+  const dir = workspace();
+  await addComment(path.join(dir, ".hivemind"), pageNote);
+  await addComment(path.join(dir, ".hivemind"), { file: "a.ts", startLine: 1, endLine: 1, side: "additions", body: "rename", author: "you" });
+  const listed = hive(["ctl", "notes", "list", "--json"], { cwd: dir });
+  expect(listed.code).toBe(0);
+  expect((listed.json as { comments: { id: string }[] }).comments.map((c) => c.id)).toEqual(["c-note"]);
+  expect(hive(["ctl", "notes", "seen", "c-note", "--json"], { cwd: dir }).json).toMatchObject({ seen: true });
+  expect(hive(["ctl", "notes", "done", "c-note", "--summary", "bigger now", "--json"], { cwd: dir }).json).toMatchObject({ resolved: true, summary: "bigger now" });
+  expect(hive(["ctl", "notes", "reopen", "c-note", "--json"], { cwd: dir }).json).not.toHaveProperty("resolved");
+  expect(hive(["ctl", "notes", "dismiss", "c-note", "--reason", "by design", "--json"], { cwd: dir }).json).toMatchObject({ dismissed: true });
+  expect(hive(["ctl", "notes", "list", "--status", "resolved"], { cwd: dir }).stdout).toContain("dismissed");
+});

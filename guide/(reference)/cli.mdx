@@ -335,6 +335,12 @@ hive review seen <id>                   # an open comment you are on; refused on
 hive review resolve <id> [--summary "how it was addressed"]
 hive review dismiss <id> --reason "why it is not done"
 hive review reopen <id>                 # only a resolved or dismissed one
+hive ctl notes list [--status open|resolved|all] [--json]   # the notes left on pages
+hive ctl notes show|seen|reopen <id>
+hive ctl notes done <id> [--summary "what was done"]
+hive ctl notes dismiss <id> --reason "why not"
+hive ctl notes reply <id> "answer"
+hive ctl notes watch [--timeout 300]    # wait for the next note on a page; exit 4 on timeout
 hive review watch [--timeout 300] [--file f]   # wait for the next comment; exit 4 on timeout
 ```
 

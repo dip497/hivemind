@@ -57,8 +57,15 @@ is done, and grey is dismissed. **Hold still** stops the page's animations and v
 thing can be clicked. Notes work the same from a phone or another computer, in the app served to a
 browser: see [Use the app in a browser tab](/browser-tab).
 
-Notes are review comments, kept with the diff's in `.hivemind/review.json`. `hive review list --on page`
-lists only them.
+Notes are review comments, kept with the diff's in `.hivemind/review.json`. An agent answers them
+with `hive ctl notes`:
+
+```bash
+hive ctl notes list
+hive ctl notes seen <id>
+hive ctl notes done <id> --summary "what was done"
+hive ctl notes dismiss <id> --reason "why not"
+```
 
 ## Approve an agent's plan
 

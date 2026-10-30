@@ -172,13 +172,13 @@ test("Send gives an agent the open notes and how to answer them; its answers sho
   expect(open).toHaveLength(2);
   for (const c of open) expect(text).toContain(`${c.id} (fix): ${c.body}`);
   expect(text).toContain(path.join(repo, ".hivemind", "pages"));
-  expect(text).toContain("hive review resolve <id>");
+  expect(text).toContain("hive ctl notes done <id>");
 
   // The agent answers, with the command the message names.
   const cli = path.resolve("../cli/src/index.ts");
   const env = { ...process.env, HIVEMIND_TILE: "", HIVE_HCP_SOCK: "" } as Record<string, string>;
-  execFileSync("bun", [cli, "review", "seen", open[0]!.id], { cwd: repo, env });
-  execFileSync("bun", [cli, "review", "resolve", open[1]!.id, "--summary", "one column now"], { cwd: repo, env });
+  execFileSync("bun", [cli, "ctl", "notes", "seen", open[0]!.id], { cwd: repo, env });
+  execFileSync("bun", [cli, "ctl", "notes", "done", open[1]!.id, "--summary", "one column now"], { cwd: repo, env });
   await expect.poll(pinsOnPage, { timeout: 10_000 }).toEqual(["pin resolved:✓", "pin seen:2", "pin resolved:✓"]);
 });
 
