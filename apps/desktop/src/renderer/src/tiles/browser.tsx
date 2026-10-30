@@ -6,6 +6,7 @@ export type BrowserTileData = {
   tileId: string;
   frameId?: string | null;
   url?: string;
+  repoPath: string;
   openReq?: { url: string; seq: number } | null;
   onClose?: () => void;
   pinned?: boolean;
@@ -23,7 +24,7 @@ export const browserTile: TilePlugin<BrowserTileData> = {
     },
   },
   data: (t, s, h) => ({
-    tileId: t.id, frameId: s.frameId, url: t.url,
+    tileId: t.id, frameId: s.frameId, url: t.url, repoPath: s.repoPath ?? s.cwd,
     openReq: h.browserOpenReqs[t.id] ?? null, onClose: s.onClose, ...s.pin,
   }),
   lazy: true,

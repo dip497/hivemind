@@ -927,6 +927,8 @@ export interface HiveIpc {
   browserPins(tileId: string, pins: PagePin[]): Promise<void>;
   /** Hold the page's animations and media still, or let them go. */
   browserHoldStill(tileId: string, still: boolean): Promise<void>;
+  /** These notes as one message to an agent, with how to answer them; null when none is there. */
+  browserNotesMessage(repoPath: string, ids: string[]): Promise<string | null>;
   onBrowserFrame: (cb: (tileId: string, frame: PageFrame) => void) => () => void;
   /** The app window holding a watched page started or stopped drawing it. */
   onBrowserPageShown: (cb: (tileId: string, shown: boolean) => void) => () => void;

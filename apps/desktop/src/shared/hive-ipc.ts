@@ -91,6 +91,7 @@ export function hiveOverIpc(port: IpcPort, workspace: WorkspaceClient): Omit<Hiv
     browserNote: (tileId, repoPath, note) => port.invoke("browserNote", tileId, repoPath, note),
     browserPins: (tileId, pins) => port.invoke("browserPins", tileId, pins),
     browserHoldStill: (tileId, still) => port.invoke("browserHoldStill", tileId, still),
+    browserNotesMessage: (repoPath, ids) => port.invoke("browserNotesMessage", repoPath, ids),
     onBrowserFrame: (cb) => port.on(FRAME_EVENT, cb),
     onBrowserPageShown: (cb) => port.on(SHOWN_EVENT, cb),
     onBrowserPageGone: (cb) => port.on(GONE_EVENT, cb),

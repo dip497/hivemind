@@ -82,7 +82,7 @@ import { notesFor, whatsNewSinceLastRun } from "./whats-new.js";
 import { runningRelease, windowsAppFolder } from "../shared/running-release.js";
 import { keyboardCommand } from "./page-keys.js";
 import { around, elementAt, elementsIn, highlightAt, holdStill, pictureOf, showPins } from "./page-notes.js";
-import { addComment, reviewRoot, writePicture } from "@hivemind/core/review";
+import { addComment, onPage, pageNotesMessage, readComments, reviewRoot, writePicture, type PageComment } from "@hivemind/core/review";
 import type { PageNoteDraft, PagePin } from "../shared/ipc.js";
 import { serveBrowserPort } from "./browser-port.js";
 import { driveSockPath, readOrCreateToken } from "@hivemind/agent-host/hooks/token";
@@ -659,6 +659,12 @@ handle("browserPins", (_e, tileId: unknown, pins: unknown) => {
   return showPins(pageOfTile(tileId), pins as PagePin[]);
 });
 handle("browserHoldStill", (_e, tileId: unknown, still: unknown) => holdStill(pageOfTile(tileId), still === true));
+handle("browserNotesMessage", async (_e, repoPath: unknown, ids: unknown) => {
+  if (typeof repoPath !== "string" || !Array.isArray(ids)) throw new Error("which notes, in which workspace");
+  const root = await reviewRoot(repoPath);
+  const notes = (await readComments(root)).filter((c): c is PageComment => onPage(c) && ids.includes(c.id));
+  return notes.length ? pageNotesMessage(notes, root) : null;
+});
 
 handleEffect(
   "browserCdp",

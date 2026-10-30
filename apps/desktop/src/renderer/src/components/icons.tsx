@@ -17,7 +17,7 @@ import {
   MoveUpRightIcon, NetworkIcon, PaletteIcon, PanelLeftCloseIcon, PanelLeftOpenIcon, PanelsTopLeftIcon, PencilIcon, PinIcon,
   PinOffIcon, PlayIcon, PlusIcon, PowerIcon, PuzzleIcon, RefreshCwIcon, RotateCwIcon,
   Search01Icon, ServerIcon, ServerOffIcon, Settings01Icon, Settings02Icon, DashboardSquareAddIcon, SlidersHorizontalIcon,
-  SmartphoneIcon, SparklesIcon, SquareDashedIcon, SquarePenIcon, SquareTerminalIcon, Tag01Icon, TerminalIcon, TrashIcon,
+  PauseIcon, SmartphoneIcon, SparklesIcon, SquareDashedIcon, SquarePenIcon, SquareTerminalIcon, Tag01Icon, TerminalIcon, TrashIcon,
   TriangleAlertIcon, Unlink01Icon, UnplugIcon, Upload01Icon, UserPlusIcon, UserRoundIcon, UsersIcon,
   Wrench01Icon, XIcon,
 } from "@hugeicons/core-free-icons";
@@ -133,6 +133,7 @@ export const SquarePen = icon("square-pen", SquarePenIcon);
 export const SquareTerminal = icon("square-terminal", SquareTerminalIcon);
 export const Tag = icon("tag", Tag01Icon);
 export const Terminal = icon("terminal", TerminalIcon);
+export const Pause = icon("pause", PauseIcon);
 export const Trash = icon("trash", TrashIcon);
 export const TriangleAlert = icon("triangle-alert", TriangleAlertIcon);
 export const Unlink = icon("unlink", Unlink01Icon);

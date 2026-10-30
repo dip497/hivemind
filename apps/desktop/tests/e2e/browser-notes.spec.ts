@@ -105,3 +105,55 @@ test("a note is kept in the workspace's review with a picture of what it points 
   const png = fs.readFileSync(path.join(repo, ".hivemind", "pages", back.page.picture));
   expect(png.subarray(1, 4).toString()).toBe("PNG");
 });
+
+/** Where an element of the page is on screen, through the annotate layer over it. */
+async function onScreen(selector: string): Promise<{ x: number; y: number }> {
+  const [fx, fy] = await middleOf(selector);
+  const box = (await page.locator("[data-annotate-layer]").boundingBox())!;
+  return { x: box.x + fx * box.width, y: box.y + fy * box.height };
+}
+const notesOnDisk = () => (JSON.parse(fs.existsSync(path.join(repo, ".hivemind", "review.json")) ? fs.readFileSync(path.join(repo, ".hivemind", "review.json"), "utf8") : "[]") as { id: string; body: string; resolved?: boolean; page: { elements: { name: string }[]; area?: unknown } }[]);
+const pinsOnPage = () => run<string[]>(`[...(document.querySelector("hivemind-page-notes")?.shadowRoot?.children ?? [])].map((p) => p.className + ":" + p.textContent)`);
+
+test("in the tile: a click notes what it is on, Ctrl and a click gather several, a drag notes an area, and each shows as a pin", async () => {
+  fs.rmSync(path.join(repo, ".hivemind", "review.json"), { force: true });
+  await page.locator(".react-flow__node-browser [aria-label='annotate']").click();
+  await expect(page.locator("[data-annotate-layer]")).toBeVisible();
+
+  const at = await onScreen("a[href='/docs']");
+  await page.mouse.move(at.x, at.y);
+  await page.mouse.click(at.x, at.y);
+  const box = page.locator("[data-note-box]");
+  await expect(box).toContainText('link "Read the docs"');
+  await box.locator("textarea").fill("link to the new docs");
+  await box.locator("textarea").press("Enter");
+  await expect.poll(() => notesOnDisk().map((c) => c.body)).toEqual(["link to the new docs"]);
+  await expect.poll(pinsOnPage).toEqual(["pin open:1"]);
+
+  for (const sel of ["ul.plans li:nth-of-type(1)", "ul.plans li:nth-of-type(2)"]) {
+    const p = await onScreen(sel);
+    await page.keyboard.down("Control");
+    await page.mouse.click(p.x, p.y);
+    await page.keyboard.up("Control");
+  }
+  await expect(page.locator("[data-annotate-gathered]")).toContainText("2 picked");
+  const third = await onScreen("ul.plans li:nth-of-type(3)");
+  await page.mouse.click(third.x, third.y);
+  await page.locator("[data-note-box] textarea").fill("same price layout for all three");
+  await page.locator("[data-note-box] textarea").press("Enter");
+  await expect.poll(() => notesOnDisk().at(-1)?.page.elements.map((e) => e.name)).toEqual(['listitem "Free"', 'listitem "Team"', 'listitem "Business"']);
+
+  const a = await onScreen("#trial"), b = await onScreen("input");
+  await page.mouse.move(a.x - 30, a.y - 20);
+  await page.mouse.down();
+  await page.mouse.move(b.x, b.y + 20, { steps: 5 });
+  await page.mouse.up();
+  await page.locator("[data-note-box] textarea").fill("this row is crowded");
+  await page.locator("[data-note-box] textarea").press("Enter");
+  await expect.poll(() => notesOnDisk().at(-1)?.page.area).toBeTruthy();
+  await expect.poll(async () => (await pinsOnPage()).length).toBe(3);
+
+  // Done from the list: its pin says so.
+  await page.locator("[data-page-note]").first().getByRole("button", { name: "Done" }).click();
+  await expect.poll(pinsOnPage).toEqual(["pin resolved:✓", "pin open:2", "pin open:3"]);
+});
