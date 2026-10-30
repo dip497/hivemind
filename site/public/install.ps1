@@ -16,7 +16,8 @@
 
     & ([scriptblock]::Create((irm https://raw.githubusercontent.com/dip497/hivemind/main/install.ps1))) -Dev
 
-  Re-running UPGRADES in place. Installed users then manage the app with the
+  Re-running UPGRADES, also while the app is open: the new version starts at
+  its next restart. Installed users then manage the app with the
   `hivemind` launcher:
 
     hivemind upgrade            # re-run this installer (latest release)
@@ -111,6 +112,7 @@ if (`$Purge) {
 }
 Remove-Item -Force "$(Join-Path $BinDir 'hive.exe')"
 Remove-Item -Force "$(Join-Path $BinDir 'hive-net.exe')"
+Remove-Item -Force "$(Join-Path $BinDir '*.old.*')"
 Remove-Item -Force "$(Join-Path $BinDir 'hivemind.cmd')"
 Write-Host "hivemind: uninstalled."
 "@ | Set-Content -Path $script -Encoding UTF8
@@ -140,24 +142,15 @@ function Add-StartMenuShortcut {
   Ok "Start Menu shortcut"
 }
 
-# Only a WINDOWED process counts as "the app is running": the pty daemon runs
-# as hivemind.exe too, detached, and outlives the window — counting it would
-# refuse every upgrade on any machine with a surviving session daemon.
+# Only a WINDOWED process counts as "the app is open": the pty daemon runs as hivemind.exe too,
+# detached, and outlives the window.
 function Test-AppRunning {
   [bool](Get-Process -Name hivemind -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 })
 }
 
-# Unpack the release zip into a folder of its own, app-<version>.
-#
-# NO staged-upgrade path, matching macOS and unlike Linux. Two reasons, either
-# sufficient: Windows holds a lock on a running .exe, so the swap cannot happen
-# at all while the app is up; and the Start Menu shortcut launches the bundle
-# directly, so a staged dir would sit unapplied while the user kept starting the
-# old build. The caller refuses to touch a running install instead.
-#
-# The terminal daemon the app leaves running is hivemind.exe from the version that
-# started it, and Windows will not delete a running exe: each version keeps its own
-# folder, and one is removed only once nothing runs from it.
+# Unpack the release zip into a folder of its own, app-<version>, beside the open app's: Windows
+# will not overwrite or delete a running exe, so each version keeps its own folder, the launcher
+# and the Start Menu shortcut start the newest, and an old one goes once nothing runs from it.
 function Install-App ($zip, $name) {
   $dest = Join-Path $AppDir $name
   $staging = Join-Path $AppDir "unpack"
@@ -176,15 +169,28 @@ function Install-App ($zip, $name) {
   Remove-UnusedApps
 }
 
-# Every app folder but the current one that no process runs from.
+# Every app folder but the current one, the one installed before it (to go back to) and any a
+# process runs from.
 function Remove-UnusedApps {
+  $keep = @($AppHome)
+  if (Test-Path $VersionFile) { $keep += Join-Path $AppDir "app-$((Get-Content $VersionFile -Raw).Trim().TrimStart('v'))" }
   $running = @(Get-Process -ErrorAction SilentlyContinue | ForEach-Object { $_.Path } | Where-Object { $_ })
-  Get-ChildItem -Path $AppDir -Directory | Where-Object { ($_.Name -eq "app" -or $_.Name -like "app-*") -and $_.FullName -ne $AppHome } | ForEach-Object {
+  Get-ChildItem -Path $AppDir -Directory | Where-Object { ($_.Name -eq "app" -or $_.Name -like "app-*") -and $keep -notcontains $_.FullName } | ForEach-Object {
     $dir = $_.FullName + [IO.Path]::DirectorySeparatorChar
     if (-not ($running | Where-Object { $_.StartsWith($dir, [StringComparison]::OrdinalIgnoreCase) })) {
       Remove-Item -Recurse -Force $_.FullName -ErrorAction SilentlyContinue
     }
   }
+}
+
+# A running exe (hive-net serving, a hive command) cannot be overwritten or deleted, but it can be
+# renamed: it is moved aside for the process still running it, and goes on a later install.
+function Replace-Exe ($new, $dest) {
+  Get-ChildItem -Path (Split-Path $dest) -Filter "$(Split-Path $dest -Leaf).old.*" -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
+  if (Test-Path $dest) {
+    try { Remove-Item -Force $dest } catch { Move-Item -Force $dest "$dest.old.$PID" }
+  }
+  Move-Item -Force $new $dest
 }
 
 # ---------------------------------------------------------------- prebuilt ---
@@ -264,12 +270,6 @@ function Install-Prebuilt {
     return
   }
 
-  if (Test-AppRunning) {
-    Warn "hivemind is running - the app was NOT upgraded (Windows locks a running .exe)."
-    Warn "Quit hivemind, then re-run ``hivemind upgrade``. Your canvas + sessions are untouched."
-    return
-  }
-
   $cliUrl = "https://github.com/$Repo/releases/download/$tag/hive-windows-x64.exe"
   $netUrl = "https://github.com/$Repo/releases/download/$tag/hive-net-windows-x64.exe"
   $appAsset = if ($tag -match '^nightly-') { "hivemind-windows-x64.zip" } else { "hivemind-$bare-x64-win.zip" }
@@ -280,34 +280,35 @@ function Install-Prebuilt {
 
   try {
     Say "downloading hive CLI"
-    # A PID-unique temp then Move-Item, for the same reason install.sh does it:
-    # a direct write over a running .exe fails, and a fixed temp name races a
-    # concurrent upgrade.
+    # A PID-unique temp: a fixed name races a concurrent upgrade.
     Invoke-WebRequest -Uri $cliUrl -OutFile $tmpCli -UseBasicParsing
-    Move-Item -Force $tmpCli (Join-Path $BinDir "hive.exe")
+    Replace-Exe $tmpCli (Join-Path $BinDir "hive.exe")
     Ok "installed $(Join-Path $BinDir 'hive.exe')"
 
     # hive-net, beside hive: this machine's device on the network (R10). Its release build is
     # allowed to fail on its own, so a release without it installs the rest.
     try {
       Invoke-WebRequest -Uri $netUrl -OutFile $tmpNet -UseBasicParsing
-      Move-Item -Force $tmpNet (Join-Path $BinDir "hive-net.exe")
+      Replace-Exe $tmpNet (Join-Path $BinDir "hive-net.exe")
       Ok "installed $(Join-Path $BinDir 'hive-net.exe')"
     } catch {
       Warn "hive-net is not in $tag; the rest is installed without it"
     }
     Install-Sdk $tag
 
-    Say "downloading desktop app"
-    Invoke-WebRequest -Uri $appUrl -OutFile $tmpApp -UseBasicParsing
-    Say "unpacking"
-    Install-App $tmpApp "app-$bare"
+    if (Test-Path (Join-Path $AppHome "hivemind.exe")) {
+      Ok "the app of $tag is here already"
+      Remove-UnusedApps
+    } else {
+      Say "downloading desktop app"
+      Invoke-WebRequest -Uri $appUrl -OutFile $tmpApp -UseBasicParsing
+      Say "unpacking"
+      Install-App $tmpApp "app-$bare"
+    }
     Write-Launcher; Write-Uninstaller; Add-StartMenuShortcut; Add-ToUserPath
-    # Stamped only after the app actually landed — a failed download throws, so
-    # the `hivemind upgrade` we tell the user to re-run isn't a no-op (the bug
-    # install.sh had).
+    # Stamped only once the app is in place: a failed download throws, so a re-run tries again.
     Set-Content -Path $VersionFile -Value $tag
-    Ok "installed $tag"
+    if (Test-AppRunning) { Ok "downloaded $tag - restart hivemind to finish" } else { Ok "installed $tag" }
   } catch {
     Die "install failed: $($_.Exception.Message)"
   } finally {
@@ -335,8 +336,10 @@ function Install-Dev {
     Say "packaging app"; pnpm --filter "@hivemind/desktop" run dist:win
     $zip = Get-ChildItem (Join-Path $src "apps\desktop\dist-electron") -Filter *.zip | Select-Object -First 1
     if (-not $zip) { Die "no zip produced - check the electron-builder output" }
-    Install-App $zip.FullName "app-dev-$(Get-Date -Format yyyyMMddHHmmss)"
+    $name = "dev-$(Get-Date -Format yyyyMMddHHmmss)"
+    Install-App $zip.FullName "app-$name"
     Write-Launcher; Write-Uninstaller; Add-StartMenuShortcut; Add-ToUserPath
+    Set-Content -Path $VersionFile -Value $name
     Ok "dev install ready"
   } finally { Pop-Location }
 }

@@ -20,7 +20,8 @@ async function launch(update: Record<string, unknown>, progress?: string[], inst
   if (installed) fs.writeFileSync(path.join(appDir, ".installed-version"), `${installed}\n`);
   const env = { ...process.env, XDG_CONFIG_HOME: xdg, HIVEMIND_APP_DIR: appDir, HIVEMIND_TEST_UPDATE: JSON.stringify({ ...update, ...(progress ? { progress } : {}) }) } as Record<string, string>;
   delete env.ELECTRON_RUN_AS_NODE;
-  app = await electron.launch({ args: [path.resolve("out/main/index.js"), "--no-sandbox"], cwd: root, env });
+  // Started by its package folder, as an installed app is: it is then the version package.json says.
+  app = await electron.launch({ args: [process.cwd(), "--no-sandbox"], cwd: root, env });
   page = await app.firstWindow();
   await page.waitForSelector(".react-flow");
   await page.getByLabel("settings", { exact: true }).click();
@@ -55,6 +56,13 @@ test("a newer version installed under the open app asks for a restart, not the s
   await expect(about().getByRole("button", { name: "Update", exact: true })).toHaveCount(0);
 });
 
+test("the version installed is the one running: nothing waits for a restart", async () => {
+  const running = (JSON.parse(fs.readFileSync("package.json", "utf8")) as { version: string }).version;
+  await launch({ latest: "9999.1.0" }, undefined, `v${running}`);
+  await expect(about().getByText(/Update available — v9999\.1\.0/)).toBeVisible();
+  await expect(about().getByText(/restart to finish/)).toHaveCount(0);
+});
+
 test("nothing newer says so, and offers a check", async () => {
   await launch({ latest: "0.0.0" });
   await expect(about().getByText("Up to date")).toBeVisible();
@@ -67,7 +75,6 @@ test("while it works, the step is named and the bar fills to it; then a restart 
     "target version: v9999.1.0",
     "downloading desktop AppImage",
     "extracting AppImage (no libfuse2 needed)",
-    "hivemind is running — upgrade STAGED. Quit & reopen hivemind to apply it.",
     "downloaded v9999.1.0 — restart hivemind to finish",
   ]);
   const bar = about().getByRole("progressbar");

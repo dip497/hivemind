@@ -17,7 +17,7 @@ import { withoutControl } from "@hivemind/agents/node";
 import { remoteConns } from "@hivemind/host/remote/conn";
 import { DaemonEndpoint, type EndpointState } from "@hivemind/agent-host/daemon-endpoint";
 import { DAEMON_PROTOCOL_VERSION, type Viewport } from "@hivemind/agent-host/pty-protocol";
-import { daemonProtocol, retireDaemon, wakeSessions } from "@hivemind/agent-host/daemon-replace";
+import { runningDaemon, retireDaemon, wakeSessions } from "@hivemind/agent-host/daemon-replace";
 import { acceptRemoteEvent } from "./events.js";
 import { ASKPASS_SCRIPT, bridgeRemoteCommand, needsAttention, openBridge, plainTerminalCommand, sshCommand, type SshPaths } from "@hivemind/host/remote/ssh";
 import { ensureHive, hivePerson, hiveVersion } from "./hive-there.js";
@@ -167,8 +167,8 @@ const withoutTag = (msg: string) => msg.replace(/^\[attention\] /, "");
 /** This person's server there kept when it speaks this app's protocol, as on this computer; one an
  *  older app of theirs started is replaced once no agent is mid-turn, each session woken in the new one. */
 async function replaceOtherProtocol(target: RemoteTarget, bridge: () => Promise<import("node:stream").Duplex>): Promise<void> {
-  const protocol = await daemonProtocol(bridge, 30_000);
-  if (protocol === null || protocol === DAEMON_PROTOCOL_VERSION) return;
+  const found = await runningDaemon(bridge, 30_000);
+  if (!found || found.protocol === DAEMON_PROTOCOL_VERSION) return;
   const retired = await retireDaemon(bridge, {
     waiting: (ids) => report(target.hostId, "connecting", ids.length ? `updating its terminals once ${ids.length === 1 ? "an agent finishes its turn" : `${ids.length} agents finish their turns`}` : undefined),
     now: new Promise(() => {}),

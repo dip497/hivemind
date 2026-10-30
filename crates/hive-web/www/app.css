@@ -573,3 +573,12 @@ button { cursor: pointer; }
   font: 13px/18px var(--sans); color: var(--text2);
   display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden;
 }
+
+/* A newer build is had while something typed would be lost: offered, not forced. */
+.page-newer {
+  position: fixed; left: 12px; right: 12px; top: calc(env(safe-area-inset-top) + 8px); z-index: 50;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 14px;
+  border: 1px solid var(--line); border-radius: 14px; background: var(--card); color: var(--text);
+  font: 14px/20px var(--sans); box-shadow: var(--float);
+}
+.page-newer-reload { border: 0; border-radius: 10px; padding: 6px 12px; background: var(--accent); color: var(--on-text); font: 500 14px/20px var(--sans); }

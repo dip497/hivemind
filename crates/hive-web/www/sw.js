@@ -108,6 +108,18 @@ self.addEventListener("activate", (event) => event.waitUntil((async () => {
   await caches.delete("hive-web");
 })()));
 
+// An open page asks as it comes back into view: told when a newer build than the one it runs is
+// had whole, which it runs once opened again.
+self.addEventListener("message", (event) => {
+  const client = event.source;
+  if (event.data?.t !== "check" || !client) return;
+  event.waitUntil((async () => {
+    await check().catch(() => {});
+    const name = await newest();
+    if (name && name !== (await runs(client.id))) client.postMessage({ t: "newer" });
+  })());
+});
+
 self.addEventListener("fetch", (event) => {
   const req = event.request;
   // Asked not to be kept: what the server says now, or nothing.

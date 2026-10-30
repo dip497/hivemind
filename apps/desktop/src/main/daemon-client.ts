@@ -3,12 +3,14 @@
  * terminal runs (spawnPty/writePty/resizePty/killPty + detachPty). Starts the daemon on demand
  * and reconnects transparently. See research/persistence-plan.md.
  */
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 import net from "node:net";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { app } from "electron";
 import { type SessionInfo, type Viewport, DAEMON_PROTOCOL_VERSION, SOCKET_NAME } from "@hivemind/agent-host/pty-protocol";
-import { daemonProtocol, daemonSessions, retireDaemon, socketAt, stopDaemon as stopDaemonAt, wakeSessions } from "@hivemind/agent-host/daemon-replace";
+import { runningDaemon, daemonSessions, retireDaemon, socketAt, stopDaemon as stopDaemonAt, wakeSessions } from "@hivemind/agent-host/daemon-replace";
 import { DaemonEndpoint, type Callbacks } from "@hivemind/agent-host/daemon-endpoint";
 import { reachDaemon } from "@hivemind/agent-host/daemon-start";
 import { lastingDaemon } from "@hivemind/agent-host/daemon-runtime";
@@ -40,10 +42,18 @@ const daemonCommand = async (sp: string): Promise<string[]> => {
   });
   return [runtime, script, sp];
 };
+/** This app's daemon: its code and the runtime it runs on, said by every daemon it starts. A
+ *  released build only: one run from source changes with every rebuild. */
+let build: string | undefined | null = null;
+const ownBuild = (): string | undefined => {
+  build ??= app.isPackaged ? createHash("sha256").update(readFileSync(daemonScript())).update(process.versions.electron ?? "").digest("hex").slice(0, 16) : undefined;
+  return build;
+};
 // The daemon runs agents' hooks through hive-net when it is named here.
 const daemonEnv = (): NodeJS.ProcessEnv => {
   const hiveNet = hiveNetBin();
-  return { ...process.env, ELECTRON_RUN_AS_NODE: "1", ...(hiveNet ? { HIVEMIND_HIVE_NET: hiveNet } : {}) };
+  const b = ownBuild();
+  return { ...process.env, ELECTRON_RUN_AS_NODE: "1", ...(hiveNet ? { HIVEMIND_HIVE_NET: hiveNet } : {}), ...(b ? { HIVEMIND_DAEMON_BUILD: b } : {}) };
 };
 /** The sessions a daemon replacement waits on (agents mid-turn); null when none is waiting. */
 let waitingOn: string[] | null = null;
@@ -56,20 +66,24 @@ export function daemonWaitingOn(): string[] | null { return waitingOn; }
 export function restartAgentsNow(): void { cutWait?.(); }
 
 /**
- * A daemon of this app's protocol is kept, whatever build started it: its agents run on through
- * the app's upgrade. One of another protocol is replaced once no agent is mid-turn, each session
- * put to sleep and woken in the new one. Call ONCE at startup; every connection waits for it.
+ * The daemon this app would start is kept. One another build started (the restart after an update)
+ * or of another protocol is replaced once no agent is mid-turn, each session put to sleep and woken
+ * in the new one; a command running in a terminal stops (Restart lists them first). One that does
+ * not say its build is kept while it speaks this protocol: nothing could list its commands. Call
+ * ONCE at startup; every connection waits for it.
  */
 let freshness: Promise<void> | null = null;
 export function ensureFreshDaemon(): Promise<void> {
-  freshness ??= replaceOtherProtocol();
+  freshness ??= replaceOtherBuild();
   return freshness;
 }
 
-async function replaceOtherProtocol(): Promise<void> {
+async function replaceOtherBuild(): Promise<void> {
   const sp = socketPath();
-  const protocol = await daemonProtocol(socketAt(sp));
-  if (protocol === null || protocol === DAEMON_PROTOCOL_VERSION) return;
+  const found = await runningDaemon(socketAt(sp));
+  if (!found) return;
+  const own = ownBuild();
+  if (found.protocol === DAEMON_PROTOCOL_VERSION && (!found.build || !own || found.build === own)) return;
   const show = (ids: string[] | null) => { waitingOn = ids; onWaiting(ids); };
   const retired = await retireDaemon(socketAt(sp), {
     waiting: (ids) => show(ids.length ? ids : null),
@@ -168,6 +182,13 @@ export function killAll(): void {
 /** The sessions running on this computer, asked of a daemon already running: none is started to ask. */
 export async function runningSessions(): Promise<SessionInfo[]> {
   return (await daemonSessions(socketAt(socketPath()))).filter((s) => s.state === "live" && !s.asleep);
+}
+/** The terminals running a command that the restart after an update stops: none when the daemon
+ *  does not say which build started it, as it is then kept (`ensureFreshDaemon`). */
+export async function commandsRestartStops(): Promise<SessionInfo[]> {
+  const found = await runningDaemon(socketAt(socketPath()), 2000).catch(() => null);
+  if (!found?.build) return [];
+  return (await daemonSessions(socketAt(socketPath()))).filter((s) => s.state === "live" && !s.asleep && s.command);
 }
 /** Stop this computer's daemon as `hive daemon stop` does, after our own socket goes so nothing
  *  here starts another: every session ends, saved, and comes back when the daemon next starts. */

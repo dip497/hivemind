@@ -5,7 +5,7 @@ import fs from "node:fs";
 import net from "node:net";
 import path from "node:path";
 import { frame, makeLineDecoder, type ClientMsg } from "../src/pty-protocol.ts";
-import { daemonProtocol, daemonSessions, retireDaemon, socketAt } from "../src/daemon-replace.ts";
+import { runningDaemon, daemonSessions, retireDaemon, socketAt } from "../src/daemon-replace.ts";
 
 const dir = fs.mkdtempSync("/tmp/hds-");
 const servers: net.Server[] = [];
@@ -29,8 +29,8 @@ async function silentDaemon(name: string): Promise<string> {
 
 test.skipIf(!unix)("a daemon that does not say its protocol is an error, not no daemon", async () => {
   const sock = await silentDaemon("protocol");
-  expect(await daemonProtocol(socketAt(path.join(dir, "none")), 200)).toBeNull();
-  await expect(daemonProtocol(socketAt(sock), 200)).rejects.toThrow("did not answer");
+  expect(await runningDaemon(socketAt(path.join(dir, "none")), 200)).toBeNull();
+  await expect(runningDaemon(socketAt(sock), 200)).rejects.toThrow("did not answer");
 });
 
 test.skipIf(!unix)("a daemon that does not list its sessions is an error, not no sessions", async () => {

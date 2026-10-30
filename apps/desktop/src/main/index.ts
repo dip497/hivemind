@@ -78,6 +78,8 @@ import { ControlPlane } from "@hivemind/host/control/plane";
 import { REATTACH_RESET } from "@hivemind/agent-host/daemon-endpoint";
 import type { ReadScreen } from "@hivemind/agent-host/session-relay";
 import { ipcPath, upgradeCommand, windowsStartMenuShortcut } from "./platform.js";
+import { notesFor, whatsNewSinceLastRun } from "./whats-new.js";
+import { runningRelease, windowsAppFolder } from "../shared/running-release.js";
 import { driveSockPath, readOrCreateToken } from "@hivemind/agent-host/hooks/token";
 import { ApiError, isErrorCode } from "@hivemind/workspace-api/protocol";
 import { appViewsDir, handleViewProtocol, listViewPackages, startViewWatchdog, VIEW_SCHEME_PRIVILEGES, viewSdk } from "./view-packages.js";
@@ -606,19 +608,22 @@ handleEffect("setBrowserCdpEnabled", (enabled) => ({ detail: enabled ? "on" : "o
   return { ok: true as const };
 }), { local: true });
 
-// The install.sh launcher (`~/.local/bin/hivemind`). Relaunching THROUGH it is
-// what makes "restart after update" land on the new version: the running
-// AppImage can't overwrite itself, so install.sh stages the new build to
-// `.staged` and the launcher swaps it in on its next start. A plain
-// app.relaunch() re-execs the current (old) AppRun and silently skips that swap.
+/** Set once this app's quit has handed a waiting update to the launcher. */
+let finishingUpdate = false;
+
+// What a restart starts: the version installed, which an update may have put beside this one.
+// On Linux the launcher (`~/.local/bin/hivemind`) starts the one `.installed-version` names; on
+// Windows that version's own folder. A plain app.relaunch() starts this same build again.
 function resolveLauncherPath(): string | null {
-  const launcher = process.platform === "win32" ? "hivemind.cmd" : "hivemind";
+  if (process.platform === "win32") {
+    const tag = installedReleaseTag();
+    const exe = tag ? path.join(installedAppDir(), windowsAppFolder(tag), "hivemind.exe") : null;
+    try { if (exe && statSync(exe).isFile()) return exe; } catch { /* not installed by install.ps1 */ }
+    return null;
+  }
   const candidates = [
-    process.platform === "win32"
-      ? path.join(process.env.LOCALAPPDATA || path.join(os.homedir(), "AppData", "Local"), "hivemind", "bin", launcher)
-      : path.join(os.homedir(), ".local", "bin", launcher),
-    // path.delimiter, not ":" — PATH is ";"-separated on Windows.
-    ...(process.env.PATH ?? "").split(path.delimiter).filter(Boolean).map((d) => path.join(d, launcher)),
+    path.join(os.homedir(), ".local", "bin", "hivemind"),
+    ...(process.env.PATH ?? "").split(path.delimiter).filter(Boolean).map((d) => path.join(d, "hivemind")),
   ];
   for (const p of candidates) {
     try { if (statSync(p).isFile()) return p; } catch { /* not here */ }
@@ -626,15 +631,19 @@ function resolveLauncherPath(): string | null {
   return null;
 }
 handle("relaunchApp", () => {
-  const launcher = resolveLauncherPath();
-  if (launcher) app.relaunch({ execPath: launcher, args: [] });
-  else app.relaunch();
+  if (!finishUpdateAfterQuit(true)) {
+    const launcher = resolveLauncherPath();
+    if (launcher) app.relaunch({ execPath: launcher, args: [] });
+    else app.relaunch();
+  }
   stopServices();
   app.exit(0);
 }, { local: true });
 
 // ── app version + self-update ─────────────────────────────────────────────
 handle("getAppVersion", () => app.getVersion());
+handle("whatsNew", () => whatsNewSinceLastRun(), { local: true });
+handle("releaseNotes", (_e, version: unknown) => notesFor(String(version)), { local: true });
 
 // Strict "is `latest` newer than `current`" over dotted numeric versions.
 // Tolerant of differing segment counts and non-numeric junk (→ 0).
@@ -652,26 +661,29 @@ function isNewerVersion(latest: string, current: string): boolean {
 // Fetch the latest GitHub release in MAIN (the renderer's CSP blocks the
 // api.github.com request). Any failure — offline, DNS, rate-limit, non-200 —
 // resolves to a no-update result so the UI shows nothing rather than an error.
-/** A build the installer downloaded beside the running one, waiting for a restart. The
- *  installer records it apart from the installed version, and the launcher promotes it when
- *  it applies it (`install.sh`). Absent, unreadable or not newer: nothing is waiting. */
+/** A version installed since this app started, which starts at its next restart: `.installed-version`
+ *  says which the next start runs, and differs from this one's until then. A build run from
+ *  source is not that install unless its folder is named. */
 function stagedVersion(current: string): string | null {
-  const dir = installedAppDir();
+  if (!app.isPackaged && !process.env.HIVEMIND_APP_DIR?.trim()) return null;
   const installed = installedReleaseTag();
-  // Swapped in under this app already: it waits for a restart all the same. A build run from
-  // source is not that install unless its folder is named.
-  const ours = app.isPackaged || !!process.env.HIVEMIND_APP_DIR?.trim();
-  if (ours && installed && !installed.startsWith("nightly-") && !existsSync(path.join(dir, ".staged-version"))) {
-    const numeric = installed.replace(/^v/, "");
-    return isNewerVersion(numeric, current) ? numeric : null;
-  }
-  try {
-    const v = readFileSync(path.join(dir, ".staged-version"), "utf8").trim();
-    if (v.startsWith("nightly-")) return newerNightlyTag(v, installed) ? v : null;
-    const numeric = v.replace(/^v/, "");
-    if (installed?.startsWith("nightly-")) return numeric || null;
-    return numeric && isNewerVersion(numeric, current) ? numeric : null;
-  } catch { return null; }
+  if (!installed) return null;
+  // macOS keeps one bundle where the Dock finds it: an update waits under versions/ until it quits.
+  const waiting = process.platform === "darwin"
+    ? existsSync(path.join(installedAppDir(), "versions", installed, "hivemind.app"))
+    : installed !== runningRelease(process.execPath, current);
+  if (!waiting) return null;
+  return installed.startsWith("nightly-") ? installed : installed.replace(/^v/, "");
+}
+
+/** On macOS, the launcher puts a waiting update in place of this bundle once this app has quit,
+ *  and opens it again when asked. Whether it was handed over. */
+function finishUpdateAfterQuit(reopen: boolean): boolean {
+  if (process.platform !== "darwin" || !stagedVersion(app.getVersion())) return false;
+  const launcher = resolveLauncherPath();
+  if (!launcher) return false;
+  spawn(launcher, ["finish-update", String(process.pid), ...(reopen ? ["--open"] : [])], { detached: true, stdio: "ignore" }).unref();
+  return true;
 }
 
 function installedAppDir(): string {
@@ -800,6 +812,8 @@ handle("getLaunchTarget", (e) => launchTargets.get(e.sender) ?? null, { local: t
 ptyDaemon.setDaemonWaitSink((ids) => broadcast("daemon:waiting", ids));
 handle("daemon:waiting", () => ptyDaemon.daemonWaitingOn(), { local: true });
 handle("daemon:restart-now", () => ptyDaemon.restartAgentsNow(), { local: true });
+handle("daemon:commands", async () => (await ptyDaemon.commandsRestartStops())
+  .map((s) => ({ id: toBareId(s.id), title: s.title || path.basename(s.cwd) })), { local: true });
 // A New Window command: another window on the workspace the asking one shows.
 handle("window:new", (e) => createWindow(workspaceShownBy(e.sender)), { local: true });
 
@@ -2055,6 +2069,7 @@ let quitting = false;
 // otherwise lose the canvas tile-layout (localStorage). Flush, then exit a beat
 // later. Closing the socket signals the daemon to detach; sessions keep running.
 function forceExitAfterFlush(): void {
+  if (!finishingUpdate) finishingUpdate = finishUpdateAfterQuit(false);
   stopServices();
   try {
     killAllPtys();

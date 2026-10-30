@@ -1,3 +1,4 @@
+import type { ReleaseNotes } from "./release-notes.js";
 import type { SessionStatus } from "@hivemind/agent-host/status-store";
 /** Typed contract for IPC between main and renderer. */
 import type { PageFrame, PageInput } from "./page-input.js";
@@ -629,6 +630,12 @@ export interface HiveIpc {
    *  in MAIN (renderer CSP blocks the github.com fetch). Never rejects — a
    *  failed check resolves with `latest: null`. */
   checkForUpdate?(): Promise<UpdateStatus>;
+  /** What changed since the version this person last ran, once a run, newest first; none on a
+   *  first run or when this is not newer. */
+  whatsNew?(): Promise<ReleaseNotes[]>;
+  /** What `version` changed: this one's or an older one's from the changelog shipped; a newer
+   *  one's, with the versions between, from GitHub (none when it cannot be reached). */
+  releaseNotes?(version: string): Promise<ReleaseNotes[]>;
   /** Run the official installer (the same `install.sh` flow `hivemind upgrade`
    *  uses) and resolve with its exit status. Does NOT quit — the renderer shows
    *  the result and then calls `relaunchApp()` to restart into the new version.
@@ -1068,6 +1075,8 @@ export type HiveApi = HiveIpc & {
   onDaemonWaiting: (cb: (ids: string[] | null) => void) => () => void;
   /** Stop waiting: those agents are put to sleep now, ending their turns, and woken in the new daemon. */
   restartAgentsNow?: () => Promise<void>;
+  /** The terminals running a command that restarting into a downloaded update stops. */
+  commandsRestartStops?: () => Promise<{ id: string; title: string }[]>;
   /** Path passed on the CLI (`hivemind .` / `hivemind /repo`), or null. */
   getLaunchTarget?: () => Promise<string | null>;
   /** Another window, on the workspace this one shows. */

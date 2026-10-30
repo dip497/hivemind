@@ -1,6 +1,7 @@
 import * as SettingsDialog from "@radix-ui/react-dialog";
 import { ThemePanel } from "./ThemePanel";
 import { QuitDialog } from "./QuitDialog";
+import { WhatsNew, showWhatsNew } from "./WhatsNew";
 import { QuitSetting } from "./quit-setting";
 import { RecentProjects } from "./RecentProjects";
 import { WorkspaceActions } from "./multiplayer/workspace-actions";
@@ -117,9 +118,21 @@ function useUpdateCheck() {
   const [upgrading, setUpgrading] = useState(false);
   const [progress, setProgress] = useState<UpdateProgress | null>(null);
   const upgradingRef = useRef(false);
-  const restart = useCallback(() => {
-    toast.loading("Restarting into the new version…");
-    window.setTimeout(() => { void window.hive.relaunchApp?.(); }, 600);
+  const restart = useCallback(async () => {
+    const go = () => {
+      toast.loading("Restarting into the new version…", { id: "restart" });
+      window.setTimeout(() => { void window.hive.relaunchApp?.(); }, 600);
+    };
+    // The terminals start again on the new version: a command running in one stops, so it is named first.
+    const stops = await window.hive.commandsRestartStops?.().catch(() => []) ?? [];
+    if (!stops.length) return go();
+    toast.warning(stops.length === 1 ? "Restarting stops a command running in a terminal" : `Restarting stops commands running in ${stops.length} terminals`, {
+      id: "restart",
+      description: `${stops.map((s) => s.title).join(", ")}. Each terminal comes back at its prompt; agents come back in the same conversation.`,
+      action: { label: "Restart", onClick: go },
+      cancel: { label: "Not now", onClick: () => {} },
+      duration: Infinity,
+    });
   }, []);
   const upgrade = useCallback(() => {
     if (upgradingRef.current || !window.hive?.runUpgrade) return;
@@ -346,6 +359,7 @@ export function App() {
 
         <FolderPathDialog />
         <QuitDialog />
+        <WhatsNew />
         <StatusAnnouncer />
         <RecentProjects
           open={!!recentOpen}
@@ -386,7 +400,7 @@ const REPO_URL = "https://github.com/dip497/hivemind";
 function UpdateWork({ progress, busy, onRestart }: { progress: UpdateProgress | null; busy: boolean; onRestart: () => void }) {
   const p = progress ?? UPDATE_START;
   const filled = ((UPDATE_STEPS.indexOf(p.step) + 1) / UPDATE_STEPS.length) * 100;
-  const ready = p.step === "done" && !busy && !p.blocked;
+  const ready = p.step === "done" && !busy;
   return (
     <>
       <div className="min-w-0 flex-1">
@@ -520,6 +534,7 @@ function SettingsModal({
             <div className="flex items-baseline gap-2">
               <span className="text-row font-semibold text-[var(--color-fg)]">hivemind</span>
               <span className="text-count font-mono text-[var(--color-fg2)]">{version ? `v${version}` : "version…"}</span>
+              {version && window.hive.releaseNotes && <NotesLink version={version} label="What's new" />}
             </div>
             <a
               href={REPO_URL}
@@ -547,6 +562,7 @@ function SettingsModal({
                   <span className="size-2 rounded-full bg-[var(--color-warn)]" aria-hidden />
                   Update available{update.latest ? ` — v${update.latest}` : ""}
                 </span>
+                {update.latest && window.hive.releaseNotes && <NotesLink version={update.latest} label="What's in it" />}
                 <Button onClick={onUpgrade} size="xs" title="Download the latest release">Update</Button>
               </>
             ) : update?.off ? (
@@ -599,3 +615,19 @@ function SettingsModal({
   );
 }
 
+
+/** Opens what `version` changed; says so when it cannot be read (a newer one is read from GitHub). */
+function NotesLink({ version, label }: { version: string; label: string }) {
+  const [state, setState] = useState<"idle" | "busy" | "none">("idle");
+  const open = () => {
+    setState("busy");
+    void window.hive.releaseNotes!(version).then((n) => {
+      if (n.length) { setState("idle"); showWhatsNew(n); } else setState("none");
+    }, () => setState("none"));
+  };
+  return (
+    <button type="button" className="settings-link text-count" onClick={open} disabled={state === "busy"} data-release-notes={version}>
+      {state === "none" ? "No notes found" : state === "busy" ? "Reading…" : label}
+    </button>
+  );
+}

@@ -193,6 +193,8 @@ export function hiveOverIpc(port: IpcPort, workspace: WorkspaceClient): Omit<Hiv
     startViewOffers: local("plugins:start-view-offers", invoke("plugins:start-view-offers")),
     onViewRunaway: (cb) => port.on("views:runaway", cb),
     checkForUpdate: local("checkForUpdate", invoke("checkForUpdate")),
+    whatsNew: local("whatsNew", invoke("whatsNew")),
+    releaseNotes: local("releaseNotes", invoke("releaseNotes")),
     runUpgrade: local("runUpgrade", invoke("runUpgrade")),
     onUpdateProgress: (cb) => port.on("update:progress", cb),
     onBrowserPopup: (cb) => port.on("browser:popup", cb),
@@ -213,6 +215,7 @@ export function hiveOverIpc(port: IpcPort, workspace: WorkspaceClient): Omit<Hiv
     daemonWaitingOn: local("daemon:waiting", invoke("daemon:waiting")),
     onDaemonWaiting: (cb) => port.on("daemon:waiting", cb),
     restartAgentsNow: local("daemon:restart-now", invoke("daemon:restart-now")),
+    commandsRestartStops: local("daemon:commands", invoke("daemon:commands")),
     pickMedia: local("media:pick", invoke("media:pick")),
     themes: port.serves("themes:list") ? {
       list: () => port.invoke("themes:list"),
