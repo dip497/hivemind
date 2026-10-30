@@ -264,7 +264,10 @@ app_open() {
   ps -e -o args= 2>/dev/null | HIVEMIND_APP="$appdir/" awk 'index(\$0, ENVIRON["HIVEMIND_APP"]) && !/pty-daemon\.js/ { found = 1 } END { exit !found }'
 }
 finish_update() {
-  local next="$APP_DIR/versions/\$(cat "$APP_DIR/.installed-version" 2>/dev/null)/hivemind.app"
+  local tag next
+  tag=\$(cat "$APP_DIR/.installed-version" 2>/dev/null)
+  case "\$tag" in ""|.*|*[!A-Za-z0-9._-]*) return 0 ;; esac
+  next="$APP_DIR/versions/\$tag/hivemind.app"
   [ -d "\$next" ] || return 0
   rm -rf "$appdir.old"
   if [ -d "$appdir" ]; then mv "$appdir" "$appdir.old" || return 1; fi

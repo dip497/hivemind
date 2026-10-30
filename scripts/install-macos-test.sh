@@ -123,6 +123,13 @@ TAG=v9.9.12
 : > "$TMP/out4"; [ -d "$APP_DIR/versions/$TAG/hivemind.app" ] && finish_version_mac > "$TMP/out4" 2>&1
 check "a re-run finishes it"           [ "$(live)" = "hivemind v9.9.12 " ]
 
+# ── a version stamp that is not a version moves nothing ──
+mkdir -p "$APP_DIR/versions" "$APP_DIR/elsewhere/hivemind.app"
+echo "../elsewhere" > "$INSTALLED_FILE"
+"$BIN_DIR/hivemind" finish-update
+check "a stamp that is a path is ignored" [ "$(live)" = "hivemind v9.9.12 " ]
+rm -rf "$APP_DIR/elsewhere" "$APP_DIR/versions"
+
 # `hivemind uninstall` (no --purge) removes the app but keeps user data.
 open_window
 install_release v9.9.13 > /dev/null
