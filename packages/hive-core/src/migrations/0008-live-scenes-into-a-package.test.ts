@@ -1,5 +1,5 @@
 /**
- * 0007 on a settings.json from before the live scenes moved into a package (fixtures/0007/before):
+ * 0008 on a settings.json from before the live scenes moved into a package (fixtures/0008/before):
  * Koi Pond as the wallpaper and Shoal as the one a Clean preset put aside name the package's
  * wallpapers, which this build reads, and every other value stays. A file naming neither is left
  * alone, with no backup. Killed at 20 points and run again, it ends as a clean run does.
@@ -10,8 +10,8 @@ import path from "node:path";
 import { mergeSettings } from "../settings-schema.js";
 import { TestRoot } from "./fixtures/runs.js";
 
-const FIXTURE = path.join(import.meta.dir, "fixtures", "0007", "before");
-const ID = "0007-live-scenes-into-a-package";
+const FIXTURE = path.join(import.meta.dir, "fixtures", "0008", "before");
+const ID = "0008-live-scenes-into-a-package";
 const BEFORE = JSON.parse(fs.readFileSync(path.join(FIXTURE, "settings.json"), "utf8"));
 let t: TestRoot;
 afterEach(() => t.remove());
@@ -32,7 +32,7 @@ describe("the live scenes' names move to the Live scenes package", () => {
     back.appearance.lookBefore.wallpaper = "shoal";
     expect(back).toEqual(BEFORE);
     expect(t.ledger().find((a) => a.id === ID)?.result).toEqual({ renamed: ["@dip497/live-scenes/koi", "@dip497/live-scenes/shoal"] });
-    // The backup is the file as 0007 found it: restoring it gives back the old names.
+    // The backup is the file as 0008 found it: restoring it gives back the old names.
     const backup = t.read(`migrations/backups/${ID}/settings.json`).appearance;
     expect([backup.wallpaper.kind, backup.lookBefore.wallpaper]).toEqual(["koi", "shoal"]);
   });

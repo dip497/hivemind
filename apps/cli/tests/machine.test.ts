@@ -23,7 +23,8 @@ beforeAll(() => {
   const bin = path.join(tmp, "bin");
   fs.mkdirSync(bin);
   // `good` has this version's hive, `arm` gets it downloaded there, `oldmac` has no release,
-  // `down` refuses the connection (exit 255), and `shell` runs what it is sent in a home of its own.
+  // `down` refuses the connection (exit 255), `shell` runs what it is sent in a home of its own, and
+  // `win` is a Windows PC whose ssh opens cmd: no `sh` there, and PowerShell answers.
   const rhome = path.join(tmp, "rhome");
   const there = path.join(rhome, ".hivemind", "bin", version);
   fs.mkdirSync(there, { recursive: true });
@@ -40,6 +41,10 @@ case "$target_prev" in
     *) printf 'HIVEPROBE-UNAME Linux aarch64\\n'; if [ -f "${path.join(tmp, "installed")}" ]; then printf 'HIVEPROBE-PATH /home/u/.hivemind/bin/${version}/hive\\nHIVEPROBE-DAEMON yes\\n'; fi ;;
   esac ;;
   oldmac) printf 'HIVEPROBE-UNAME Darwin x86_64\\n' ;;
+  win) case "$last" in
+    "sh -c"*) echo "'sh' is not recognized as an internal or external command," >&2; exit 1 ;;
+    powershell*) printf 'HIVEPROBE-UNAME Windows ARM64\\r\\nHIVEPROBE-KIND laptop\\r\\n' ;;
+  esac ;;
   shell) HOME=${rhome} PATH=/usr/bin:/bin exec sh -c "$last" ;;
   *)    printf 'HIVEPROBE-UNAME Linux x86_64\\n' ;;
 esac
@@ -60,8 +65,17 @@ describe("hive machine", () => {
     expect(fs.statSync(path.join(tmp, "xdg", "hivemind", "machines.json")).mode & 0o777).toBe(0o600);
   });
 
-  test("a machine without this version's hive gets it, downloaded there, in a folder of that version", () => {
+  test("added as it comes, a machine gets no hive: its terminals run over plain ssh", () => {
     const r = run("machine", "add", "arm", "--json");
+    expect(r.json).toMatchObject({ target: "arm", platform: "linux-arm64", installed: false });
+    expect(fs.existsSync(path.join(tmp, "installed"))).toBe(false);
+    expect((r.json as { installHive?: boolean }).installHive).toBeUndefined();
+    expect(run("machine", "list").stdout).toMatch(/arm\s+\(linux-arm64\)\s+plain ssh/);
+    expect(run("machine", "remove", "arm", "--json").code).toBe(0);
+  });
+
+  test("asked to, a machine without this version's hive gets it, downloaded there, in a folder of that version", () => {
+    const r = run("machine", "add", "arm", "--install-hive", "--json");
     expect(r.json).toMatchObject({ target: "arm", platform: "linux-arm64", installed: true, hivePath: `/home/u/.hivemind/bin/${version}/hive` });
     const cmd = fs.readFileSync(path.join(tmp, "installed"), "utf8");
     expect(cmd).toContain(`'https://github.com/dip497/hivemind/releases/download/v${version}/hive-linux-arm64'`);
@@ -69,14 +83,34 @@ describe("hive machine", () => {
     expect(run("machine", "remove", "arm", "--json").code).toBe(0);
   });
 
-  test("a platform with no release is not saved, and says so", () => {
-    const r = run("machine", "add", "oldmac", "--json");
+  test("a platform with no release gets no hive and is not saved so; without it, it is", () => {
+    const r = run("machine", "add", "oldmac", "--install-hive", "--json");
     expect(r.json).toMatchObject({ error: { code: "MACHINE_INSTALL_UNAVAILABLE" } });
     expect((data(run("machine", "list", "--json")).machines as { target: string }[]).map((m) => m.target)).toEqual(["good"]);
+    expect(run("machine", "add", "oldmac", "--json").json).toMatchObject({ platform: "darwin-x86_64", installed: false });
+    expect(run("machine", "remove", "oldmac", "--json").code).toBe(0);
+  });
+
+  test("a Windows PC whose ssh opens cmd is asked again as Windows and saved, over plain ssh: hive is not put there, nor run there", () => {
+    expect(run("machine", "add", "win", "--json").json).toMatchObject({ target: "win", platform: "windows-arm64", kind: "laptop", installed: false });
+    expect(run("machine", "install-hive", "win", "--json").json).toMatchObject({ error: { code: "MACHINE_INSTALL_UNAVAILABLE" } });
+    expect(run("ps", "--machine", "win", "--json").json).toMatchObject({ error: { code: "MACHINE_WITHOUT_HIVE" } });
+    expect(run("machine", "remove", "win", "--json").code).toBe(0);
+    expect(run("machine", "add", "win", "--install-hive", "--json").json).toMatchObject({ error: { code: "MACHINE_INSTALL_UNAVAILABLE" } });
+  });
+
+  test("hive is put on a machine later, and taken off it for new terminals", () => {
+    expect(run("machine", "add", "shell", "--json").code).toBe(0);
+    expect(run("ps", "--machine", "shell", "--json").json).toMatchObject({ error: { code: "MACHINE_WITHOUT_HIVE" } });
+    expect(run("machine", "install-hive", "shell", "--json").json).toMatchObject({ installHive: true });
+    expect(run("machine", "list").stdout).toMatch(/shell\s.*\shive$/m);
+    expect(run("machine", "install-hive", "shell", "--off", "--json").json).toMatchObject({ installHive: false });
+    expect(run("machine", "list").stdout).toMatch(/shell\s.*plain ssh$/m);
+    expect(run("machine", "remove", "shell", "--json").code).toBe(0);
   });
 
   test("a command sent to a machine runs this version's hive there as this person's", () => {
-    expect(run("machine", "add", "shell", "--json").code).toBe(0);
+    expect(run("machine", "add", "shell", "--install-hive", "--json").code).toBe(0);
     const r = run("ps", "--machine", "shell");
     const person = machineKeys(path.join(tmp, "xdg", "hivemind", "identity")).personId.slice(0, 16);
     expect(r.stdout.trim()).toBe(`ps as ${path.join(tmp, "rhome")}/.hivemind/people/${person}`);

@@ -3,15 +3,14 @@ title: "Machines and hosts"
 description: "How Hivemind runs terminals and agents on another computer: a machine over ssh, or a host over hive-net."
 ---
 
-A frame can sit on another computer. Its terminals and agents then run there, in that
-computer's own background process, and keep running when you disconnect. There are two ways to
-reach it.
+A frame can sit on another computer. Its terminals and agents then run there. There are two ways
+to reach it.
 
 <Diagram name="machines-paths" caption="Two ways to run on another machine" />
 
-- **Your computer** → **machine**: ssh, with your own `~/.ssh/config` and keys. The app puts its own version of `hive` there and runs `hive daemon bridge`, which joins your own **background process** on that machine. Each person who logs in as the same user has their own.
+- **Your computer** → **machine**: ssh, with your own `~/.ssh/config` and keys. With **Install hive there** on, the app puts its own version of `hive` there and runs `hive daemon bridge`, which joins your own **background process** on that machine. Each person who logs in as the same user has their own.
 - **Your computer** → **host**: hive-net, directly or through your relay. The host runs `hive host`, whose background process runs the workspace's terminals and agents.
-- A machine `hive` cannot be put on gets plain ssh terminals, which end when the connection drops.
+- A machine without `hive`, which is how one starts and every Windows one stays, runs plain ssh terminals. They end when the connection drops: see [Keep terminals running](/machines#keep-terminals-running).
 
 ## Machine or host
 

@@ -39,12 +39,41 @@ export interface ProbeResult {
   daemon?: boolean;
 }
 
-/** Matches the release asset names (`hive-linux-x86_64`, `hive-darwin-arm64`). */
+/** Matches the release asset names (`hive-linux-x86_64`, `hive-darwin-arm64`, `hive-windows-x64`). */
 export function platformOf(os: string, arch: string): string | null {
+  const x64 = /^(x86_64|amd64)$/i.test(arch.trim());
+  const arm = /^(aarch64|arm64)$/i.test(arch.trim());
+  if (os.trim() === "Windows") return x64 ? "windows-x64" : arm ? "windows-arm64" : null;
   const o = os.trim() === "Linux" ? "linux" : os.trim() === "Darwin" ? "darwin" : null;
-  const a = /^(x86_64|amd64)$/.test(arch.trim()) ? "x86_64" : /^(aarch64|arm64)$/.test(arch.trim()) ? "arm64" : null;
+  const a = x64 ? "x86_64" : arm ? "arm64" : null;
   return o && a ? `${o}-${a}` : null;
 }
+
+export { isWindowsPlatform } from "./remote-uri.js";
+
+/** A command a Windows machine runs whether its ssh opens cmd or PowerShell: the script, in
+ *  PowerShell, base64-encoded, which neither shell reads anything into. `interactive`: for a
+ *  terminal; otherwise it may not ask for input. */
+export function powershellCommand(script: string, interactive = false): string {
+  const encoded = Buffer.from(script, "utf16le").toString("base64");
+  // A script npm installs (an agent's .ps1) runs whatever the machine's script policy says.
+  return `powershell -NoLogo -NoProfile -ExecutionPolicy Bypass${interactive ? "" : " -NonInteractive"} -EncodedCommand ${encoded}`;
+}
+
+/** One word in PowerShell, whatever it holds: each quote PowerShell reads as one (it takes the
+ *  typographic ‘ ’ ‚ ‛ as well as ') doubled. */
+export const psq = (s: string): string => `'${s.replace(/['\u2018\u2019\u201A\u201B]/g, "$&$&")}'`;
+
+/** The probe for a machine whose ssh is not a POSIX shell: Windows says what it is, as the POSIX
+ *  probe's tagged lines do, and what kind of computer it is when Windows knows. */
+export const WINDOWS_PROBE = powershellCommand([
+  `"HIVEPROBE-UNAME Windows $env:PROCESSOR_ARCHITECTURE"`,
+  `try {`,
+  `  $c = Get-CimInstance Win32_ComputerSystem -ErrorAction Stop`,
+  `  $k = if ($c.Model -match 'Virtual|VMware|KVM|QEMU|Xen|HVM') { 'virtual-machine' } elseif ($c.PCSystemType -eq 2) { 'laptop' } elseif (@(4, 5, 7) -contains $c.PCSystemType) { 'server' } else { 'desktop' }`,
+  `  "HIVEPROBE-KIND $k"`,
+  `} catch {}`,
+].join("\n"));
 
 export function localPlatform(): string | null {
   return platformOf(process.platform === "linux" ? "Linux" : process.platform === "darwin" ? "Darwin" : "", process.arch === "x64" ? "x86_64" : process.arch);
@@ -101,7 +130,7 @@ export function parseProbe(out: string): ProbeResult {
   if (!uname) throw new HiveError("machine_probe_failed", "remote did not answer the probe (is it a POSIX shell?)");
   const [os = "", arch = ""] = uname.split(" ");
   const platform = platformOf(os, arch);
-  if (!platform) throw new HiveError("machine_unsupported", `unsupported remote platform '${uname}' — Linux or macOS on x86_64/arm64 only`);
+  if (!platform) throw new HiveError("machine_unsupported", `unsupported remote platform '${uname}' — Linux, macOS or Windows on x86_64/arm64 only`);
   const hivePath = line("PATH");
   const kind = kindIn(out);
   const res: ProbeResult = { platform, ...(kind ? { kind } : {}) };

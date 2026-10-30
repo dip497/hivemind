@@ -6,6 +6,7 @@ import { Requests } from "./multiplayer/requests";
 import { TooltipProvider } from "./components/ui/tooltip";
 import { App } from "./App";
 import { useThemeField } from "./theme-store";
+import { inEditable } from "./dom-focus";
 // Self-host Geist (UI) and JetBrains Mono (terminal/code/IDs) so glyphs are available
 // immediately and offline — no CDN round-trip, no flash-of-fallback that would
 // leave xterm's glyph atlas built on the wrong metrics. Weights match --font-mono.
@@ -47,6 +48,12 @@ window.addEventListener("vite:preloadError", (e) => {
   try { sessionStorage.setItem(KEY, String(Date.now())); } catch { /* reload anyway */ }
   e.preventDefault();
   location.reload();
+});
+
+// Select all is a text field's: anywhere else it would take the whole window's text, its tiles'
+// names and buttons, which the next copy puts on the clipboard and a paste then types into an agent.
+window.addEventListener("keydown", (e) => {
+  if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "a" && !inEditable(e.target)) e.preventDefault();
 });
 
 const queryClient = new QueryClient({

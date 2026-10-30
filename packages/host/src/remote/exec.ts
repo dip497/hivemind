@@ -1,5 +1,23 @@
-/** Safe remote command builders; every interpolated path/arg is POSIX-quoted because ssh runs a shell string. */
+/** Safe remote command builders; every interpolated path/arg is quoted for the shell ssh runs it in. */
 import { shq } from "@hivemind/agents/node";
+import { powershellCommand, psq } from "@hivemind/core";
+import { windowsFolder } from "@hivemind/core/remote-uri";
+
+/** One argument as a Windows program reads its command line: quoted, a quote in it escaped, and
+ *  the backslashes before a quote doubled. */
+export function windowsArg(s: string): string {
+  if (s && !/[\s"]/.test(s)) return s;
+  return `"${s.replace(/(\\*)"/g, '$1$1\\"').replace(/(\\+)$/, "$1$1")}"`;
+}
+
+/** git run by .NET on a Windows machine, its output copied byte for byte: PowerShell's own output
+ *  would re-encode it and end its lines in CRLF. */
+const WIN_GIT = `$s = New-Object System.Diagnostics.ProcessStartInfo 'git', $a
+$s.UseShellExecute = $false; $s.RedirectStandardOutput = $true; $s.RedirectStandardError = $true
+$p = [System.Diagnostics.Process]::Start($s)
+$e = $p.StandardError.ReadToEndAsync()
+$o = [Console]::OpenStandardOutput(); $p.StandardOutput.BaseStream.CopyTo($o); $o.Flush()
+$p.WaitForExit(); [Console]::Error.Write($e.Result); exit $p.ExitCode`;
 
 /**
  * Build a safe remote `git -C <path> <args…>` command string. Mirrors the
@@ -7,7 +25,8 @@ import { shq } from "@hivemind/agents/node";
  * is single-quote-escaped so paths/refs with spaces or metacharacters can't
  * break out of the remote shell.
  */
-export function remoteGit(repoPath: string, args: string[]): string {
+export function remoteGit(repoPath: string, args: string[], windows = false): string {
+  if (windows) return powershellCommand(`$a = ${psq(["-C", windowsFolder(repoPath) ?? repoPath, ...args].map(windowsArg).join(" "))}\n${WIN_GIT}`);
   return `git -C ${shq(repoPath)} ${args.map(shq).join(" ")}`;
 }
 

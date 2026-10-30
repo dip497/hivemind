@@ -49,8 +49,8 @@ function renames(raw: Record<string, unknown> | null): Array<{ holder: Record<st
   return out;
 }
 
-export const m0007: Migration = {
-  id: "0007-live-scenes-into-a-package",
+export const m0008: Migration = {
+  id: "0008-live-scenes-into-a-package",
   root: "config",
   backsUp: ["settings.json"],
   movesFilesAnOlderAppReads: false,

@@ -10,14 +10,16 @@ import path from "node:path";
 import { app } from "electron";
 import * as nodePty from "@lydell/node-pty";
 import { parseRemote, type RemoteTarget } from "@hivemind/core/remote-uri";
+import { isWindowsPlatform } from "@hivemind/core";
+import { machineAt } from "@hivemind/host/remote/catalog";
 import { pasteText } from "@hivemind/agent-host/paste";
-import { shq, withoutControl } from "@hivemind/agents/node";
+import { withoutControl } from "@hivemind/agents/node";
 import { remoteConns } from "@hivemind/host/remote/conn";
 import { DaemonEndpoint, type EndpointState } from "@hivemind/agent-host/daemon-endpoint";
 import { DAEMON_PROTOCOL_VERSION, type Viewport } from "@hivemind/agent-host/pty-protocol";
 import { daemonProtocol, retireDaemon, wakeSessions } from "@hivemind/agent-host/daemon-replace";
 import { acceptRemoteEvent } from "./events.js";
-import { ASKPASS_SCRIPT, bridgeRemoteCommand, needsAttention, openBridge, sshCommand, type SshPaths } from "@hivemind/host/remote/ssh";
+import { ASKPASS_SCRIPT, bridgeRemoteCommand, needsAttention, openBridge, plainTerminalCommand, sshCommand, type SshPaths } from "@hivemind/host/remote/ssh";
 import { ensureHive, hivePerson, hiveVersion } from "./hive-there.js";
 
 interface SpawnOpts {
@@ -103,11 +105,19 @@ export function hostFailure(hostId: string): string | undefined {
   return failure.get(hostId);
 }
 
+/** Whether this host's terminals run over plain ssh: a saved machine the person did not ask to
+ *  have `hive` put on, and every Windows one. */
+export function plainSsh(hostId: string): boolean {
+  const m = machineAt(hostId);
+  return !!m && (!m.installHive || isWindowsPlatform(m.platform));
+}
+
 /** This host's daemon endpoint: this person's terminal server there, run by this app's own `hive`,
  *  put in place first when it is not. Null when it cannot be put there (or the host cannot be
- *  probed right now); rejects when the login needs the person. */
+ *  probed right now), or its terminals run over plain ssh; rejects when the login needs the person. */
 export function endpointFor(target: RemoteTarget): Promise<DaemonEndpoint | null> {
   if (paused.has(target.hostId)) return Promise.reject(new Error("this machine is turned off"));
+  if (plainSsh(target.hostId)) return Promise.resolve(null);
   const cached = endpoints.get(target.hostId);
   if (cached) return cached;
   report(target.hostId, "connecting");
@@ -268,8 +278,8 @@ async function spawnThroughDaemon(opts: SpawnOpts, target: RemoteTarget, cb: Cal
     return { pid: r.pid > 0 ? -r.pid : r.pid, ...(r.asleep ? { asleep: true as const } : {}) };
   }
   // The local PTY is ssh's terminal, so a resize reaches the remote as a window change.
-  const inner = `cd ${shq(target.path)} && exec ${[opts.cmd, ...(opts.args ?? [])].map(shq).join(" ")}`;
-  const c = sshCommand(target, remoteConns.resolveAuthFor(target.hostId), sshPaths(), `bash -lc ${shq(inner)}`, { tty: true });
+  const windows = isWindowsPlatform(machineAt(target.hostId)?.platform);
+  const c = sshCommand(target, remoteConns.resolveAuthFor(target.hostId), sshPaths(), plainTerminalCommand(target.path, opts.cmd, opts.args ?? [], windows), { tty: true });
   const p = nodePty.spawn("ssh", c.args, { name: "xterm-256color", cols: opts.cols, rows: opts.rows, env: { ...(process.env as Record<string, string>), ...c.env } });
   p.onData(cb.onData);
   p.onExit(({ exitCode, signal }) => {

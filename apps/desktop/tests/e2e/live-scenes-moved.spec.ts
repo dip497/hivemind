@@ -1,6 +1,6 @@
 // Shoal, Koi Pond, Jellyfish and Fireflies moved out of the app into the Live scenes package. A
 // settings.json from before, Koi Pond chosen, names the package's Koi Pond once the app starts
-// (migration 0007); the plain background shows, and Settings ▸ Appearance says what it comes in
+// (migration 0008); the plain background shows, and Settings ▸ Appearance says what it comes in
 // and installs that from HiveHub, after which it draws, with nothing else to choose, and HiveHub's
 // list says the package is installed. Make your own
 // there hands an agent the prompt for a live wallpaper.
