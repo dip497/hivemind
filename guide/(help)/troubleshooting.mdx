@@ -71,7 +71,7 @@ xattr -dr com.apple.quarantine ~/.hivemind-app/hivemind.app
 
 **Check:** `hivemind` opens the app.
 
-If the installer says `hivemind is running — the app was NOT upgraded`, quit Hivemind, then run `hivemind upgrade` again. Hivemind needs macOS 13 or later on Apple Silicon: see [System requirements](/system-requirements).
+Hivemind needs macOS 13 or later on Apple Silicon: see [System requirements](/system-requirements).
 
 ## The AppImage does not start
 
@@ -103,8 +103,6 @@ To keep running the AppImage by hand, start it with `--no-sandbox`:
 4. To pick up an older conversation, list it with `hive ctl sessions <agent>`, then start it with `hive ctl spawn --agent <agent> --resume <session>`.
 
 **Check:** the agent's tile shows its conversation again.
-
-On macOS, the installer does not replace a running app. Quit Hivemind before `hivemind upgrade`.
 
 ## hive ctl says the app is not running
 

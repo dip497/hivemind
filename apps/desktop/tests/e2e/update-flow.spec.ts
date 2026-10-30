@@ -75,7 +75,6 @@ test("while it works, the step is named and the bar fills to it; then a restart 
     "target version: v9999.1.0",
     "downloading desktop AppImage",
     "extracting AppImage (no libfuse2 needed)",
-    "hivemind is running — upgrade STAGED. Quit & reopen hivemind to apply it.",
     "downloaded v9999.1.0 — restart hivemind to finish",
   ]);
   const bar = about().getByRole("progressbar");

@@ -33,25 +33,17 @@ test("an upgrade in place walks check → download → install → done, naming 
 });
 
 test("a download that needs a restart says so, and is the only thing left", () => {
-  const staged = fold([...RUN.slice(0, 6), "hivemind is running — upgrade STAGED. Quit & reopen hivemind to apply it.", "downloaded v2026.9.7 — restart hivemind to finish"]).at(-1)!;
+  const staged = fold([...RUN.slice(0, 6), "downloaded v2026.9.7 — restart hivemind to finish"]).at(-1)!;
   assert.equal(staged.step, "done");
   assert.equal(staged.staged, true);
   assert.equal(staged.label, "Downloaded — restart to finish");
-  // Asked again when it is already waiting.
-  assert.equal(updateProgress("v2026.9.7 is downloaded already — restart hivemind to finish").staged, true);
+  // Windows says it without the dash its console may not show.
+  assert.equal(updateProgress("+ downloaded v2026.9.7 - restart hivemind to finish").staged, true);
 });
 
 test("nothing known yet, and noise, are both safe", () => {
   assert.deepEqual(updateProgress("some line nobody expected"), UPDATE_START);
   assert.equal(updateProgress("warn: could not reach github.com", { step: "download", label: "Downloading" }).step, "download");
-});
-
-test("where a running app cannot be replaced at all, it says what the user has to do", () => {
-  // macOS and Windows: the installer upgrades the CLI and refuses the app.
-  const p = updateProgress("hivemind is running - the app was NOT upgraded (Windows locks a running .exe).", { step: "download", label: "Downloading", version: "2026.9.7" });
-  assert.equal(p.blocked, true);
-  assert.equal(p.staged, undefined);
-  assert.match(p.label, /Close hivemind/);
 });
 
 test("the tag comes out of the url GitHub's releases/latest redirects to", () => {

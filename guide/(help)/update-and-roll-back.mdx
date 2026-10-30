@@ -9,10 +9,9 @@ Update when the app says a new version is out, or go back to an older one if a r
 Update Hivemind on this computer, or roll it back to the release I name.
 
 1. Record the current version with \`hive --version\`.
-2. On macOS, check whether the app is open. If it is, ask me to quit it first: the installer does not replace a running app on macOS.
-3. To update: run \`hivemind upgrade\`. To roll back or pin a version: on Linux and macOS run \`bash <(curl -fsSL https://hivemind.griiken.com/install.sh) --version <tag>\`; on Windows run \`& ([scriptblock]::Create((irm https://hivemind.griiken.com/install.ps1))) -Version <tag>\`. Tags look like \`v2026.10.3\`; ask me which one.
-4. Check \`hive --version\` prints the version expected. If the app was open on Linux, tell me to restart it to finish.
-5. In each project that uses Hivemind's agent skills, run \`hive add skill\` to refresh them.
+2. To update: run \`hivemind upgrade\`. To roll back or pin a version: on Linux and macOS run \`bash <(curl -fsSL https://hivemind.griiken.com/install.sh) --version <tag>\`; on Windows run \`& ([scriptblock]::Create((irm https://hivemind.griiken.com/install.ps1))) -Version <tag>\`. Tags look like \`v2026.10.3\`; ask me which one.
+3. Check \`hive --version\` prints the version expected. If the installer says "restart hivemind to finish", tell me to press **Restart to finish** in the app.
+4. In each project that uses Hivemind's agent skills, run \`hive add skill\` to refresh them.
 
 At the end, tell me the old and the new version.
 `}</AgentPrompt>
@@ -28,7 +27,9 @@ At the end, tell me the old and the new version.
   </Step>
 </Steps>
 
-Your agents keep running in the background process while the app restarts.
+Your terminals and agents move to the new version with the app. An agent in the middle of a turn finishes it first, then comes back in the same conversation; each terminal comes back in its folder. A command still running in a terminal, such as a dev server, stops, so **Restart** names those terminals first and waits for you to press it again.
+
+Quitting instead works too: the new version starts the next time you open Hivemind.
 
 ## Update from a terminal
 
@@ -38,9 +39,7 @@ hivemind upgrade
 
 `hivemind upgrade` runs the installer again. It does nothing when you are already on the newest version. `hive upgrade` does the same.
 
-<Note>
-On macOS, quit Hivemind first. The installer does not replace a running app there, and says `hivemind is running — the app was NOT upgraded`.
-</Note>
+The app can stay open. The new version downloads beside it, and the installer says `downloaded <version> — restart hivemind to finish`. Each version is a folder of its own, so the open app is never changed under you, and the version before stays on disk to go back to.
 
 After an update, refresh the agent skills in each project that uses them:
 
@@ -90,7 +89,6 @@ It prints the version you chose.
 
 | What you see | Fix |
 |---|---|
-| `hivemind is running — the app was NOT upgraded` | Quit Hivemind, then run `hivemind upgrade` again. |
 | Agents gone after the update | See [Agents stopped after an upgrade](/troubleshooting#agents-stopped-after-an-upgrade). |
 | `upgrade failed` | Check you are online, and that `curl` is installed. |
 
