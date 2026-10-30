@@ -157,3 +157,27 @@ test("in the tile: a click notes what it is on, Ctrl and a click gather several,
   await page.locator("[data-page-note]").first().getByRole("button", { name: "Done" }).click();
   await expect.poll(pinsOnPage).toEqual(["pin resolved:✓", "pin open:2", "pin open:3"]);
 });
+
+test("Send gives an agent the open notes and how to answer them; its answers show on the pins", async () => {
+  // Hold what Send hands the agent picker instead of starting an agent.
+  await page.evaluate(() => {
+    window.addEventListener("hivemind:deliver-to-agent", (e) => {
+      (window as unknown as { delivered: string }).delivered = (e as CustomEvent<{ text: string }>).detail.text;
+      e.stopImmediatePropagation();
+    }, { capture: true });
+  });
+  await page.locator("[data-send-notes]").click();
+  const text = await page.waitForFunction(() => (window as unknown as { delivered?: string }).delivered).then((h) => h.jsonValue());
+  const open = notesOnDisk().filter((c) => !c.resolved);
+  expect(open).toHaveLength(2);
+  for (const c of open) expect(text).toContain(`${c.id} (fix): ${c.body}`);
+  expect(text).toContain(path.join(repo, ".hivemind", "pages"));
+  expect(text).toContain("hive review resolve <id>");
+
+  // The agent answers, with the command the message names.
+  const cli = path.resolve("../cli/src/index.ts");
+  const env = { ...process.env, HIVEMIND_TILE: "", HIVE_HCP_SOCK: "" } as Record<string, string>;
+  execFileSync("bun", [cli, "review", "seen", open[0]!.id], { cwd: repo, env });
+  execFileSync("bun", [cli, "review", "resolve", open[1]!.id, "--summary", "one column now"], { cwd: repo, env });
+  await expect.poll(pinsOnPage, { timeout: 10_000 }).toEqual(["pin resolved:✓", "pin seen:2", "pin resolved:✓"]);
+});
