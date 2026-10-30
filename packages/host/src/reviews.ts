@@ -7,7 +7,7 @@ import { named, type Domain } from "@hivemind/workspace-api/server";
 import type { Method } from "@hivemind/workspace-api/methods";
 import {
   deleteComment, dismissComment, editComment, markSeen, normalizeComments, onPage, readComments, reopenComment, replyTo,
-  resolveComment, reviewRoot, writeComments, type ReviewComment,
+  pageNotesMessage, resolveComment, reviewRoot, writeComments, type PageComment, type ReviewComment,
 } from "@hivemind/core/review";
 import { HiveError } from "@hivemind/core/storage";
 
@@ -44,6 +44,12 @@ export const reviews: Domain<ReviewMethod> = {
     "review.reopen": (_, repo, id) => one(repo, id, reopenComment),
     "review.reply": (_, repo, id, body) => one(repo, id, (r, i) => replyTo(r, i, { author: "you", body: text(body, "body"), at: new Date().toISOString() })),
     "review.edit": (_, repo, id, body) => one(repo, id, (r, i) => editComment(r, i, text(body, "body"))),
+    "review.message": async (_, repo, ids) => {
+      if (!Array.isArray(ids)) throw new ApiError("BAD_REQUEST", "ids must be a list");
+      const root = await reviewRoot(text(repo, "repo"));
+      const notes = (await readComments(root)).filter((c): c is PageComment => onPage(c) && ids.includes(c.id));
+      return notes.length ? pageNotesMessage(notes, root) : null;
+    },
     "review.delete": async (_, repo, id) => {
       if (!(await deleteComment(await reviewRoot(text(repo, "repo")), idOf(id)))) throw new ApiError("NOT_FOUND", `no comment ${String(id)}`);
     },

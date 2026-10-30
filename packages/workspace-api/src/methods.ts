@@ -89,6 +89,9 @@ export interface WorkspaceMethods {
   "review.reply": (repo: string, id: string, body: string) => ReviewComment;
   "review.edit": (repo: string, id: string, body: string) => ReviewComment;
   "review.delete": (repo: string, id: string) => void;
+  /** These notes on a page as one message to an agent, with how to answer them; null when none is
+   *  there. */
+  "review.message": (repo: string, ids: string[]) => string | null;
   /** Every agent session's status there is. Each change after it is a `status.changed` event. */
   "status.all": () => Array<{ tileId: string; status: StatusChange["status"] }>;
   /** (0.34) Watch the last lines of `tiles` (at most 1024), in place of those the caller watched (none:

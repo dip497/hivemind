@@ -237,7 +237,7 @@ export function usePageAnnotate({ tileId, repoPath, url, loads }: {
 
   const open = notes.filter((c) => !c.resolved);
   const send = async () => {
-    const text = await window.hive.browserNotesMessage(repoPath, open.map((c) => c.id));
+    const text = await window.hive.reviewMessage(repoPath, open.map((c) => c.id));
     if (!text) return;
     window.dispatchEvent(new CustomEvent("hivemind:deliver-to-agent", { detail: { text } }));
     setSent(`${open.length} sent`);

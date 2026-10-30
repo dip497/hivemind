@@ -3,7 +3,7 @@
 
 import type { ViewSession } from "../pkg/hive_web.js";
 import type { TermSource } from "./terminal.js";
-import type { Agent, Folders, Held, Offered, Photo, Piece, Places, Reply, Screen, Sent, SlashCommand, Start, Unfolded, ViewFile } from "./types.js";
+import type { Agent, Folders, Held, Offered, PageNote, Photo, Piece, Places, Reply, Screen, Sent, SlashCommand, Start, Unfolded, ViewFile } from "./types.js";
 
 export interface App {
   /** Show the agent of `tile`; Back comes back here. `started`: it was just started from here. */
@@ -25,6 +25,12 @@ export interface App {
   terminal(workspace: string, tile: string, changed: () => void, ended: (why: string) => void): { source: TermSource; stop: () => void } | null;
   /** Show the terminal of the tile `tile` in `workspace`, called `name`, one that runs no agent. */
   openTerminal(workspace: string, tile: string, name: string): void;
+  /** The notes left on pages in `agent`'s workspace. */
+  notes(agent: Agent): Promise<PageNote[]>;
+  /** Mark a note done, dismiss it saying why, or reopen it. Whether it landed. */
+  changeNote(agent: Agent, id: string, to: "done" | "dismiss" | "reopen", reason?: string): Promise<boolean>;
+  /** Send the notes `ids` to `agent`, with how to answer them. Whether it took them. */
+  sendNotes(agent: Agent, ids: string[]): Promise<boolean>;
   /** The computer's name, as paired. */
   computer(): string;
   workspaces(): Promise<Held[]>;

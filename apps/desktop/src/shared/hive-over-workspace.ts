@@ -50,6 +50,7 @@ export function hiveOverWorkspace(workspace: WorkspaceClient) {
     reviewReply: (repo, id, body) => workspace.call("review.reply", repo, id, body),
     reviewEdit: (repo, id, body) => workspace.call("review.edit", repo, id, body),
     reviewDelete: (repo, id) => workspace.call("review.delete", repo, id),
+    reviewMessage: (repo, ids) => workspace.call("review.message", repo, ids),
     gitStatus: (repo) => workspace.call("git.status", repo),
     gitListFiles: (repo) => workspace.call("git.listFiles", repo),
     gitListBranches: (repo) => workspace.call("git.listBranches", repo),

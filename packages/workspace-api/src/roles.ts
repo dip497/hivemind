@@ -25,6 +25,7 @@ const LEAST: Record<string, Role> = {
   "issue.list": "view",
   "issue.read": "view",
   "review.list": "view",
+  "review.message": "view",
   // Answering or closing a comment, as someone editing the work does.
   "review.seen": "edit",
   "review.resolve": "edit",

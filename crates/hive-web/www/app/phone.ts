@@ -7,7 +7,7 @@ import init, { Device, type Host, Homes, Term, type ViewSession, connectWith, de
 import type { Filter } from "./home.js";
 import type { Account, Computer } from "./accounts.js";
 import { deviceKey, get } from "./store.js";
-import type { Agent, Folders, Held, Offered, Others, Overview, Paired, Photo, Piece, Places, Reply, Screen, Sent, Shown, SlashCommand, Start, Unfolded, ViewFile } from "./types.js";
+import type { Agent, Folders, Held, Offered, Others, Overview, PageNote, Paired, Photo, Piece, Places, Reply, Screen, Sent, Shown, SlashCommand, Start, Unfolded, ViewFile } from "./types.js";
 import { message } from "./words.js";
 
 /** What connecting shows, step by step (pair.ts). */
@@ -331,6 +331,28 @@ export class Phone {
   /** Close `agent`. Whether it was open. */
   async close(agent: Agent): Promise<boolean> {
     return this.on(agent.device).closeAgent(agent.workspace, agent.tile);
+  }
+
+  /** The folder `agent`'s workspace keeps its notes in; null when it has none. */
+  private async repoOf(agent: Agent): Promise<string | null> {
+    const held = (await this.on(agent.device).workspaces()) as Held[];
+    return held.find((w) => w.workspace === agent.workspace)?.repo ?? null;
+  }
+
+  async notes(agent: Agent): Promise<PageNote[]> {
+    const repo = await this.repoOf(agent);
+    return repo ? ((await this.on(agent.device).notes(agent.workspace, repo)) as PageNote[]) : [];
+  }
+
+  async changeNote(agent: Agent, id: string, to: "done" | "dismiss" | "reopen", reason?: string): Promise<boolean> {
+    const repo = await this.repoOf(agent);
+    if (!repo) return false;
+    return this.on(agent.device).changeNote(agent.workspace, repo, id, to, reason).then(() => true, () => false);
+  }
+
+  async sendNotes(agent: Agent, ids: string[]): Promise<boolean> {
+    const repo = await this.repoOf(agent);
+    return repo ? this.on(agent.device).sendNotes(agent.workspace, repo, ids, agent.tile).catch(() => false) : false;
   }
 
   /** The workspaces the computers reached hold, each named with its computer when there are more. */

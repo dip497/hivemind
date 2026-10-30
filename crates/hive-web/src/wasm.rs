@@ -9,7 +9,7 @@ use hive_phone::{
     failure::Failure,
     home, homes,
     identity::DeviceCertificate,
-    markdown, network, pairing, person,
+    markdown, network, notes, pairing, person,
     screen::{Screen, FIRST_HISTORY},
     views,
     workspace::{self, Answer, Input, Reply, Sent, Watched},
@@ -542,6 +542,53 @@ impl Host {
             Some(sent) => to_js(&serde_json::to_value(sent).map_err(err)?),
             None => Ok(JsValue::NULL),
         }
+    }
+
+    /// The notes on pages kept in `repo` of `workspace`: `[{id, body, status, what, url, summary?}]`.
+    pub async fn notes(&self, workspace: String, repo: String) -> Result<JsValue, JsError> {
+        let notes = notes::notes(&self.connection, &workspace, &repo)
+            .await
+            .map_err(err)?;
+        to_js(&serde_json::to_value(notes).map_err(err)?)
+    }
+
+    /// Mark the note `id` done, dismiss it (`reason` says why) or reopen it.
+    #[wasm_bindgen(js_name = changeNote)]
+    pub async fn change_note(
+        &self,
+        workspace: String,
+        repo: String,
+        id: String,
+        to: String,
+        reason: Option<String>,
+    ) -> Result<(), JsError> {
+        let change = match to.as_str() {
+            "done" => notes::Change::Done,
+            "dismiss" => notes::Change::Dismiss(reason.unwrap_or_default()),
+            "reopen" => notes::Change::Reopen,
+            other => {
+                return Err(JsError::new(&format!(
+                    "a note is done, dismissed or reopened, not {other}"
+                )))
+            }
+        };
+        notes::change(&self.connection, &workspace, &repo, &id, change)
+            .await
+            .map_err(err)
+    }
+
+    /// Send the notes `ids` to the agent of `tile`, with how to answer them. Whether it took them.
+    #[wasm_bindgen(js_name = sendNotes)]
+    pub async fn send_notes(
+        &self,
+        workspace: String,
+        repo: String,
+        ids: Vec<String>,
+        tile: String,
+    ) -> Result<bool, JsError> {
+        notes::send(&self.connection, &workspace, &repo, &ids, &tile)
+            .await
+            .map_err(err)
     }
 
     /// Stop the agent of `tile` in its turn. Whether it was in one.

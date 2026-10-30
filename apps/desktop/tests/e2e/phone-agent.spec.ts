@@ -46,6 +46,9 @@ const app = {
   send: async (a, text) => (window.calls.push(["send", a.tile, text]), window.sent === undefined ? { held: false } : window.sent),
   stop: async (a) => (window.calls.push(["stop", a.tile]), true),
   close: async (a) => (window.calls.push(["close", a.tile]), true),
+  notes: async (a) => (window.calls.push(["notes", a.workspace]), window.notes ?? []),
+  changeNote: async (a, id, to, reason) => (window.calls.push(["changeNote", id, to, reason ?? null]), true),
+  sendNotes: async (a, ids) => (window.calls.push(["sendNotes", a.tile, ids]), true),
 };
 const screen = new AgentScreen(app);
 document.getElementById("app").append(screen.el);
@@ -507,3 +510,43 @@ test("a permission names its tool in sans and shows its command in mono on a pan
   await card.locator("[data-answer=allow]").click();
   await expect.poll(() => page.evaluate(() => (window as unknown as { calls: unknown[][] }).calls.filter((c) => c[0] === "answer"))).toEqual([["answer", "t1", { allow: true }]]);
 });
+
+test("the notes left on pages in the agent's workspace: open ones sent to it, each done, dismissed with a reason, or reopened", async () => {
+  const page = await screen();
+  await page.evaluate(() => {
+    (window as unknown as { notes: object[] }).notes = [
+      { id: "c-1", body: "make it bigger", status: "open", what: 'button "Start trial"', url: "http://x/" },
+      { id: "c-2", body: "crowded", status: "seen", what: "Area", url: "http://x/" },
+      { id: "c-3", body: "old", status: "resolved", what: 'link "Docs"', url: "http://x/", summary: "renamed" },
+    ];
+  });
+  await open(page, "t1");
+  await show(page, overview(agent("t1", "Claude")));
+  await page.locator("[data-more]").click();
+  await page.locator("[data-open-notes]").click();
+  const card = page.locator("[data-page-notes]");
+  await expect(card).toBeVisible();
+  await expect(card.locator("[data-note]")).toHaveCount(3);
+  await expect(card.locator('[data-note="c-3"]')).toContainText("renamed");
+  const calls = () => page.evaluate(() => (window as unknown as { calls: unknown[][] }).calls.filter((c) => c[0] !== "conversation" && c[0] !== "notes"));
+
+  await card.locator("[data-send-notes]").click();
+  await expect(card.locator("[data-send-notes]")).toHaveText("Send 2 to Claude");
+  await expect.poll(calls).toEqual([["sendNotes", "t1", ["c-1", "c-2"]]]);
+
+  // Dismissing asks why first: an empty reason sends nothing.
+  await card.locator('[data-note="c-2"] [data-note-dismiss]').click();
+  await card.locator('[data-note="c-2"] [data-note-dismiss]').click();
+  expect(await calls()).toHaveLength(1);
+  await card.locator('[data-note="c-2"] [data-note-reason]').fill("by design");
+  await card.locator('[data-note="c-2"] [data-note-dismiss]').click();
+  await card.locator('[data-note="c-1"] [data-note-done]').click();
+  await card.locator('[data-note="c-3"] [data-note-reopen]').click();
+  await expect.poll(calls).toEqual([
+    ["sendNotes", "t1", ["c-1", "c-2"]],
+    ["changeNote", "c-2", "dismiss", "by design"],
+    ["changeNote", "c-1", "done", null],
+    ["changeNote", "c-3", "reopen", null],
+  ]);
+});
+
