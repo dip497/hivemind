@@ -273,6 +273,47 @@ test("a browser tile's page in the tab is the app window's own: it shows there, 
   }
 });
 
+test("a note on a browser tile's page, made in the tab as a phone would, is kept and pinned on the page", async () => {
+  const site = http.createServer((_req, res) => {
+    res.setHeader("content-type", "text/html");
+    res.end(`<!doctype html><title>Note page</title><body style="margin:0"><button id=go style="display:block;width:100vw;height:60vh;font:40px sans-serif">Go</button>`);
+  });
+  await new Promise<void>((r) => site.listen(0, "127.0.0.1", r));
+  const pageUrl = `http://127.0.0.1:${(site.address() as AddressInfo).port}/`;
+  try {
+    await tab.locator('[data-toolbar-action="board"]').first().click();
+    await tab.locator('[data-board-choice="tile:browser"]').click();
+    const watched = tab.locator("[data-watched-page]").last();
+    const tileId = await tab.locator(".react-flow__node-browser").last().getAttribute("data-id");
+    const inWindow = (expression: string) => app.page.evaluate(([t, x]) => window.hive.browserCdp!(t, "Runtime.evaluate", { expression: x, returnByValue: true })
+      .then((r) => (r as { result: { value: unknown } }).result.value, () => null), [tileId!, expression] as const);
+    const address = watched.locator("[data-watched-page-address]");
+    await expect.poll(async () => {
+      const title = await inWindow("document.title");
+      if (title === "Note page") return title;
+      await address.fill(pageUrl);
+      await address.press("Enter");
+      return title;
+    }, { timeout: 20_000, intervals: [2000] }).toBe("Note page");
+    await expect(watched.locator("[data-watched-page-picture] img")).toBeVisible({ timeout: 10_000 });
+
+    await watched.locator("[aria-label='annotate']").click();
+    const layer = watched.locator("[data-annotate-layer]");
+    await expect(layer).toBeVisible();
+    const box = (await layer.boundingBox())!;
+    await tab.mouse.click(box.x + box.width * 0.5, box.y + box.height * 0.3);
+    const note = watched.locator("[data-note-box]");
+    await expect(note).toContainText('button "Go"');
+    await note.locator("textarea").fill("make it green");
+    await note.locator("textarea").press("Enter");
+    // The window's page did not take the click as a press of its button.
+    await expect.poll(() => app.page.evaluate((r) => window.hive.reviewList(r).then((all) => all.map((c) => c.body)), repo)).toEqual(["make it green"]);
+    await expect.poll(() => inWindow(`[...(document.querySelector("hivemind-page-notes")?.shadowRoot?.children ?? [])].map((p) => p.textContent).join()`)).toBe("1");
+  } finally {
+    site.close();
+  }
+});
+
 test("turned off, the port closes", async () => {
   await app.page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: "browser" } })));
   await app.page.locator("[data-browser-app]").getByRole("switch", { name: "Serve the app to a browser" }).click();

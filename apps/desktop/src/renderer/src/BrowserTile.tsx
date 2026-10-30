@@ -130,7 +130,7 @@ function TabView({
 /** A page: in the app window, a web view on the canvas; where there is none (a browser tab the
  *  app serves), that same page, watched and used from there. */
 export function BrowserTile(props: Props) {
-  return window.hive.browserRegister ? <WebView {...props} /> : <WatchedPage tileId={props.tileId} url={props.url} onClose={props.onClose} />;
+  return window.hive.browserRegister ? <WebView {...props} /> : <WatchedPage tileId={props.tileId} url={props.url} repoPath={props.repoPath} onClose={props.onClose} />;
 }
 
 function WebView({ tileId, frameId, url, repoPath, selected, openReq, onClose, pinned, onTogglePin }: Props) {

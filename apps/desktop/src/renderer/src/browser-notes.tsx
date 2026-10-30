@@ -151,7 +151,12 @@ function AnnotateLayer({ tileId, repoPath, onNoted }: { tileId: string; repoPath
     <div
       ref={ref}
       data-annotate-layer
-      className="absolute inset-0 z-10 cursor-crosshair"
+      className="nodrag nopan nowheel absolute inset-0 z-10 cursor-crosshair"
+      style={{ touchAction: "none" }}
+      // What the layer takes is a note, never a click on the page under it.
+      onMouseDown={(e) => e.stopPropagation()}
+      onMouseUp={(e) => e.stopPropagation()}
+      onMouseMove={(e) => e.stopPropagation()}
       onPointerDown={(e) => { if (e.button === 0 && !draft) { press.current = local(e); (e.target as HTMLElement).setPointerCapture?.(e.pointerId); } }}
       onPointerMove={onMove}
       onPointerUp={(e) => void onUp(e)}
