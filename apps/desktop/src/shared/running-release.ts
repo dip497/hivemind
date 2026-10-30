@@ -7,6 +7,11 @@ export function runningRelease(execPath: string, current: string): string {
   const at = parts.lastIndexOf("versions");
   if (at >= 0 && parts[at + 1]) return parts[at + 1]!;
   const win = parts.find((p) => p.startsWith("app-"))?.slice("app-".length);
-  if (win) return win.startsWith("nightly-") ? win : `v${win}`;
+  if (win) return /^\d/.test(win) ? `v${win}` : win;
   return `v${current}`;
+}
+
+/** The folder install.ps1 unpacks release `tag` into. */
+export function windowsAppFolder(tag: string): string {
+  return `app-${tag.replace(/^v/, "")}`;
 }

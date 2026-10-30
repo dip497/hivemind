@@ -624,7 +624,7 @@ jobs:
           if ($missing) { throw "not unpacked in the bundle: $($missing -join ', ') - the terminal would be dead" }
           foreach ($name in @($need.Keys)) { Write-Host "ok: $($need[$name].FullName)" }
 
-      - name: "Smoke: an upgrade leaves the terminal daemon running"
+      - name: "Smoke: an upgrade leaves running programs running"
         # The daemon is hivemind.exe from the version that started it, and Windows will not delete
         # a running exe: install.ps1 puts each version in a folder of its own and removes one only
         # once nothing runs from it.
@@ -652,6 +652,22 @@ jobs:
           Remove-UnusedApps
           if (Test-Path $old) { throw "the old folder stayed once nothing ran from it" }
           Write-Host "ok: the daemon kept its folder through the upgrade, which went once it stopped"
+          # A hive.exe still running (hive-net serving, a hive command) is replaced all the same.
+          New-Item -ItemType Directory -Force -Path $BinDir | Out-Null
+          $hive = Join-Path $BinDir "hive.exe"
+          Copy-Item "$env:SystemRoot\System32\PING.EXE" $hive
+          $busy = Start-Process -FilePath $hive -ArgumentList "-n 60 127.0.0.1" -PassThru -WindowStyle Hidden
+          Start-Sleep -Seconds 2
+          Set-Content -Path "$BinDir\hive.new" -Value "new build"
+          Replace-Exe "$BinDir\hive.new" $hive
+          if ((Get-Content $hive -Raw).Trim() -ne "new build") { throw "the new hive.exe is not in place" }
+          if ($busy.HasExited) { throw "the running hive.exe was stopped" }
+          Stop-Process -Id $busy.Id -Force
+          $busy.WaitForExit()
+          Set-Content -Path "$BinDir\hive.new" -Value "newer build"
+          Replace-Exe "$BinDir\hive.new" $hive
+          if (Get-ChildItem $BinDir -Filter "hive.exe.old.*") { throw "the old hive.exe stayed once nothing ran it" }
+          Write-Host "ok: a running hive.exe was replaced, and its old copy went once it stopped"
 
       - name: "Smoke: the compiled CLI runs"
         # The Linux jobs go further (sessions.test.ts against the binary); here

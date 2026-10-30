@@ -79,7 +79,7 @@ import { REATTACH_RESET } from "@hivemind/agent-host/daemon-endpoint";
 import type { ReadScreen } from "@hivemind/agent-host/session-relay";
 import { ipcPath, upgradeCommand, windowsStartMenuShortcut } from "./platform.js";
 import { notesFor, whatsNewSinceLastRun } from "./whats-new.js";
-import { runningRelease } from "../shared/running-release.js";
+import { runningRelease, windowsAppFolder } from "../shared/running-release.js";
 import { driveSockPath, readOrCreateToken } from "@hivemind/agent-host/hooks/token";
 import { ApiError, isErrorCode } from "@hivemind/workspace-api/protocol";
 import { appViewsDir, handleViewProtocol, listViewPackages, startViewWatchdog, VIEW_SCHEME_PRIVILEGES, viewSdk } from "./view-packages.js";
@@ -608,19 +608,19 @@ handleEffect("setBrowserCdpEnabled", (enabled) => ({ detail: enabled ? "on" : "o
   return { ok: true as const };
 }), { local: true });
 
-// The install.sh launcher (`~/.local/bin/hivemind`). Relaunching THROUGH it is
-// what makes "restart after update" land on the new version: the running
-// AppImage can't overwrite itself, so install.sh stages the new build to
-// `.staged` and the launcher swaps it in on its next start. A plain
-// app.relaunch() re-execs the current (old) AppRun and silently skips that swap.
+// What a restart starts: the version installed, which an update may have put beside this one.
+// On Linux the launcher (`~/.local/bin/hivemind`) starts the one `.installed-version` names; on
+// Windows that version's own folder. A plain app.relaunch() starts this same build again.
 function resolveLauncherPath(): string | null {
-  const launcher = process.platform === "win32" ? "hivemind.cmd" : "hivemind";
+  if (process.platform === "win32") {
+    const tag = installedReleaseTag();
+    const exe = tag ? path.join(installedAppDir(), windowsAppFolder(tag), "hivemind.exe") : null;
+    try { if (exe && statSync(exe).isFile()) return exe; } catch { /* not installed by install.ps1 */ }
+    return null;
+  }
   const candidates = [
-    process.platform === "win32"
-      ? path.join(process.env.LOCALAPPDATA || path.join(os.homedir(), "AppData", "Local"), "hivemind", "bin", launcher)
-      : path.join(os.homedir(), ".local", "bin", launcher),
-    // path.delimiter, not ":" — PATH is ";"-separated on Windows.
-    ...(process.env.PATH ?? "").split(path.delimiter).filter(Boolean).map((d) => path.join(d, launcher)),
+    path.join(os.homedir(), ".local", "bin", "hivemind"),
+    ...(process.env.PATH ?? "").split(path.delimiter).filter(Boolean).map((d) => path.join(d, "hivemind")),
   ];
   for (const p of candidates) {
     try { if (statSync(p).isFile()) return p; } catch { /* not here */ }
