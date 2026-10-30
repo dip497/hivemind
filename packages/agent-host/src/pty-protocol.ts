@@ -34,6 +34,9 @@ export interface SessionInfo {
   title?: string;
   /** Put to sleep: only an attach with `wake` restores it. */
   asleep?: true;
+  /** A command its program started holds its terminal (a shell running something): put to sleep,
+   *  that command stops. */
+  command?: true;
 }
 
 /** Where a terminal's cursor is: column and row of its visible rows, from 0. */
@@ -125,7 +128,7 @@ export type ServerMsg =
    *  not be saved. */
   | { t: "slept"; reqId: string; id: string; error?: string }
   | { t: "sessions"; reqId: string; ids: string[]; detail?: SessionInfo[] }
-  | { t: "pong"; reqId: string; protocol?: number }
+  | { t: "pong"; reqId: string; protocol?: number; build?: string }
   /** Answers `screen`, in order with the session's data: bytes before it are older than it. */
   | { t: "screen"; reqId: string; id: string; replay: string | null }
   /** Answers `control`; `error` when `sock` is not an absolute path. */

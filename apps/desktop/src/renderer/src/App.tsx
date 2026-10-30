@@ -118,9 +118,21 @@ function useUpdateCheck() {
   const [upgrading, setUpgrading] = useState(false);
   const [progress, setProgress] = useState<UpdateProgress | null>(null);
   const upgradingRef = useRef(false);
-  const restart = useCallback(() => {
-    toast.loading("Restarting into the new version…");
-    window.setTimeout(() => { void window.hive.relaunchApp?.(); }, 600);
+  const restart = useCallback(async () => {
+    const go = () => {
+      toast.loading("Restarting into the new version…", { id: "restart" });
+      window.setTimeout(() => { void window.hive.relaunchApp?.(); }, 600);
+    };
+    // The terminals start again on the new version: a command running in one stops, so it is named first.
+    const stops = await window.hive.commandsRestartStops?.().catch(() => []) ?? [];
+    if (!stops.length) return go();
+    toast.warning(stops.length === 1 ? "Restarting stops a command running in a terminal" : `Restarting stops commands running in ${stops.length} terminals`, {
+      id: "restart",
+      description: `${stops.map((s) => s.title).join(", ")}. Each terminal comes back at its prompt; agents come back in the same conversation.`,
+      action: { label: "Restart", onClick: go },
+      cancel: { label: "Not now", onClick: () => {} },
+      duration: Infinity,
+    });
   }, []);
   const upgrade = useCallback(() => {
     if (upgradingRef.current || !window.hive?.runUpgrade) return;

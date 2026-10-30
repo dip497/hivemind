@@ -953,6 +953,7 @@ export class SessionManager {
       id: s.id, state: "live", cmd: s.spec.cmd, args: s.spec.args ?? [], cwd: s.spec.cwd,
       pid: s.pty.pid, viewers: s.clients.size, cols: s.spec.cols, rows: s.spec.rows,
       ...(s.lastTitle ? { title: s.lastTitle } : {}),
+      ...(s.pty.holdsTerminal?.() === false ? { command: true as const } : {}),
     };
   }
 

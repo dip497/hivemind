@@ -1075,6 +1075,8 @@ export type HiveApi = HiveIpc & {
   onDaemonWaiting: (cb: (ids: string[] | null) => void) => () => void;
   /** Stop waiting: those agents are put to sleep now, ending their turns, and woken in the new daemon. */
   restartAgentsNow?: () => Promise<void>;
+  /** The terminals running a command that restarting into a downloaded update stops. */
+  commandsRestartStops?: () => Promise<{ id: string; title: string }[]>;
   /** Path passed on the CLI (`hivemind .` / `hivemind /repo`), or null. */
   getLaunchTarget?: () => Promise<string | null>;
   /** Another window, on the workspace this one shows. */

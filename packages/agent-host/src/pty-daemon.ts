@@ -53,6 +53,9 @@ const spawnPty: (file: string, args: string[] | string, opts: { cwd: string; col
 dropHandedDown(process.env[HANDED_DOWN]);
 delete process.env[HANDED_DOWN];
 const socketPath = process.argv[2] || process.env.HIVEMIND_PTY_SOCK;
+/** The build that started this daemon, when it says (`runningDaemon`); not passed on to sessions. */
+const BUILD = process.env.HIVEMIND_DAEMON_BUILD;
+delete process.env.HIVEMIND_DAEMON_BUILD;
 if (!socketPath) {
   console.error("[pty-daemon] no socket path given");
   process.exit(1);
@@ -687,7 +690,7 @@ const server = net.createServer((sock) => {
         send({ t: "sessions", reqId: msg.reqId, ids: manager.list(), ...(msg.detail ? { detail: manager.info() } : {}) });
         break;
       case "ping":
-        send({ t: "pong", reqId: msg.reqId, protocol: DAEMON_PROTOCOL_VERSION });
+        send({ t: "pong", reqId: msg.reqId, protocol: DAEMON_PROTOCOL_VERSION, ...(BUILD ? { build: BUILD } : {}) });
         break;
       case "hello":
         canResync = Array.isArray(msg.caps) && msg.caps.includes("resync");

@@ -1,8 +1,7 @@
 /**
- * Stopping a machine's daemon, and moving its sessions to a new daemon when the one running speaks
- * another protocol: every agent finishes the turn it is in, is put to sleep (its conversation and
- * screen kept), the old daemon stops, and each is woken in the new one. A daemon of the same
- * protocol is never replaced.
+ * Stopping a machine's daemon, and moving its sessions to a new daemon when the one running is not
+ * the one the app would start: every agent finishes the turn it is in, is put to sleep (its
+ * conversation and screen kept), the old daemon stops, and each is woken in the new one.
  */
 import net from "node:net";
 import type { Duplex } from "node:stream";
@@ -57,14 +56,15 @@ export function socketAt(sock: string): () => Promise<Duplex> {
   });
 }
 
-/** The protocol of the daemon `connect` reaches: null when none is running, 0 when it names none.
- *  Throws when one is running but does not answer in `answerMs`: a busy daemon is still there. */
-export async function daemonProtocol(connect: () => Promise<Duplex>, answerMs = ANSWER_MS): Promise<number | null> {
+/** The daemon `connect` reaches: its protocol (0 when it names none) and the build that started it,
+ *  when it says. Null when none is running; throws when one is running but does not answer in
+ *  `answerMs`: a busy daemon is still there. */
+export async function runningDaemon(connect: () => Promise<Duplex>, answerMs = ANSWER_MS): Promise<{ protocol: number; build?: string } | null> {
   let s: Duplex;
   try { s = await connect(); } catch { return null; }
   const l = line(s);
   try {
-    return await l.ask({ t: "ping", reqId: "protocol" }, (m) => (m.t === "pong" ? m.protocol ?? 0 : undefined), answerMs);
+    return await l.ask({ t: "ping", reqId: "protocol" }, (m) => (m.t === "pong" ? { protocol: m.protocol ?? 0, ...(m.build ? { build: m.build } : {}) } : undefined), answerMs);
   } finally {
     l.end();
   }
@@ -112,8 +112,9 @@ export interface Retired {
 }
 
 /** Put every running session of the daemon `connect` reaches to sleep once no agent is mid-turn,
- *  then stop that daemon; throws when it does not stop. `waiting` hears the sessions it waits on, and [] once it waits on none; `now` ends
- *  the wait, ending those turns. */
+ *  then stop that daemon; throws when it does not stop. A command running in a terminal stops with
+ *  it. `waiting` hears the sessions it waits on, and [] once it waits on none; `now` ends the wait,
+ *  ending those turns. */
 export async function retireDaemon(connect: () => Promise<Duplex>, o: { waiting: (ids: string[]) => void; now: Promise<void> }): Promise<Retired> {
   const l = line(await connect());
   try {

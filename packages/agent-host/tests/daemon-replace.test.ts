@@ -7,7 +7,7 @@ import fs from "node:fs";
 import net from "node:net";
 import path from "node:path";
 import { frame, makeLineDecoder, type ServerMsg } from "../src/pty-protocol.ts";
-import { retireDaemon, socketAt, wakeSessions } from "../src/daemon-replace.ts";
+import { daemonSessions, retireDaemon, runningDaemon, socketAt, wakeSessions } from "../src/daemon-replace.ts";
 
 const DAEMON = path.join(import.meta.dir, "../src/pty-daemon.ts");
 const dir = fs.mkdtempSync("/tmp/hdr-");
@@ -34,9 +34,9 @@ fs.writeFileSync(agent, [
   `while :; do if [ -e "${dir}/busy-$name" ]; then s=MID-TURN; else s=READY; fi; printf '\\033[2J\\033[H%s' "$s"; sleep 0.2; done`,
 ].join("\n"), { mode: 0o755 });
 
-const startDaemon = async () => {
+const startDaemon = async (env: Record<string, string> = {}) => {
   fs.rmSync(sock, { force: true });
-  const d = spawn(process.execPath, [DAEMON, sock], { stdio: "ignore", env: { ...process.env, HOME: dir, XDG_CONFIG_HOME: path.join(dir, "config") } });
+  const d = spawn(process.execPath, [DAEMON, sock], { stdio: "ignore", env: { ...process.env, HOME: dir, XDG_CONFIG_HOME: path.join(dir, "config"), ...env } });
   daemons.push(d);
   for (let i = 0; i < 100 && !fs.existsSync(sock); i++) await new Promise((r) => setTimeout(r, 100));
   return d;
@@ -99,3 +99,21 @@ test.skipIf(!unix)("a daemon is replaced only once no agent is mid-turn, and eac
   }
   watcher.destroy();
 }, 60_000);
+
+test.skipIf(process.platform !== "linux")("a daemon says the build that started it, and which terminal runs a command", async () => {
+  await startDaemon({ HIVEMIND_DAEMON_BUILD: "build-1" });
+  expect(await runningDaemon(socketAt(sock))).toMatchObject({ build: "build-1" });
+  const c = await connect();
+  const shell = (id: string) => c.write(frame({ t: "attach", reqId: id, id, spec: { cwd: dir, cmd: "bash", args: ["--norc", "--noprofile", "-i"], cols: 80, rows: 24 } }));
+  shell("server");
+  shell("prompt");
+  await new Promise((r) => setTimeout(r, 1000));
+  c.write(frame({ t: "write", id: "server", data: "sleep 300\r" }));
+  const running = async () => (await daemonSessions(socketAt(sock))).filter((x) => x.command).map((x) => x.id).join();
+  const becomes = async (want: string) => { for (let t = 0; t < 5000 && (await running()) !== want; t += 100) await new Promise((r) => setTimeout(r, 100)); return running(); };
+  expect(await becomes("server")).toBe("server");
+  // The command ends (Ctrl+C): back at its prompt.
+  c.write(frame({ t: "write", id: "server", data: "\x03" }));
+  expect(await becomes("")).toBe("");
+  c.destroy();
+}, 30_000);

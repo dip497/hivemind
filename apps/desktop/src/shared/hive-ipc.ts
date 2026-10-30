@@ -215,6 +215,7 @@ export function hiveOverIpc(port: IpcPort, workspace: WorkspaceClient): Omit<Hiv
     daemonWaitingOn: local("daemon:waiting", invoke("daemon:waiting")),
     onDaemonWaiting: (cb) => port.on("daemon:waiting", cb),
     restartAgentsNow: local("daemon:restart-now", invoke("daemon:restart-now")),
+    commandsRestartStops: local("daemon:commands", invoke("daemon:commands")),
     pickMedia: local("media:pick", invoke("media:pick")),
     themes: port.serves("themes:list") ? {
       list: () => port.invoke("themes:list"),

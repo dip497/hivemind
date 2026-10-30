@@ -812,6 +812,8 @@ handle("getLaunchTarget", (e) => launchTargets.get(e.sender) ?? null, { local: t
 ptyDaemon.setDaemonWaitSink((ids) => broadcast("daemon:waiting", ids));
 handle("daemon:waiting", () => ptyDaemon.daemonWaitingOn(), { local: true });
 handle("daemon:restart-now", () => ptyDaemon.restartAgentsNow(), { local: true });
+handle("daemon:commands", async () => (await ptyDaemon.commandsRestartStops())
+  .map((s) => ({ id: toBareId(s.id), title: s.title || path.basename(s.cwd) })), { local: true });
 // A New Window command: another window on the workspace the asking one shows.
 handle("window:new", (e) => createWindow(workspaceShownBy(e.sender)), { local: true });
 
