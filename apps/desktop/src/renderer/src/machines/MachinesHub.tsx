@@ -10,9 +10,10 @@ import { Button } from "../components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "../components/ui/dialog";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
+import { Switch } from "../components/ui/switch";
 import { ShowMore, useShowMore } from "../components/ui/show-more";
 import type { DeviceWorkspace, MachineInfo, PairedDeviceSummary, RemoteDirEntry } from "../../../shared/ipc";
-import { machineUri, posixJoin } from "@hivemind/core/remote-uri";
+import { isWindowsPlatform, machineUri, posixJoin } from "@hivemind/core/remote-uri";
 import { errText, machineForRequest, statusOf, useMachines, type MachinesRequest } from "./store";
 import { joinedId, useShown } from "../multiplayer/shown";
 import { AttentionNote, MachineDot, MachineIcon, machineFacts, statusWords } from "./status";
@@ -251,8 +252,12 @@ function MachineList({ picking, onChoose, onChooseDevice, onEdit, onAdd, usageOf
                 {doing ? <><Spinner size={11} className="animate-spin" />{doing}…</> : statusWords(s, m.enabled)}
                 {s.detail && s.state !== "online" && s.state !== "attention" && <span className="min-w-0 text-[var(--color-fg3)] truncate" title={s.detail}>— {s.detail}</span>}
               </dd>
-              <dt className="text-[var(--color-fg3)]">hive</dt>
-              <dd className="font-mono text-[var(--color-fg2)] truncate">{m.hivePath ?? "put there when a terminal opens"}</dd>
+              <dt className="text-[var(--color-fg3)]">Terminals</dt>
+              <dd className="min-w-0 flex items-center gap-2">
+                <Switch size="sm" checked={!!m.installHive} disabled={isWindowsPlatform(m.platform) || !!doing} aria-label={`install hive on ${m.label}`} data-machine-install-hive={m.label}
+                  onCheckedChange={(on) => void run(m, on ? "putting hive there" : "saving", () => window.hive.machineUpdate(m.id, { installHive: on }))} />
+                <span className="min-w-0 truncate text-[var(--color-fg2)]" title={m.hivePath}>{terminalsWord(m)}</span>
+              </dd>
               <dt className="text-[var(--color-fg3)]">Used by</dt>
               <dd className="text-[var(--color-fg2)]">{u.frames > 0 ? `${plural(u.frames, "frame")} · ${plural(u.terminals, "terminal")}` : "nothing on this canvas"}</dd>
             </dl>
@@ -262,7 +267,7 @@ function MachineList({ picking, onChoose, onChooseDevice, onEdit, onAdd, usageOf
             )}
             {m.enabled && s.state === "no-hive" && (
               <p className="rounded-lg bg-[var(--color-bg2)] border border-[var(--color-line2)] px-3 py-2 text-label text-[var(--color-fg2)]">
-                hive could not be put there, so terminals run over plain ssh and stop when the connection drops.
+                hive could not be put there{s.detail ? ` (${s.detail})` : ""}, so terminals run over plain ssh and stop when the connection drops.
               </p>
             )}
 
@@ -346,6 +351,7 @@ function AddMachine({ initialTarget, editing, onCancel, onAdded }: {
   const [label, setLabel] = useState(editing?.label ?? "");
   const [usePassword, setUsePassword] = useState(false);
   const [password, setPassword] = useState("");
+  const [installHive, setInstallHive] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<{ attention: boolean; text: string } | null>(null);
   const [warn, setWarn] = useState<MachineInfo | null>(null);
@@ -365,7 +371,7 @@ function AddMachine({ initialTarget, editing, onCancel, onAdded }: {
         onAdded(r.machine);
         return;
       }
-      const r = await window.hive.machineAdd({ target: target.trim(), label: label.trim() || undefined, password: usePassword && password ? password : undefined });
+      const r = await window.hive.machineAdd({ target: target.trim(), label: label.trim() || undefined, password: usePassword && password ? password : undefined, installHive });
       if (r.passwordSaved === false) { setWarn(r.machine); return; }
       onAdded(r.machine);
     } catch (e) {
@@ -406,6 +412,20 @@ function AddMachine({ initialTarget, editing, onCancel, onAdded }: {
       ) : (
         <Button type="button" variant="link" size="xs" onClick={() => setUsePassword(true)} className="-mt-2 justify-self-start ">Use a password instead</Button>
       )}
+      {!editing && (
+        <div className="grid gap-1.5">
+          <div className="flex items-center gap-2">
+            <Switch id="machine-install-hive" size="sm" checked={installHive} onCheckedChange={setInstallHive} data-machine-install-hive="" />
+            <Label htmlFor="machine-install-hive">Install hive there</Label>
+          </div>
+          <p className="text-count text-muted-foreground leading-relaxed">
+            Off, each terminal is a plain ssh session: it ends when the connection drops or this app closes.
+            On, the app copies its own <span className="font-mono">hive</span> (about 120 MB) into <span className="font-mono">~/.hivemind</span> there,
+            which keeps terminals and agents running through dropped connections and restarts, lets agents sleep, and updates with the app.
+            You can turn it on later. Not on Windows yet.
+          </p>
+        </div>
+      )}
       {editing && <p className="-mt-1 text-count text-muted-foreground">A new address is reached before it is saved. Frames on {editing.label} move with it; terminals already open keep their session.</p>}
       {error && (error.attention
         ? <AttentionNote target={target.trim()} detail={error.text} />
@@ -417,6 +437,13 @@ function AddMachine({ initialTarget, editing, onCancel, onAdded }: {
       </div>
     </form>
   );
+}
+
+/** How a machine's terminals run, in a few words. */
+function terminalsWord(m: MachineInfo): string {
+  if (isWindowsPlatform(m.platform)) return "plain ssh: hive is not on Windows yet";
+  if (!m.installHive) return "plain ssh: they end when the connection drops";
+  return m.hivePath ? "kept running by hive there" : "kept running by hive, put there when one opens";
 }
 
 const RECENT_MAX = 5;

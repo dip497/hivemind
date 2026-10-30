@@ -2,7 +2,9 @@
 import { spawn } from "node:child_process";
 import { Duplex, PassThrough } from "node:stream";
 import path from "node:path";
-import { hiveThere, parseProbe, probeScript, shq, type ProbeResult } from "@hivemind/core";
+import { HiveError, WINDOWS_PROBE, hiveThere, parseProbe, powershellCommand, probeScript, psq, shq, type ProbeResult } from "@hivemind/core";
+import { windowsFolder } from "@hivemind/core/remote-uri";
+import { repairShellSpec } from "@hivemind/agent-host/shell-spec";
 import type { RemoteTarget } from "@hivemind/core/remote-uri";
 import { BRIDGE_READY } from "@hivemind/agent-host/pty-protocol";
 import type { HostAuth } from "./conn.js";
@@ -67,6 +69,20 @@ export const ASKPASS_SCRIPT = `#!/bin/sh
 case "$1" in *assphrase*) printf '%s\\n' "$HIVE_SSH_PASSPHRASE" ;; *) printf '%s\\n' "$HIVE_SSH_PASSWORD" ;; esac
 `;
 
+/** What a terminal runs over plain ssh, with no `hive` there: `cmd` in `folder`, through a login
+ *  shell for the user's PATH. On Windows through PowerShell (`powershellCommand`), which also runs
+ *  an agent npm installed as a script; a shell named as on Linux there is PowerShell itself. */
+export function plainTerminalCommand(folder: string, cmd: string, args: readonly string[], windows: boolean): string {
+  if (!windows) return `bash -lc ${shq(`cd ${shq(folder)} && exec ${[cmd, ...args].map(shq).join(" ")}`)}`;
+  const run = repairShellSpec({ cmd, args: [...args] }, "win32");
+  const at = windowsFolder(folder);
+  return powershellCommand([
+    ...(at ? [`Set-Location -LiteralPath ${psq(at)}`] : []),
+    `& ${[run.cmd, ...(run.args ?? [])].map(psq).join(" ")}`,
+    `exit $LASTEXITCODE`,
+  ].join("; "), true);
+}
+
 /** The remote side of the bridge to person `person`'s terminal server, through `hive` `version`;
  *  run through a login shell so sessions get the user's PATH. */
 export function bridgeRemoteCommand(version: string, person: string): string {
@@ -95,6 +111,17 @@ export function probeRemote(cmd: SshCommand, timeoutMs = 30_000): Promise<ProbeR
 /** Probes `t` for the platform, the kind of computer and the `hive` of `version` there. */
 export function probeCommand(t: RemoteTarget, auth: HostAuth, paths: SshPaths, version: string): SshCommand {
   return sshCommand(t, auth, paths, probeScript(version));
+}
+
+/** What `t` is: asked as a POSIX shell, then, when none answers (Windows' cmd or PowerShell), as
+ *  Windows. */
+export async function probeMachine(t: RemoteTarget, auth: HostAuth, paths: SshPaths, version: string): Promise<ProbeResult> {
+  try {
+    return await probeRemote(probeCommand(t, auth, paths, version));
+  } catch (e) {
+    if (!(e instanceof HiveError) || e.code !== "machine_probe_failed") throw e;
+    return probeRemote(sshCommand(t, auth, paths, WINDOWS_PROBE));
+  }
 }
 
 /** Resolves once the remote bridge reports ready; ssh's own error otherwise. Destroying the stream ends ssh. */

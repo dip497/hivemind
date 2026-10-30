@@ -11,7 +11,7 @@ import type { FrameClose, FrameClosed, FrameOpened, FrameSpec } from "@hivemind/
 import { ApiError, flag, text } from "@hivemind/workspace-api/protocol";
 import type { Connection, Domain } from "@hivemind/workspace-api/server";
 import { mintId, toBareId } from "@hivemind/workspace-api/tile-id";
-import { isRemote, machineUri } from "@hivemind/core/remote-uri";
+import { folderInUri, isRemote, isWindowsFolder, machineUri } from "@hivemind/core/remote-uri";
 import type { WorktreeCreateOpts, WorktreeEntry } from "@hivemind/workspace-api/git";
 
 /** How the store is written by a frame call: its windows hear of it. */
@@ -64,8 +64,10 @@ function specOf(value: unknown): FrameSpec {
   const spec: FrameSpec = {};
   if (s.path != null) {
     spec.path = text(s.path, "spec.path");
-    if (!path.posix.isAbsolute(spec.path) && !path.isAbsolute(spec.path)) throw new ApiError("BAD_REQUEST", "spec.path is a folder, given in full");
     if (s.machine != null) spec.machine = text(s.machine, "spec.machine");
+    // On another machine a folder may be Windows' (`C:\work`).
+    const inFull = path.posix.isAbsolute(spec.path) || path.isAbsolute(spec.path) || (spec.machine !== undefined && isWindowsFolder(spec.path));
+    if (!inFull) throw new ApiError("BAD_REQUEST", "spec.path is a folder, given in full");
   } else {
     if (s.machine != null) throw new ApiError("BAD_REQUEST", "spec.machine goes with spec.path: a worktree is made on this machine");
     const w = s.worktree as Record<string, unknown> | null;
@@ -127,10 +129,11 @@ export function framesDomain(o: FramesOptions): Domain<"frame.open" | "frame.clo
           // A folder on another machine runs as the person there: theirs to name, or an agent's here.
           if (from.actor.kind === "peer" && from.actor.access !== "owner" && from.actor.tile === undefined) throw new ApiError("FORBIDDEN", "only the person, or an agent on this machine, opens a frame on another machine");
           const machine = machineNamed(s.machine);
-          const folder = machineUri(machine.id, s.path!);
+          const at = folderInUri(s.path!);
+          const folder = machineUri(machine.id, at);
           const there = boundTo(core, folder);
           if (there) return { frame: there.id, path: folder, opened: false, created: false };
-          const frame: FrameRecord = { id: mintId("frame"), title: s.title ?? (path.posix.basename(s.path!) || machine.name), workspacePath: folder, ...(s.parent ? { parentFrameId: s.parent } : {}) };
+          const frame: FrameRecord = { id: mintId("frame"), title: s.title ?? (path.posix.basename(at) || machine.name), workspacePath: folder, ...(s.parent ? { parentFrameId: s.parent } : {}) };
           o.store().addFrame(r, frame, FRAMES);
           return { frame: frame.id, path: folder, opened: true, created: false };
         }

@@ -4,7 +4,8 @@
  * fs and git run through here; interactive PTYs go through remote/pty.ts.
  */
 import { spawn } from "node:child_process";
-import type { RemoteTarget } from "@hivemind/core/remote-uri";
+import { isWindowsPlatform, type RemoteTarget } from "@hivemind/core/remote-uri";
+import { machineAt } from "./catalog.js";
 import { RemoteFs, type ExecResult } from "./fs.js";
 import { ConcurrencyLimiter } from "./exec.js";
 import { sshCommand, type SshPaths } from "./ssh.js";
@@ -81,7 +82,7 @@ export class RemoteConnectionManager {
 
   /** The host's filesystem (stateless: every call is one ssh command). */
   async fs(target: RemoteTarget): Promise<RemoteFs> {
-    return new RemoteFs((cmd, input) => this.exec(target, cmd, { input }));
+    return new RemoteFs((cmd, input) => this.exec(target, cmd, { input }), isWindowsPlatform(machineAt(target.hostId)?.platform));
   }
 }
 

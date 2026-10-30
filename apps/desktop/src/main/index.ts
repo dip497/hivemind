@@ -998,7 +998,7 @@ remoteConns.setAuthResolver((hostId) => {
 handle("machines:get", wrap(async () => machinesSnapshot()));
 handleEffect("machines:add", (req) => ({ target: named(req?.target) }), wrap(async (_e, req: MachineAddRequest) => addMachine(req)));
 handleEffect("machines:check", (id) => ({ target: named(id) }), wrap(async (_e, id: string) => checkMachine(String(id))));
-handleEffect("machines:update", (id) => ({ target: named(id) }), wrap(async (_e, id: string, patch: { label?: string; enabled?: boolean }) => updateMachine(String(id), patch ?? {})));
+handleEffect("machines:update", (id) => ({ target: named(id) }), wrap(async (_e, id: string, patch: { label?: string; enabled?: boolean; installHive?: boolean }) => updateMachine(String(id), patch ?? {})));
 handleEffect("machines:edit", (id, patch) => ({ target: named(id), detail: named(patch?.target) }), wrap(async (_e, id: string, patch: { target: string; label?: string; password?: string }) => editMachine(String(id), {
   target: String(patch?.target ?? ""),
   ...(typeof patch?.label === "string" ? { label: patch.label } : {}),

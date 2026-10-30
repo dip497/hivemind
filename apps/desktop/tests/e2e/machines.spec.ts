@@ -1,5 +1,6 @@
 // Machines, end to end against a real OpenSSH server this spec starts on 127.0.0.1 with its own
-// keys, agent and remote $HOME: add a machine (this version's hive put there), run a frame on it, adopt a
+// keys, agent and remote $HOME: add a machine (over plain ssh, as asked by default; then this version's
+// hive put there when the person turns it on), run a frame on it, adopt a
 // job started with `hive run` there, lose the server and get it back. A frame names the machine it
 // runs on, not its address (R9): the address edited, the frame follows; the machine removed, the
 // frame goes back to the address, still running there; saved again, it is on the new machine.
@@ -113,7 +114,7 @@ test.afterAll(async () => {
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
-test("add a machine: probe, put this version's hive there, save", async () => {
+test("add a machine: probe and save, hive put there only once the person turns it on", async () => {
   test.setTimeout(180_000);
   await page.locator('.hm-layers [data-layers-rail="machines"]').click();
   // A field chosen as soon as the form shows keeps the keys: the form's first focus never takes them.
@@ -131,10 +132,19 @@ test("add a machine: probe, put this version's hive there, save", async () => {
   expect(kept).toBe("machine-label");
   await page.getByLabel("Host").fill(`ssh://${os.userInfo().username}@127.0.0.1:${port}`);
   await page.getByLabel("Name", { exact: true }).fill("build-box");
+  await expect(page.getByRole("switch", { name: "Install hive there" })).not.toBeChecked();
   await page.getByRole("button", { name: "Add", exact: true }).click();
   const row = page.locator('ul[aria-label="machines"] li', { hasText: "build-box" });
   await expect(row).toContainText("online", { timeout: 150_000 });
-  expect(fs.existsSync(path.join(dir, "rhome/.hivemind/bin", VERSION, "hive"))).toBe(true);
+  const hiveThere = () => fs.existsSync(path.join(dir, "rhome/.hivemind/bin", VERSION, "hive"));
+  expect(hiveThere()).toBe(false);
+  // Turned on from the machine's page: put there at once.
+  await row.click();
+  const keep = page.locator('[data-machine-install-hive="build-box"]');
+  await expect(keep).not.toBeChecked();
+  await keep.click();
+  await expect.poll(hiveThere, { timeout: 150_000 }).toBe(true);
+  await expect(keep).toBeChecked();
   await page.keyboard.press("Escape");
   // Layers is where machines live: listed before anything runs there, with its link and actions.
   const header = page.locator('.hm-layers [data-machine-header="build-box"]');

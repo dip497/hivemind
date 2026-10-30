@@ -9,7 +9,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { machinesPath, newMachineId, validateLabel, validateTarget, KIND_SCRIPT, kindIn, type Machine, type MachineKind, type ProbeResult } from "@hivemind/core";
+import { isWindowsPlatform, machinesPath, newMachineId, validateLabel, validateTarget, KIND_SCRIPT, kindIn, type Machine, type MachineKind, type ProbeResult } from "@hivemind/core";
 import { machineHostId, parseDeviceUri, parseMachineUri, parseRemote, sshUri, type RemoteTarget } from "@hivemind/core/remote-uri";
 import type { MachineAddRequest, MachineAddResult, MachineInfo, MachineProbe, MachineState, MachineStatus, MachinesSnapshot, SessionSummary } from "../../shared/ipc.js";
 import type { SessionInfo } from "@hivemind/agent-host/pty-protocol";
@@ -17,8 +17,8 @@ import { remoteConns } from "@hivemind/host/remote/conn";
 import { machines as catalog, onMachinesChange } from "@hivemind/host/remote/catalog";
 import { remoteTarget } from "@hivemind/host/remote/targets";
 import { needsAttention } from "@hivemind/host/remote/ssh";
-import { ensureHive, probeHive } from "./hive-there.js";
-import { closeIdle, endpointFor, hostConnected, hostFailure, hostServingTiles, readyEndpoints, reconnectHost, resetHost, setHostPaused, setRemoteStatusSink, sshPaths } from "./pty.js";
+import { NO_HIVE_ON_WINDOWS, ensureHive, probeHive } from "./hive-there.js";
+import { closeIdle, endpointFor, plainSsh, hostConnected, hostFailure, hostServingTiles, readyEndpoints, reconnectHost, resetHost, setHostPaused, setRemoteStatusSink, sshPaths } from "./pty.js";
 import { forgetSavedHost, passwordState, saveHost } from "./saved-hosts.js";
 
 const PING_MS = 10_000;
@@ -176,18 +176,27 @@ export async function addMachine(req: MachineAddRequest): Promise<MachineAddResu
   if (req.password) remoteConns.setAuth(t.hostId, { ...remoteConns.resolveAuthFor(t.hostId), password: req.password });
   let ensured: Awaited<ReturnType<typeof ensureHive>>;
   try {
-    ensured = await ensureHive(t, sshPaths());
+    // Only asked for is `hive` put there; without it, reached is enough.
+    ensured = req.installHive ? await ensureHive(t, sshPaths()) : { found: await probe(t) };
   } catch (e) {
     if (req.password) remoteConns.clearAuth(t.hostId);
     throw probeError(target, e);
   }
   const { found, missing } = ensured;
+  const installHive = !!req.installHive && !isWindowsPlatform(found.platform);
   const passwordSaved = req.password ? saveHost(t.host, t.port, t.user ?? "", { password: req.password }) : true;
-  const m: Machine = { id: newMachineId(), label, target, enabled: true, platform: found.platform, ...(found.kind ? { kind: found.kind } : {}), ...(found.hivePath ? { hivePath: found.hivePath } : {}) };
+  const m: Machine = {
+    id: newMachineId(), label, target, enabled: true, platform: found.platform,
+    ...(found.kind ? { kind: found.kind } : {}), ...(found.hivePath ? { hivePath: found.hivePath } : {}), ...(installHive ? { installHive: true } : {}),
+  };
   await mutate((list) => { clashWith(list, target, t.hostId); return [...list, m]; });
   resetHost(t.hostId);
-  setStatus(t.hostId, missing ? "no-hive" : "online", missing);
-  return { machine: info(m), probe: toProbe(found), installed: !!ensured.put, ...(passwordSaved ? {} : { passwordSaved: false }) };
+  setStatus(t.hostId, installHive && missing ? "no-hive" : "online", installHive ? missing : undefined);
+  return {
+    machine: info(m), probe: toProbe(found), installed: !!ensured.put,
+    ...(req.installHive && !installHive ? { notInstalled: NO_HIVE_ON_WINDOWS } : {}),
+    ...(passwordSaved ? {} : { passwordSaved: false }),
+  };
 }
 
 export async function checkMachine(id: string): Promise<MachineProbe> {
@@ -219,11 +228,31 @@ export async function checkMachine(id: string): Promise<MachineProbe> {
   return toProbe(found);
 }
 
-export async function updateMachine(id: string, patch: { label?: string; enabled?: boolean }): Promise<void> {
+export async function updateMachine(id: string, patch: { label?: string; enabled?: boolean; installHive?: boolean }): Promise<void> {
   const m = byId(id);
+  if (patch.installHive && isWindowsPlatform(m.platform)) throw new Error(NO_HIVE_ON_WINDOWS);
   if (patch.enabled !== undefined) setHostPaused(machineHostId(m.target), !patch.enabled);
   const label = patch.label === undefined ? undefined : validateLabel(patch.label);
-  await mutate((list) => list.map((m) => (m.id === id ? { ...m, ...(label !== undefined ? { label } : {}), ...(patch.enabled !== undefined ? { enabled: patch.enabled } : {}) } : m)));
+  await mutate((list) => list.map((x) => {
+    if (x.id !== id) return x;
+    const { installHive: _was, ...rest } = x;
+    const installHive = patch.installHive ?? x.installHive;
+    return { ...rest, ...(label !== undefined ? { label } : {}), ...(patch.enabled !== undefined ? { enabled: patch.enabled } : {}), ...(installHive ? { installHive: true } : {}) };
+  }));
+  if (patch.installHive === undefined || patch.installHive === !!m.installHive) return;
+  // New terminals go the new way; those running keep the way they started. Asked for, `hive` is
+  // put there now, so a machine that cannot take it says so at once.
+  const hostId = machineHostId(m.target);
+  resetHost(hostId);
+  if (!patch.installHive) return setStatus(hostId, "online");
+  setStatus(hostId, "connecting", "putting hive there");
+  try {
+    const { missing } = await ensureHive(targetOf(m), sshPaths());
+    setStatus(hostId, missing ? "no-hive" : "online", missing);
+  } catch (e) {
+    const err = probeError(m.target, e);
+    setStatus(hostId, err.message.startsWith("[attention]") ? "attention" : "offline", err.message.replace(/^\[\w+\] /, ""));
+  }
 }
 
 /** Point a saved machine somewhere else. A new address is reached before it is saved, so a typo
@@ -289,6 +318,7 @@ export async function machineSessions(uri: string | null): Promise<SessionSummar
   if (!uri) return (await listSessionsLocal()).slice(0, MAX_SESSIONS).map(summary);
   const t = remoteTarget(uri);
   const ep = await endpointFor(t);
+  if (!ep && plainSsh(t.hostId)) throw new Error("this machine's terminals run over plain ssh: nothing there keeps a list of them");
   if (!ep) throw new Error(hostFailure(t.hostId) ?? "this machine's terminals cannot be listed right now");
   return (await ep.sessions()).slice(0, MAX_SESSIONS).map(summary);
 }

@@ -18,6 +18,9 @@ export interface Machine {
   platform?: string;
   /** Reported by the machine when it is checked. */
   kind?: MachineKind;
+  /** This app puts its own `hive` there, to keep terminals running when the connection drops.
+   *  Off: terminals run over plain ssh. Never on a Windows machine yet. */
+  installHive?: boolean;
 }
 
 interface MachinesFile {
@@ -27,7 +30,7 @@ interface MachinesFile {
 
 const VERSION = 1;
 export const MACHINE_LIMITS = { fileBytes: 64 * 1024, machines: 64, labelBytes: 128, targetBytes: 1024 } as const;
-const FIELDS = new Set(["id", "label", "target", "enabled", "hivePath", "platform", "kind"]);
+const FIELDS = new Set(["id", "label", "target", "enabled", "hivePath", "platform", "kind", "installHive"]);
 const ID_RE = /^m_[0-9a-f]{12}$/;
 // eslint-disable-next-line no-control-regex
 const CONTROL = /[\x00-\x1f\x7f]/;
@@ -99,6 +102,10 @@ function validateMachine(v: unknown, i: number): Machine {
   if (m.kind !== undefined) {
     if (!isMachineKind(m.kind)) throw new HiveError("machines_invalid", `${where}.kind is invalid`);
     out.kind = m.kind;
+  }
+  if (m.installHive !== undefined) {
+    if (typeof m.installHive !== "boolean") throw new HiveError("machines_invalid", `${where}.installHive must be a boolean`);
+    if (m.installHive) out.installHive = true;
   }
   return out;
 }
