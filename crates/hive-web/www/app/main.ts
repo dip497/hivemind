@@ -413,6 +413,7 @@ async function start(): Promise<void> {
   route();
 
   navigator.serviceWorker?.register("sw.js").catch(() => {});
+  followBuilds();
   // Paired computers are kept only while the browser keeps this page's storage.
   void navigator.storage?.persist?.().catch(() => {});
   // The wasm after the first screen, which does not need it.
@@ -426,6 +427,33 @@ async function start(): Promise<void> {
   addEventListener("online", () => phone?.retry());
   document.addEventListener("visibilitychange", () => document.visibilityState === "visible" && phone?.retry());
   if (link !== null) offer(link, name);
+}
+
+/** A newer build of this page, once the server has one: opened again at once when nothing typed
+ *  would be lost, else offered. Asked as the page comes back into view, as a phone keeps it open. */
+function followBuilds(): void {
+  const sw = navigator.serviceWorker;
+  if (!sw) return;
+  // The fields the person typed into: one the page filled in itself (a device's name) is no loss.
+  const touched = new Set<HTMLInputElement | HTMLTextAreaElement>();
+  document.addEventListener("input", (e) => {
+    const f = e.target;
+    if (f instanceof HTMLTextAreaElement || (f instanceof HTMLInputElement && f.type !== "file")) touched.add(f);
+  }, true);
+  const typed = () => [...touched].some((f) => f.isConnected && f.value.trim() !== "");
+  sw.addEventListener("message", (e: MessageEvent) => {
+    if ((e.data as { t?: unknown } | null)?.t !== "newer") return;
+    if (!typed()) return location.reload();
+    if (document.querySelector("[data-page-newer]")) return;
+    const bar = h("div", { class: "page-newer", role: "status", "data-page-newer": "" }, "Hivemind was updated.");
+    const reload = h("button", { class: "page-newer-reload" }, "Reload");
+    reload.addEventListener("click", () => location.reload());
+    bar.append(reload);
+    document.body.append(bar);
+  });
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") sw.controller?.postMessage({ t: "check" });
+  });
 }
 
 start().catch((e: unknown) => {

@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Fixed: the phone page updates itself. Kept open, as a phone keeps it, it looks for a new build each time you come back to it and opens it at once, or, while you have typed something, offers **Reload**. It ran the old page until opened again twice.
 - Added: **What's new**. The first start after an update shows what changed in every version since the one you last ran. **Settings ▸ About** shows this version's notes, and, with an update on offer, what is in it before you install it.
 - Fixed: **Restart to finish** after an update restarts into the new version. On Linux each version is now a folder of its own (`~/.hivemind-app/versions/`): an update never touches the files of the open app, the launcher starts the version installed last, and a version goes once nothing runs from it, but the one before stays to go back to. A restart no longer came back on the old version, still asking to restart.
 - **Breaking:** a new machine runs its terminals over plain ssh unless you turn on **Install hive there** when you add it: `hive machine add` puts `hive` there only with `--install-hive`, and `hive ps`, `attach`, `run` and `kill --machine` on a machine without it say how to turn it on. Turn it on later in **Manage machines…** or with `hive machine install-hive <machine>`. Machines you already have keep their `hive`.
