@@ -75,9 +75,8 @@ function questionsAndAnswers(url: string, markdown: string) {
   if (sections.length < 3 || !sections.every((s) => /^[^\n]+\?\s*\n/.test(s))) return [];
   const plain = (md: string) =>
     md
-      .replace(/<[^>]+>/g, '')
-      // What a tag nested in another leaves behind: no angle bracket survives.
-      .replace(/[<>]/g, '')
+      // A tag goes whole, and an angle bracket outside one goes too: none is left to make a tag.
+      .replace(/<[^>]*>|[<>]/g, '')
       .replace(/^\s*[-*]\s+/gm, '')
       .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
       .replace(/[`*_]/g, '')
