@@ -14,11 +14,11 @@ let page: Page;
 
 const about = () => page.locator(".settings-dialog");
 
-async function launch(update: Record<string, unknown>, progress?: string[], installed?: string): Promise<void> {
+async function launch(update: Record<string, unknown>, progress?: string[], installed?: string, release?: string): Promise<void> {
   const xdg = fs.mkdtempSync(path.join(root, "x-"));
   const appDir = fs.mkdtempSync(path.join(root, "app-"));
   if (installed) fs.writeFileSync(path.join(appDir, ".installed-version"), `${installed}\n`);
-  const env = { ...process.env, XDG_CONFIG_HOME: xdg, HIVEMIND_APP_DIR: appDir, HIVEMIND_TEST_UPDATE: JSON.stringify({ ...update, ...(progress ? { progress } : {}) }) } as Record<string, string>;
+  const env = { ...process.env, XDG_CONFIG_HOME: xdg, HIVEMIND_APP_DIR: appDir, ...(release ? { HIVEMIND_RELEASE: release } : {}), HIVEMIND_TEST_UPDATE: JSON.stringify({ ...update, ...(progress ? { progress } : {}) }) } as Record<string, string>;
   delete env.ELECTRON_RUN_AS_NODE;
   app = await electron.launch({ args: [path.resolve("out/main/index.js"), "--no-sandbox"], cwd: root, env });
   page = await app.firstWindow();
@@ -53,6 +53,12 @@ test("a newer version installed under the open app asks for a restart, not the s
   await launch({ latest: "9999.1.0" }, undefined, "v9999.1.0");
   await expect(about().getByText(/v9999\.1\.0 is downloaded — restart to finish/)).toBeVisible();
   await expect(about().getByRole("button", { name: "Update", exact: true })).toHaveCount(0);
+});
+
+test("the version the launcher started is the one installed: nothing waits for a restart", async () => {
+  await launch({ latest: "9999.1.0" }, undefined, "v9999.1.0", "v9999.1.0");
+  await expect(about().getByText(/Update available — v9999\.1\.0/)).toBeVisible();
+  await expect(about().getByText(/restart to finish/)).toHaveCount(0);
 });
 
 test("nothing newer says so, and offers a check", async () => {

@@ -652,26 +652,16 @@ function isNewerVersion(latest: string, current: string): boolean {
 // Fetch the latest GitHub release in MAIN (the renderer's CSP blocks the
 // api.github.com request). Any failure — offline, DNS, rate-limit, non-200 —
 // resolves to a no-update result so the UI shows nothing rather than an error.
-/** A build the installer downloaded beside the running one, waiting for a restart. The
- *  installer records it apart from the installed version, and the launcher promotes it when
- *  it applies it (`install.sh`). Absent, unreadable or not newer: nothing is waiting. */
+/** A version installed since this app started, which starts at its next restart: the launcher
+ *  says which release it started (HIVEMIND_RELEASE), and `.installed-version` which it starts
+ *  next. Each is a folder of its own (`install.sh`), so they differ until the restart. A build run
+ *  from source is not that install unless its folder is named. */
 function stagedVersion(current: string): string | null {
-  const dir = installedAppDir();
+  if (!app.isPackaged && !process.env.HIVEMIND_APP_DIR?.trim()) return null;
   const installed = installedReleaseTag();
-  // Swapped in under this app already: it waits for a restart all the same. A build run from
-  // source is not that install unless its folder is named.
-  const ours = app.isPackaged || !!process.env.HIVEMIND_APP_DIR?.trim();
-  if (ours && installed && !installed.startsWith("nightly-") && !existsSync(path.join(dir, ".staged-version"))) {
-    const numeric = installed.replace(/^v/, "");
-    return isNewerVersion(numeric, current) ? numeric : null;
-  }
-  try {
-    const v = readFileSync(path.join(dir, ".staged-version"), "utf8").trim();
-    if (v.startsWith("nightly-")) return newerNightlyTag(v, installed) ? v : null;
-    const numeric = v.replace(/^v/, "");
-    if (installed?.startsWith("nightly-")) return numeric || null;
-    return numeric && isNewerVersion(numeric, current) ? numeric : null;
-  } catch { return null; }
+  const running = process.env.HIVEMIND_RELEASE?.trim() || `v${current}`;
+  if (!installed || installed === running) return null;
+  return installed.startsWith("nightly-") ? installed : installed.replace(/^v/, "");
 }
 
 function installedAppDir(): string {

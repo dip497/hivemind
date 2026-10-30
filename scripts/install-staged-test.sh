@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# What `.installed-version` means: the version that RUNS. An upgrade taken while the app is
-# live can only be downloaded beside it, so the installer records that apart and the launcher
-# promotes it when it swaps the build in. Without that, a re-run reads the stamp, believes the
-# new version is installed, and leaves the user on the old build with nothing left to try.
+# An update, taken while the app is open or not: each version is a folder of its own under
+# versions/, `.installed-version` names the one the launcher starts, and the files of an open app
+# are never touched. A restart starts the new one whatever of the old one is still exiting; a
+# build goes once nothing runs from it, but the one before stays to go back to.
 #
 # Drives the real install.sh in a temp prefix. The downloader and "is the app live" are
 # shimmed on PATH — they stand in for the network and for ps, never for our logic.
@@ -73,35 +73,38 @@ case "$url" in
     cat > "$out" <<IMG
 #!/usr/bin/env bash
 mkdir -p squashfs-root
-printf '#!/usr/bin/env bash\n# AppRun $want\nexit 0\n' > squashfs-root/AppRun
+printf '#!/usr/bin/env bash\n# BIN= AppRun $want\necho "AppRun $want release=\$HIVEMIND_RELEASE"\n' > squashfs-root/AppRun
 chmod +x squashfs-root/AppRun
 IMG
     chmod +x "$out";;
   *) printf '#!/usr/bin/env bash\nexit 0\n' > "$out"; chmod +x "$out";;
 esac
 SHIM
-# What runs: the test decides, by writing into $TMP_RUNNING 0 (nothing), 1 (the app's window) or
-# daemon (only the terminal daemon the app left running).
+# What runs: the processes the test writes into $TMP_PS, one command line each.
 cat > "$TMP/shims/ps" <<'SHIM'
 #!/usr/bin/env bash
-case "$(cat "$TMP_RUNNING" 2>/dev/null || echo 0)" in
-  1) echo "$HIVEMIND_APP_DIR/hivemind-extracted/hivemind --no-sandbox" ;;
-  daemon) echo "$HIVEMIND_APP_DIR/hivemind-extracted/hivemind $HIVEMIND_APP_DIR/hivemind-extracted/resources/app.asar/out/main/pty-daemon.js $HOME/.config/hivemind/pty-daemon.sock" ;;
-esac
+cat "$TMP_PS" 2>/dev/null || true
 SHIM
 chmod +x "$TMP/shims"/*
 export PATH="$TMP/shims:$PATH"
-export TMP_LATEST="$TMP/latest" TMP_RUNNING="$TMP/running" TMP_URLS="$TMP/urls" TMP_API_403="$TMP/api403" TMP_NO_REDIRECT="$TMP/noredirect" TMP_NO_NET="$TMP/nonet" TMP_NO_SDK="$TMP/nosdk"
+export TMP_PS="$TMP/ps" TMP_LATEST="$TMP/latest" TMP_URLS="$TMP/urls" TMP_API_403="$TMP/api403" TMP_NO_REDIRECT="$TMP/noredirect" TMP_NO_NET="$TMP/nonet" TMP_NO_SDK="$TMP/nosdk"
 echo v9.9.9 > "$TMP_LATEST"
-echo 0 > "$TMP_RUNNING"
+: > "$TMP_PS"
 
 run_installer() { bash "$REPO_ROOT/install.sh" "$@" 2>&1; }
+# What the launcher starts, as the build it started says.
+starts() { "$HIVEMIND_BIN_DIR/hivemind" 2>&1; }
+nothing_runs() { : > "$TMP_PS"; }
+# A window of the build in `$1` (a folder under the app's), and the terminal daemon one left running.
+window_of() { echo "$APP/$1/hivemind --no-sandbox" >> "$TMP_PS"; echo "$APP/$1/hivemind --type=renderer" >> "$TMP_PS"; }
+daemon_of() { echo "$APP/$1/hivemind $APP/$1/resources/app.asar/out/main/pty-daemon.js $HOME/.config/hivemind/pty-daemon.sock" >> "$TMP_PS"; }
+versions() { ls "$APP/versions" 2>/dev/null | tr '\n' ' ' | sed 's/ $//'; }
 
 # ── 1. a first install, with nothing running ──────────────────────────────
 run_installer > "$TMP/out1"
-check "first install stamps what runs" "v9.9.9" "$(stamp .installed-version)"
-check "nothing is waiting" "(none)" "$(stamp .staged-version)"
-check "the build is in place" "yes" "$([ -f "$APP/hivemind-extracted/AppRun" ] && echo yes || echo no)"
+check "first install stamps what starts" "v9.9.9" "$(stamp .installed-version)"
+check "the build is a folder of its own" "v9.9.9" "$(versions)"
+check "the launcher starts it, and says which it is" "AppRun v9.9.9 release=v9.9.9" "$(starts)"
 check "hive-net is on PATH beside hive" "hive-net v9.9.9" "$("$HIVEMIND_BIN_DIR/hive-net" 2>&1)"
 check "the npm SDK is under its stable name" "npm v9.9.9" "$(cat "$APP/sdk/hivemind-api.tgz" 2>&1)"
 check "the Python SDK is a folder pip installs" "# python v9.9.9" "$(cat "$APP/sdk/python/pyproject.toml" 2>&1)"
@@ -111,41 +114,58 @@ check "the Python SDK is a folder pip installs" "# python v9.9.9" "$(cat "$APP/s
 check "the tag comes from the redirect" "yes" "$(grep -q "github.com/dip497/hivemind/releases/latest" "$TMP_URLS" && echo yes || echo no)"
 check "the api is not asked at all" "yes" "$(grep -q "api.github.com" "$TMP_URLS" && echo no || echo yes)"
 
-# ── 2. an upgrade taken while the app is live ─────────────────────────────
+# ── 2. an update taken while the app is open ─────────────────────────────
 echo v9.9.10 > "$TMP_LATEST"
-echo 1 > "$TMP_RUNNING"
+window_of versions/v9.9.9
 run_installer > "$TMP/out2"
-check "a live app stages the download" "yes" "$([ -d "$APP/hivemind-extracted.staged" ] && echo yes || echo no)"
-check "the waiting version is recorded" "v9.9.10" "$(stamp .staged-version)"
-check "what runs is still the old one" "v9.9.9" "$(stamp .installed-version)"
+check "the new version is a folder of its own" "v9.9.10 v9.9.9" "$(versions)"
+check "the open app's files are untouched" "yes" "$(grep -q "AppRun v9.9.9" "$APP/versions/v9.9.9/AppRun" && echo yes || echo no)"
+check "it is the one the launcher starts next" "v9.9.10" "$(stamp .installed-version)"
 check "it says what is left to do" "yes" "$(grep -qi "restart hivemind to finish" "$TMP/out2" && echo yes || echo no)"
 
-# ── 3. asked again while that download is waiting ─────────────────────────
-before=$(stat -c %Y "$APP/hivemind-extracted.staged")
+# ── 3. asked again: it is there already ──────────────────────────────────
+before=$(stat -c %Y "$APP/versions/v9.9.10")
+: > "$TMP_URLS"
 run_installer > "$TMP/out3"
-check "it is not downloaded twice" "yes" "$([ "$(stat -c %Y "$APP/hivemind-extracted.staged")" = "$before" ] && echo yes || echo no)"
-check "it says it is already waiting" "yes" "$(grep -qi "downloaded already" "$TMP/out3" && echo yes || echo no)"
+check "it is not downloaded twice" "no" "$(grep -q "AppImage" "$TMP_URLS" && echo yes || echo no)"
+check "nor unpacked again" "yes" "$([ "$(stat -c %Y "$APP/versions/v9.9.10")" = "$before" ] && echo yes || echo no)"
 
-# ── 3b. started again while the app is open: it hands over, and the swap waits ──
-"$HIVEMIND_BIN_DIR/hivemind" > "$TMP/out3b" 2>&1 || true
-check "an open app keeps its files" "yes" "$(grep -q "AppRun v9.9.9" "$APP/hivemind-extracted/AppRun" && echo yes || echo no)"
-check "the download still waits" "v9.9.10" "$(stamp .staged-version)"
-check "and what runs is still recorded" "v9.9.9" "$(stamp .installed-version)"
+# ── 4. the restart, the old app still on its way out: the new one starts ──
+check "a restart starts the new version, whatever of the old still runs" "AppRun v9.9.10 release=v9.9.10" "$(starts)"
 
-# ── 4. the launcher starts: the staged build becomes the one that runs ────
-echo 0 > "$TMP_RUNNING"
-"$HIVEMIND_BIN_DIR/hivemind" > "$TMP/out4" 2>&1 || true
-check "the staged build was applied" "yes" "$(grep -q "AppRun v9.9.10" "$APP/hivemind-extracted/AppRun" && echo yes || echo no)"
-check "the stamp follows what runs" "v9.9.10" "$(stamp .installed-version)"
-check "nothing is waiting any more" "(none)" "$(stamp .staged-version)"
-
-# ── 4b. only the terminal daemon runs: its agents keep running, the build goes in place ──
+# ── 4b. a build nothing runs from goes; the one before stays, and one a daemon runs from ──
+nothing_runs
+daemon_of versions/v9.9.9
 echo v9.9.10b > "$TMP_LATEST"
-echo daemon > "$TMP_RUNNING"
 run_installer > "$TMP/out4b"
-check "a running daemon does not hold the upgrade" "v9.9.10b" "$(stamp .installed-version)"
-check "nothing is staged for it" "no" "$([ -d "$APP/hivemind-extracted.staged" ] && echo yes || echo no)"
-echo 0 > "$TMP_RUNNING"
+check "the terminal daemon keeps its build; the one before stays" "v9.9.10 v9.9.10b v9.9.9" "$(versions)"
+check "only a daemon running is no window: nothing to restart" "no" "$(grep -qi "restart hivemind to finish" "$TMP/out4b" && echo yes || echo no)"
+nothing_runs
+echo v9.9.10c > "$TMP_LATEST"
+run_installer > "$TMP/out4c"
+check "once nothing runs from them, old builds go" "v9.9.10b v9.9.10c" "$(versions)"
+
+# ── 4c. an install from before versions/, its update staged by an older installer ──
+rm -rf "$APP/versions"
+mkdir -p "$APP/hivemind-extracted" "$APP/hivemind-extracted.staged"
+printf '#!/usr/bin/env bash\n# BIN=\necho "AppRun v9.9.8 release=$HIVEMIND_RELEASE"\n' > "$APP/hivemind-extracted/AppRun"
+printf '#!/usr/bin/env bash\n# BIN=\necho "AppRun v9.9.10d release=$HIVEMIND_RELEASE"\n' > "$APP/hivemind-extracted.staged/AppRun"
+chmod +x "$APP/hivemind-extracted/AppRun" "$APP/hivemind-extracted.staged/AppRun"
+echo v9.9.8 > "$APP/.installed-version"
+echo v9.9.10d > "$APP/.staged-version"
+check "the build from before still starts" "AppRun v9.9.8 release=v9.9.8" "$(starts)"
+window_of hivemind-extracted
+echo v9.9.10d > "$TMP_LATEST"
+: > "$TMP_URLS"
+run_installer > "$TMP/out4d"
+check "the staged build becomes its version, not downloaded again" "no" "$(grep -q "AppImage" "$TMP_URLS" && echo yes || echo no)"
+check "the restart starts it" "AppRun v9.9.10d release=v9.9.10d" "$(starts)"
+check "the open one's folder stays while it runs" "yes" "$([ -x "$APP/hivemind-extracted/AppRun" ] && echo yes || echo no)"
+check "nothing is waiting under the old names" "(none)" "$(stamp .staged-version)"
+nothing_runs
+echo v9.9.10e > "$TMP_LATEST"
+run_installer > "$TMP/out4e"
+check "then it goes" "no" "$([ -d "$APP/hivemind-extracted" ] && echo yes || echo no)"
 
 # ── 5. the api is rate-limited: the version still resolves ───────────────
 echo 1 > "$TMP_API_403"
@@ -231,6 +251,6 @@ check "stepping back is not 'nothing to do'" "no" "$(grep -q 'nothing to do' "$T
 # Rollback: --version installs exactly that build, an older one too.
 run_installer --version v9.9.12 > "$TMP/out11"
 check "--version rolls back to an older build" "v9.9.12" "$(stamp .installed-version)"
-check "the app rolls back with it" "yes" "$(grep -q "AppRun v9.9.12" "$APP/hivemind-extracted/AppRun" && echo yes || echo no)"
+check "the app rolls back with it" "AppRun v9.9.12 release=v9.9.12" "$(starts)"
 
 if [ "$fail" = 0 ]; then echo "staged upgrade: all ok"; else echo "staged upgrade: FAILED"; exit 1; fi
