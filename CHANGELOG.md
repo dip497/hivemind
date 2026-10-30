@@ -9,6 +9,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Fixed: Ctrl+A with no text field focused no longer selects the whole window, so a copy after it can no longer put every tile's name, button and terminal line on the clipboard to be pasted into an agent.
+
 ## [2026.10.8] — 2026-10-30
 
 - Fixed: on light themes other than Clean Light, such as Tokyo Night Day, Gruvbox Light and Catppuccin Latte, an issue's state on its state picker and its assignee's initial were a little too faint to read; they are darker now.
