@@ -42,8 +42,13 @@ function cacheFor(path) {
   return "public, max-age=3600";
 }
 
+/** Where a redirect may send a browser: a path on this site, or this project on GitHub. */
+const PROJECT = "https://github.com/dip497/hivemind/";
+const stays = (location) => (location.startsWith("/") && !/^\/[/\\]/.test(location)) || location.startsWith(PROJECT);
+
 createServer((req, res) => {
-  const hit = answerFor(req.url ?? "/", ROOT);
+  const found = answerFor(req.url ?? "/", ROOT);
+  const hit = found?.location && !stays(found.location) ? null : found;
   if (hit?.location) {
     res.writeHead(hit.status, { location: hit.location, "cache-control": hit.cache });
     return res.end();
