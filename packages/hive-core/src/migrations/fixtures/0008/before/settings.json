@@ -1,0 +1,13 @@
+{
+  "v": 1,
+  "appearance": {
+    "preset": "clean",
+    "radius": 10,
+    "wallpaper": { "kind": "koi", "brightness": 0.8, "colour": true },
+    "lookBefore": { "glass": true, "wallpaper": "shoal", "radius": 6 },
+    "glass": { "enabled": false }
+  },
+  "views": { "defaultView": "windows" },
+  "profile": { "name": "Ada", "color": "#336699" },
+  "browserCdp": true
+}

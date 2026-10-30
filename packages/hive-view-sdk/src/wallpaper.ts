@@ -1,7 +1,7 @@
 /**
- * Live wallpaper protocol 1: a scene drawn behind the canvas whose creatures are the workspace's
- * agents, as a package member (`hivemind-wallpaper.json`) in a sandboxed iframe. The app's own
- * scenes (Shoal, Koi Pond, Jellyfish, Fireflies) are told the same things and keep the same clock.
+ * Live wallpaper protocol 1: a scene drawn behind the canvas, as a package member
+ * (`hivemind-wallpaper.json`) in a sandboxed iframe. It may draw the workspace's agents as its
+ * creatures, or a world of its own that ignores them, as the Live scenes package does.
  *
  *   import { connectWallpaper } from "@hivemind/view-sdk";
  *
@@ -53,7 +53,7 @@ export interface WallpaperTile { x0: number; y0: number; x1: number; y1: number;
  *  be on this computer, so give it a fallback. */
 export interface WallpaperLook { page: string; text: string; attention: string; dark: boolean; colour: boolean; mono: string }
 
-/** `run`: animate. `hold`: keep the last frame (the window is hidden, idle or covered). `still`:
+/** `run`: animate. `hold`: keep the last frame (the window is minimised or hidden, or the workspace covered). `still`:
  *  motion is off; show one settled frame, and draw again only when something changes. */
 export type WallpaperMode = "run" | "hold" | "still";
 

@@ -1,8 +1,10 @@
 // A package's live wallpaper in the built app: installed while the app was closed, it is offered
 // once as the background and Use draws it, in its sandboxed frame, told each agent's creature and
 // where their tiles are, by handles that are not the tiles' ids; the pointer over a creature names
-// its agent and a click there goes to its tile, on the app's own scenes too. A wallpaper that names
-// creatures it was never sent is turned off for the session, the plain background showing instead;
+// its agent and a click there goes to its tile; it runs on while the person is idle or in another
+// window, as a video does, and stops only while the window is hidden; its Colour switch reaches it,
+// and See-through leaves the Layers panel clear glass over it. A wallpaper that names creatures it
+// was never sent is turned off for the session, the plain background showing instead;
 // one that says a creature is under the pointer while the pointer is over a tile is not heard; one
 // that takes the keyboard is turned off, what had the keyboard getting it back; a package switched
 // off stops its wallpaper in every window; and a view the repository ships named like a wallpaper's
@@ -233,31 +235,76 @@ test("a package switched off stops its wallpaper in every window, not only the o
   await page.evaluate(() => window.hive.switchPackage("@e2e/pond", true));
 });
 
-test("on the app's own scenes too: the pointer over a shark names its agent, and a click there goes to its tile", async () => {
-  // Motion off: one settled frame, so a shark stays where the pointer finds it.
-  await page.evaluate(() => Promise.all([window.hive.settingsSet("appearance.glass.animate", false), window.hive.settingsSet("appearance.wallpaper.kind", "shoal")]));
-  await expect(page.locator('.hm-wallpaper[data-scene="shoal"] canvas')).toHaveCount(1);
-  await page.locator(".react-flow__pane").click({ position: { x: 5, y: 5 } });
-  await zoomOut();
-  await page.waitForTimeout(1500);
-  await shot("5-shoal-before");
-  // Over the open water, a step at a time, until a shark is under the pointer.
-  const label = page.locator(".hm-live-label");
-  const found = await (async () => {
-    for (let y = 120; y < 860; y += 24) {
-      for (let x = 360; x < 1420; x += 24) {
-        const free = await page.evaluate(([px, py]) => document.elementFromPoint(px!, py!)?.classList.contains("react-flow__pane"), [x, y]);
-        if (!free) continue;
-        await page.mouse.move(x, y);
-        if (await label.count()) return { x, y };
-      }
-    }
-    return null;
-  })();
-  expect(found, "a shark somewhere on the open water").not.toBeNull();
-  const key = await label.getAttribute("data-creature");
-  expect(await tiles()).toContain(key);
-  await shot("5-shoal-hover");
-  await page.mouse.click(found!.x, found!.y);
-  await expect(page.locator(`.react-flow__node[data-id="${key}"].selected`)).toHaveCount(1);
+test("resting your hands or working in another window does not stop it, nor a video: only a hidden window does", async () => {
+  await page.evaluate(() => window.hive.settingsSet("appearance.wallpaper.kind", "@e2e/pond/dots"));
+  const frame = await wallpaperFrame("@e2e/pond/dots");
+  const mode = () => frame.evaluate(() => (window as unknown as { seen: { modes: string[] } }).seen.modes.at(-1));
+  await page.bringToFront();
+  await expect.poll(mode).toBe("run");
+  // Another window in front, as the page sees it (the private X display has no window manager to move
+  // focus), and over 30 seconds with no input: the window is still in sight.
+  await page.evaluate(() => { document.hasFocus = () => false; window.dispatchEvent(new Event("blur")); });
+  await page.waitForTimeout(33_000);
+  expect(await mode()).toBe("run");
+  // A video background plays on the same way.
+  const glassWas = await page.evaluate(() => window.hive.settingsGet().then((s) => s.appearance.glass.enabled));
+  const file = path.resolve("tests/fixtures/settings-motion.webm");
+  await app.evaluate(({ dialog }, selected) => { dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [selected] }); }, file);
+  await page.evaluate(async () => {
+    const media = await window.hive.pickMedia("background");
+    if (!media) throw new Error("No test media");
+    await window.hive.settingsSet("appearance.glass.enabled", true);
+    await window.hive.settingsSet("appearance.wallpaper", { kind: "video", videoSrc: media.url });
+  });
+  const video = page.locator("video.hm-wp-video");
+  const playedTo = () => video.evaluate((v: HTMLVideoElement) => v.paused ? -1 : v.currentTime);
+  await expect.poll(playedTo).toBeGreaterThan(0);
+  const at = await playedTo();
+  await expect.poll(playedTo).not.toBe(at);
+  expect(await page.evaluate(() => document.hasFocus())).toBe(false);
+  // Hidden, it stops; shown again, it plays.
+  await page.evaluate(() => { Object.defineProperty(document, "hidden", { configurable: true, get: () => true }); document.dispatchEvent(new Event("visibilitychange")); });
+  await expect.poll(() => video.evaluate((v: HTMLVideoElement) => v.paused)).toBe(true);
+  await page.evaluate(() => { delete (document as { hidden?: boolean }).hidden; document.dispatchEvent(new Event("visibilitychange")); });
+  await expect.poll(playedTo).toBeGreaterThan(0);
+  await page.evaluate(() => { delete (document as { hasFocus?: () => boolean }).hasFocus; });
+  await page.evaluate((was) => Promise.all([window.hive.settingsSet("appearance.wallpaper.kind", "@e2e/pond/dots"), window.hive.settingsSet("appearance.glass.enabled", was)]), glassWas);
+  await page.bringToFront();
+});
+
+test("its Colour switch reaches it, and See-through frosts the panels and the tools in one click, the Layers panel clear glass over it", async () => {
+  const before = await page.evaluate(() => window.hive.settingsGet().then((s) => s.appearance));
+  const onDisk = () => JSON.parse(fs.readFileSync(env.HIVE_SETTINGS!, "utf8")).appearance;
+  try {
+    await page.evaluate(() => window.hive.settingsSet("appearance.wallpaper.kind", "@e2e/pond/dots"));
+    const frame = await wallpaperFrame("@e2e/pond/dots");
+    const colour = () => frame.evaluate(() => (window as unknown as { seen: { look: { colour: boolean } } }).seen.look.colour);
+    const was = await colour();
+    if (await page.locator("[data-settings-body]").count() === 0) await page.locator('[aria-label="settings"]').click();
+    await page.locator('[data-settings-page="appearance"]').click();
+    await page.getByRole("switch", { name: "Draw Dots in its own colours" }).click();
+    await expect.poll(colour).toBe(!was);
+    await page.getByRole("button", { name: "See-through" }).click();
+    await expect.poll(() => onDisk()?.glass).toMatchObject({ enabled: true, contentGlass: true, opacity: 0.5, blur: 14, contentOpacity: 0.45 });
+    await expect(page.locator("[data-settings-body]")).toContainText("It shows through the frosted panels and tiles");
+    await shot("5-see-through");
+    await page.getByRole("button", { name: "Close", exact: true }).click();
+    // Over another background the panel stops at 68% so its names stay legible; over a live
+    // wallpaper its blur does that, and it takes a third of the panel tint: clear glass.
+    const alpha = () => page.locator(".hm-layers").first().evaluate((el) => {
+      const m = /\/\s*([\d.]+)\)\s*$/.exec(getComputedStyle(el).backgroundColor);
+      return m ? Number(m[1]) : 1;
+    });
+    await expect.poll(alpha).toBeCloseTo(0.5 / 3, 2);
+    // Asked for less transparency, it is solid over it too.
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-transparency", value: "reduce" }] });
+    await expect.poll(alpha).toBe(1);
+    await cdp.send("Emulation.setEmulatedMedia", { features: [] });
+    await expect.poll(alpha).toBeCloseTo(0.5 / 3, 2);
+    await page.evaluate(() => window.hive.settingsSet("appearance.wallpaper.kind", "mono"));
+    await expect.poll(alpha).toBeCloseTo(0.68, 2);
+  } finally {
+    await page.evaluate((a) => window.hive.settingsSet("appearance", a), before);
+  }
 });

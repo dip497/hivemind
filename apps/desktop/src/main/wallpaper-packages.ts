@@ -31,7 +31,7 @@ export async function listWallpaperPackages(): Promise<WallpaperPackageInfo[]> {
   const all = await listInstalledWallpapers();
   const served: Array<{ host: string; id: string; dir: string }> = [];
   const out = await Promise.all(all.map(async (w): Promise<WallpaperPackageInfo> => {
-    const base = { id: w.id, name: w.manifest?.name ?? w.id.slice(w.id.lastIndexOf("/") + 1), package: { id: w.package.id, name: w.package.name, on: w.package.on } };
+    const base = { id: w.id, name: w.manifest?.name ?? w.id.slice(w.id.lastIndexOf("/") + 1), package: { id: w.package.id, name: w.package.name, version: w.package.version, on: w.package.on } };
     if (!w.manifest) return { ...base, description: null, colour: false, preview: null, url: null, error: w.error };
     const m = w.manifest;
     const info = { ...base, description: m.description ?? null, colour: m.colour === true, preview: null };

@@ -5,10 +5,13 @@ description: Design and animate scenes drawn in characters (ASCII and block art)
 
 # Drawing living scenes in characters
 
-This is the craft behind Hivemind's live scenes: Shoal (sharks hunting fish, seen from above,
-ported from https://github.com/stackedlol/ascii-sharks, MIT), Koi Pond, Jellyfish and Fireflies.
-Each is a grid of character cells on a 2D canvas, redrawn up to 30 times a second, behind tiles
-of terminal text, with one creature for each of the person's agents. What follows is what made
+This is the craft behind Hivemind's live scenes, the Live scenes package
+(https://github.com/dip497/hivemind-plugins, `packages/live-scenes`): Shoal (sharks hunting fish,
+seen from above, ported from https://github.com/stackedlol/ascii-sharks, MIT), Koi Pond, Jellyfish
+and Fireflies. Each is a grid of character cells on a 2D canvas, redrawn up to 30 times a second,
+behind tiles of terminal text. They began with one creature for each of the person's agents, and
+what that taught (states a glance can read, keeping off tiles, hit testing) is here for a scene
+that draws agents. What follows is what made
 them look good and what it cost to find out. The sketches are TypeScript on a
 `CanvasRenderingContext2D` (or an `OffscreenCanvas`'s), working in CSS pixels with the transform
 set to the pixel ratio.

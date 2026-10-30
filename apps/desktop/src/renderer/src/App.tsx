@@ -38,6 +38,7 @@ import { tellRecentFolders } from "./recent-folders";
 import { chooseFolder, FolderPathDialog } from "./choose-folder";
 import { runShortcut } from "./shortcut";
 import { StatusAnnouncer } from "./workspace/StatusAnnouncer";
+import type { MakeKind } from "./plugins/MakePlugin";
 const SettingsPages = preloadable(() => import("./settings-panels").then((m) => m.default));
 // Sharing's dialogs load when opened: they are nothing the first frame draws.
 const MakePluginDialog = lazy(() => import("./plugins/MakePlugin").then((m) => ({ default: m.MakePluginDialog })));
@@ -227,9 +228,9 @@ export function App() {
   const [recentOpen, setRecentOpen] = useState<"recent" | "join" | null>(null);
   const { islandShown, layersShown } = useChromeState();
   // Make your own plugin (the Add menu, Settings ▸ Plugins): a prompt to copy or hand an agent here.
-  const [making, setMaking] = useState<"widget" | "tool" | "view" | null>(null);
+  const [making, setMaking] = useState<MakeKind | null>(null);
   useEffect(() => {
-    const open = (e: Event) => { setSettingsOpen(false); setMaking((e as CustomEvent<{ kind?: "widget" | "tool" | "view" }>).detail?.kind ?? "widget"); };
+    const open = (e: Event) => { setSettingsOpen(false); setMaking((e as CustomEvent<{ kind?: MakeKind }>).detail?.kind ?? "widget"); };
     window.addEventListener("hivemind:make-plugin", open);
     return () => window.removeEventListener("hivemind:make-plugin", open);
   }, []);

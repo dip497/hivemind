@@ -94,7 +94,9 @@ export function wallpaperPackage(owner: string, name: string): Record<string, st
  *  file as it is. */
 const SCENE = `// A Hivemind live wallpaper: one creature for each of the person's agents, drawn in characters
 // behind the canvas. The app says who the agents are, where the tiles are, the colours and whether
-// to move; this answers which creature is under the pointer. The whole guide is in PROMPT.md.
+// to move; this answers which creature is under the pointer. A scene of its own may ignore the
+// agents and the tiles instead, and only answer the pointer and clicks. The whole guide is in
+// PROMPT.md.
 import { connectWallpaper, type AgentState, type WallpaperCreature } from "@hivemind/view-sdk";
 
 const wp = await connectWallpaper();

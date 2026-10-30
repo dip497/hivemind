@@ -9,7 +9,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
 import { mergeSettings } from "../settings-schema.js";
-import { files, TestRoot } from "./fixtures/runs.js";
+import { ALL, files, TestRoot } from "./fixtures/runs.js";
 import { restoreMigration } from "./manage.js";
 
 const FIXTURE = path.join(import.meta.dir, "fixtures", "0006", "before");

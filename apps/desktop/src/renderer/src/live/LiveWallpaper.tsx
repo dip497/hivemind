@@ -1,13 +1,13 @@
-/** A live wallpaper: a scene behind the canvas (Shoal's sharks, Koi Pond's koi, a package's own …),
- *  one creature per agent, in the theme's page and text colours or the scene's own. The pointer over
- *  a creature shows its agent's name and what it is doing; a click there goes to its tile. */
+/** A live wallpaper a package ships: a scene behind the canvas, told each agent's creature, where the
+ *  tiles are, the colours and whether to run. One may draw the agents (the pointer over a creature
+ *  it names shows its agent's name, and a click there goes to its tile) or a world of its own that
+ *  ignores them, as the Live scenes package does. */
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import { statusOf, subscribeStatus } from "../agent-status-bus";
 import { cssColorToHex } from "../workspace/css-color";
 import { statusWord } from "../workspace/status-look";
-import { LiveEngine, type SceneId } from "./engine";
 import type { SceneEngine } from "./page-scene";
 import { PluginEngine, type PluginWallpaper } from "./plugin-engine";
 import { roster, turnEnded, type SceneAgent } from "./roster";
@@ -55,13 +55,14 @@ function labelAt(at: { x: number; y: number }): { left: string; right: string; t
 const rosterKey = (creatures: CreatureSpec[]) => creatures.map((s) => `${s.key}:${s.variant}:${s.size}:${s.mood}`).join("|");
 
 export function LiveWallpaper({ scene, colour, agents, paused, animate, frosted, seeThrough, page, text, attention, dark, monoFont, nameOf, onOpen }: {
-  /** One of the app's scenes, or a package's live wallpaper. */
-  scene: SceneId | PluginWallpaper;
-  /** Drawn in the scene's own colours, not the theme's page and text. */
+  /** A package's live wallpaper. */
+  scene: PluginWallpaper;
+  /** The person's **Colour** switch, for a wallpaper that draws in colours of its own. */
   colour: boolean;
   /** The workspace's agents, the same array until one comes, goes or falls asleep. */
   agents: readonly SceneAgent[];
-  /** The window is hidden, unfocused or idle, or something covers the workspace. */
+  /** The window is hidden or not focused, or something covers the workspace. Not when the person
+   *  is idle: someone resting their hands is there to watch it. */
   paused: boolean;
   /** The person's Animation switch. */
   animate: boolean;
@@ -89,7 +90,7 @@ export function LiveWallpaper({ scene, colour, agents, paused, animate, frosted,
   const labelRef = useRef<HTMLDivElement>(null);
   const openRef = useRef(onOpen);
   openRef.current = onOpen;
-  const sceneKey = typeof scene === "string" ? scene : `${scene.id} ${scene.url}`;
+  const sceneKey = `${scene.id} ${scene.url}`;
   const reduced = useSyncExternalStore(lessMotion.watch, lessMotion.now, lessMotion.now);
   const contrast = useSyncExternalStore(moreContrast.watch, moreContrast.now, moreContrast.now);
   const solid = useSyncExternalStore(lessTransparency.watch, lessTransparency.now, lessTransparency.now);
@@ -101,8 +102,7 @@ export function LiveWallpaper({ scene, colour, agents, paused, animate, frosted,
   const lookRef = useRef(look);
   lookRef.current = look;
 
-  // A scene of its own for each: a canvas is handed to one worker only once, and a package's page
-  // gets a frame of its own.
+  // A frame of its own for each wallpaper.
   useEffect(() => {
     if (!shown) return;
     const events = {
@@ -110,12 +110,11 @@ export function LiveWallpaper({ scene, colour, agents, paused, animate, frosted,
       move: (at: { x: number; y: number }) => { if (labelRef.current) Object.assign(labelRef.current.style, labelAt(at)); },
       open: (key: string) => openRef.current(key),
       disable: (reason: string) => {
-        if (typeof scene === "string") return;
         turnWallpaperOff(scene.id, reason);
         toast.error(`The ${scene.name} live wallpaper was turned off: ${reason}. The plain background shows until Hivemind starts again.`);
       },
     };
-    const e = typeof scene === "string" ? new LiveEngine(hostRef.current!, scene, events) : new PluginEngine(hostRef.current!, scene, lookRef.current, events);
+    const e = new PluginEngine(hostRef.current!, scene, lookRef.current, events);
     setEngine(e);
     return () => { e.destroy(); setEngine(null); setOver(null); };
     // `scene` is the same scene while its key is.

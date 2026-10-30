@@ -18,20 +18,20 @@
  * shadcn primitives (Button/Switch), which own their look and focus rings.
  */
 import { useRef, useState } from "react";
-import { Film, Image as ImageIcon, Plus, Trash, ChevronDown } from "./components/icons";
+import { Film, Image as ImageIcon, Plus, Sparkles, Trash, ChevronDown } from "./components/icons";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "./components/ui/select";
 import { computerFonts, type ComputerFont } from "./computer-fonts";
 import { Switch as SwitchPrimitive } from "./components/ui/switch";
-import { isLiveScene, isPluginWallpaper, PRESETS, type LiveSceneId, type TerminalPalette } from "@hivemind/core/settings-schema";
+import { isPluginWallpaper, PRESETS, type TerminalPalette } from "@hivemind/core/settings-schema";
 import { NAMED_FONTS, fontNameOf, fontStack, type FontSlot } from "@hivemind/core/font-names";
 import { cssColorToHex } from "@hivemind/core/css-color";
 import { accentOf } from "@hivemind/core/appearance-extra";
 import { ACCENT_CONTRAST, accentMark, themeSwatches } from "@hivemind/core/theme-format";
-import { lightOf, swatchInk, waterCss } from "./live/palette";
-import { usableWallpaper, wallpaperOffBecause, useWallpapers } from "./live/wallpaper-store";
-import { cssColorToHex as hexOf } from "./workspace/css-color";
+import { usableWallpaper, wallpaperName, wallpaperOffBecause, useWallpapers } from "./live/wallpaper-store";
+import { useCatalogInstall } from "./plugins/catalog-install";
+import { useCatalog } from "./plugins/library";
 import { useSettings } from "./settings-store";
 import {
   ACCENTS, ANCHORS, CINEMATIC, SEE_THROUGH, WALLPAPERS, addOverlay, chooseAccent, chooseAccentColours, choosePreset, removeOverlay, setTheme, updateOverlay, wallpaperDrawn,
@@ -253,14 +253,28 @@ export function ShapeAndTypeControls({ t }: { t: ThemeState }) {
 
 // ── background ──────────────────────────────────────────────────────────────
 
-/** Each live scene's swatch, a creature in the characters it is drawn in, as text (no live
- *  preview), and what its creatures are called. */
-const SCENES: Record<LiveSceneId, { mark: string; creatures: string }> = {
-  shoal: { mark: "   .;%.\n-:t%S8@8%>\n   ';t'", creatures: "Sharks" },
-  koi: { mark: "   .%%.\n><%S@S%o)\n   '%%'", creatures: "Koi" },
-  jellyfish: { mark: " .-~~-.\n(:o@o:)\n )|(|( ", creatures: "Jellies" },
-  fireflies: { mark: "  .   \\/   *\n     .@#   .\n'v|/'|l'Y'v|", creatures: "Fireflies" },
-};
+/** A live wallpaper chosen here whose package is not installed (Shoal and the other scenes the app
+ *  had built in moved to the Live scenes package): what it comes in, and its install from HiveHub
+ *  when HiveHub lists that. The catalog is fetched only while this shows. */
+function MissingWallpaper({ id, name }: { id: string; name: string }) {
+  const pkg = id.slice(0, id.lastIndexOf("/"));
+  const entry = useCatalog()?.find((e) => e.type === "package" && e.id === pkg);
+  const { parts } = useCatalogInstall();
+  const install = entry ? parts(entry, { size: "default" }) : null;
+  // Its own name, as HiveHub lists it, once the catalog says.
+  const named = entry?.members?.find((m) => m.id === id)?.name ?? name;
+  return (
+    <div className="settings-stack" data-wallpaper-missing={id}>
+      <div className="settings-row">
+        <p className="settings-note" role="status">
+          {entry ? `${named} comes in ${entry.name}, which is not installed.` : `${name} is not installed.`} The plain background shows until it is.
+        </p>
+        {install?.action}
+      </div>
+      {install?.below}
+    </div>
+  );
+}
 
 /** Filename of a picked media URL, for the "currently using" line. */
 function mediaName(src?: string): string | null {
@@ -285,16 +299,11 @@ export function BackgroundControls({ t }: { t: ThemeState }) {
   const installed = wallpapers.filter((w) => w.url && !w.error);
   const pluginId = isPluginWallpaper(t.wallpaper) ? t.wallpaper : null;
   const plugin = pluginId ? usableWallpaper(wallpapers, pluginId) : null;
-  const current = pluginId ? wallpapers.find((w) => w.id === pluginId)?.name ?? pluginId.slice(pluginId.lastIndexOf("/") + 1) : WALLPAPERS.find((w) => w.id === t.wallpaper)?.label ?? "None";
-  const live = isLiveScene(t.wallpaper) ? t.wallpaper : null;
-  // A live scene's swatch in its own colours when Colour is on, else on the page as it draws.
-  const light = lightOf(hexOf(t.palette.bg), hexOf(t.palette.fg));
-  const liveSwatch = (id: LiveSceneId) => t.wallpaperColour
-    ? { background: waterCss(id, light), color: swatchInk(id, light) }
-    : undefined;
+  const listed = pluginId ? wallpapers.find((w) => w.id === pluginId) : undefined;
+  const current = pluginId ? wallpaperName(pluginId) : WALLPAPERS.find((w) => w.id === t.wallpaper)?.label ?? "None";
   return (
     <>
-      {/* The picker is a disclosure: eleven scenes are a rare choice, and an
+      {/* The picker is a disclosure: a background is a rare choice, and an
           always-open grid pushed every other setting off the page. */}
       <details className="settings-disclosure">
         <summary>Background<span className="settings-summary-value">{current}</span><ChevronDown size={14} /></summary>
@@ -306,10 +315,9 @@ export function BackgroundControls({ t }: { t: ThemeState }) {
               : () => setTheme({ wallpaper: w.id });
             return (
               <button key={w.id} type="button" className="settings-wallpaper" role="radio" aria-checked={sel} aria-label={w.label} data-wallpaper-option={w.id} onClick={onClick}>
-                <span className="settings-wallpaper-preview" aria-hidden data-scene={w.id} data-live={isLiveScene(w.id) || undefined} style={isLiveScene(w.id) ? liveSwatch(w.id) : undefined}>
+                <span className="settings-wallpaper-preview" aria-hidden data-scene={w.id}>
                   {w.id === "video" && <Film size={13} />}
                   {w.id === "image" && <ImageIcon size={13} />}
-                  {isLiveScene(w.id) && <span className="settings-live-mark">{SCENES[w.id].mark}</span>}
                 </span>
                 <span className="settings-wallpaper-name">{w.label}</span>
               </button>
@@ -324,13 +332,20 @@ export function BackgroundControls({ t }: { t: ThemeState }) {
             </button>
           ))}
         </div>
+        <div className="settings-actions">
+          <Button variant="outline" data-make-wallpaper onClick={() => window.dispatchEvent(new CustomEvent("hivemind:make-plugin", { detail: { kind: "wallpaper" } }))}>
+            <Sparkles />Make your own
+          </Button>
+        </div>
       </details>
-      {pluginId && !plugin && loaded && (
+      {pluginId && !plugin && loaded && (listed ? (
         <p className="settings-note" role="status">
-          {wallpaperOffBecause(pluginId) ? `${current} was turned off: ${wallpaperOffBecause(pluginId)}. ` : `${current} is not installed, or its package is off. `}
+          {wallpaperOffBecause(pluginId) ? `${current} was turned off: ${wallpaperOffBecause(pluginId)}. `
+            : listed.error ? `${current} cannot be used: ${listed.error}. `
+            : `${current}'s package, ${listed.package.name}, is off. `}
           The plain background shows instead.
         </p>
-      )}
+      ) : <MissingWallpaper id={pluginId} name={current} />)}
 
       {isMedia && (
         <div className="settings-row">
@@ -355,25 +370,25 @@ export function BackgroundControls({ t }: { t: ThemeState }) {
       {t.wallpaper !== "none" && !wallpaperDrawn(t) && (
         <p className="settings-note">The background shows behind your tools when glass is on.</p>
       )}
-      {(live || plugin?.colour) && (
+      {plugin?.colour && (
         <div className="settings-row">
-          <div><label>Colour</label><p>{live ? "In its own colours: the water, what lives in it, the light coming down." : "In its own colours."} Off, it is drawn in your theme's page and text colours.</p></div>
+          <div><label>Colour</label><p>In its own colours. Off, it is drawn in your theme's page and text colours.</p></div>
           <Switch on={t.wallpaperColour} onChange={(v) => setTheme({ wallpaperColour: v })} label={`Draw ${current} in its own colours`} />
         </div>
       )}
-      {(live || plugin) && (
+      {plugin && (
         <div className="settings-row">
           <div>
-            <label>{live ? SCENES[live].creatures : "Its creatures"} behind your tools</label>
+            <label>{current} behind your tools</label>
             <p>
               {!t.glass
                 ? `Panels and tiles are solid over ${current}.`
                 : !t.contentGlass
-                  ? "They show through the frosted panels. Frost tool content to see them behind your agents too."
-                  : "They show through the frosted panels and tiles, softened behind the text."}
+                  ? "It shows through the frosted panels. Frost tool content to see it behind your agents too."
+                  : "It shows through the frosted panels and tiles, softened behind the text."}
             </p>
           </div>
-          <Button variant="outline" title={`Thin frosted panels and tiles, so the ${live ? SCENES[live].creatures.toLowerCase() : "creatures"} show behind your agents`} onClick={() => setTheme(SEE_THROUGH)}>See-through</Button>
+          <Button variant="outline" title={`Thin frosted panels and tiles, so ${current} shows behind your agents`} onClick={() => setTheme(SEE_THROUGH)}>See-through</Button>
         </div>
       )}
     </>

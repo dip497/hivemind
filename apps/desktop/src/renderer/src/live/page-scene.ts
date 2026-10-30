@@ -1,7 +1,6 @@
 /**
- * The page's side of a live wallpaper, whoever draws it: the app's own scene on its worker
- * (engine.ts) or a package's in a sandboxed frame (plugin-engine.ts). What every one gets from the
- * page is here once: its size and pixel ratio, the pointer over empty canvas (at most once a frame,
+ * The page's side of a live wallpaper, a package's in a sandboxed frame (plugin-engine.ts). What it
+ * gets from the page is here: its size and pixel ratio, the pointer over empty canvas (at most once a frame,
  * and only while it is there), a click on the water, and which creature is under the pointer, which
  * the scene says. A click on that creature goes to its agent's tile; anywhere else, the water is the
  * scene's to answer.

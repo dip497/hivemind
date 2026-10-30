@@ -1,11 +1,9 @@
 /** Workspace decoration. Its media and CSS motion pause when covered by Settings. */
 import { useEffect, useRef, useState } from "react";
-import { isLiveScene, isPluginWallpaper } from "@hivemind/core/settings-schema";
+import { isPluginWallpaper } from "@hivemind/core/settings-schema";
 import { useTheme, wallpaperDrawn } from "./theme-store";
 import { useWorkspaceOccluded } from "./workspace-occlusion";
 import { LiveWallpaper } from "./live/LiveWallpaper";
-import { lightOf, waterCss } from "./live/palette";
-import { cssColorToHex } from "./workspace/css-color";
 import type { SceneAgent } from "./live/roster";
 import { usableWallpaper, useWallpapers } from "./live/wallpaper-store";
 
@@ -18,9 +16,9 @@ const NO_OPEN = () => {};
  * z-index:0) of its positioned parent instead of the default fixed full-window
  * layer — used by the terminal fit-to-screen overlay so the fullscreen terminal
  * sits over a clean copy of the live wallpaper (not the canvas + other tiles).
- * `agents` are the workspace's agents, for a live scene, which draws them (Shoal). `live` is false
- * behind a plugin view, which paints its own scene: a live scene shows its water there and runs
- * nothing. `nameOf` names an agent's tile for the label over its creature, and `onOpen` goes to it.
+ * `agents` are the workspace's agents, for a live wallpaper that draws them. `live` is false
+ * behind a plugin view, which paints its own scene: a live wallpaper shows the page colour there
+ * and runs nothing. `nameOf` names an agent's tile for the label over its creature, and `onOpen` goes to it.
  */
 export function Wallpaper({ embedded = false, covering = false, agents = NO_AGENTS, live = true, nameOf = NO_NAME, onOpen = NO_OPEN }: {
   embedded?: boolean; covering?: boolean; agents?: readonly SceneAgent[]; live?: boolean;
@@ -29,10 +27,12 @@ export function Wallpaper({ embedded = false, covering = false, agents = NO_AGEN
   const { glass, contentGlass, wallpaper, wallpaperColour, videoSrc, imageSrc, themeId, animate, palette, monoFont, mode } = useTheme();
   const { wallpapers } = useWallpapers();
   const cls = embedded ? " embedded" : "";
-  const [inactive, setInactive] = useState(false);
+  // It runs while it can be seen, whether or not the person is typing or the window has focus, and
+  // pauses only while no one can see it: the window minimised or hidden, or the workspace covered.
+  const [away, setAway] = useState(() => document.hidden);
   const occluded = useWorkspaceOccluded();
   // `covering`: this copy is what covers the workspace, so occlusion is not about it.
-  const paused = inactive || (occluded && !covering);
+  const paused = away || (occluded && !covering);
   // A clip that can't decode (e.g. HEVC/H.265, which Chromium doesn't bundle)
   // fires <video> onError → we fall back to a gradient instead of a black void.
   const [videoFailed, setVideoFailed] = useState(false);
@@ -50,29 +50,15 @@ export function Wallpaper({ embedded = false, covering = false, agents = NO_AGEN
     return () => v.removeEventListener("playing", ok);
   }, [videoSrc]);
 
-  // Pause the wallpaper (video decoder + bloom animations) when the window is
-  // hidden/blurred OR the user has been idle for a while — a live wallpaper
-  // composites every frame, so this reclaims continuous GPU + video-decode CPU
-  // whenever you're not actively interacting. Resumes within ~1s of any input.
-  // `bump` only writes a number (no React, no per-event timer churn); a 1Hz tick
-  // computes the paused state, and setInactive no-ops when unchanged.
+  // Pause the wallpaper (video decoder, bloom animations, a live wallpaper's clock) while the window
+  // is hidden: it composites every frame, so this gives back the GPU and decode CPU no one is looking at.
   useEffect(() => {
-    let last = Date.now();
-    const IDLE_MS = 30_000;
-    const bump = () => { last = Date.now(); };
-    const evs = ["mousemove", "keydown", "wheel", "pointerdown", "touchstart"] as const;
-    for (const e of evs) window.addEventListener(e, bump, { passive: true });
-    const tick = setInterval(() => {
-      const idle = Date.now() - last > IDLE_MS;
-      setInactive(document.hidden || !document.hasFocus() || idle);
-    }, 1000);
-    return () => {
-      clearInterval(tick);
-      for (const e of evs) window.removeEventListener(e, bump);
-    };
+    const seen = () => setAway(document.hidden);
+    document.addEventListener("visibilitychange", seen);
+    return () => document.removeEventListener("visibilitychange", seen);
   }, []);
 
-  // Stop the video decoder entirely when the window is backgrounded — zero GPU.
+  // Stop the video decoder entirely while the window is hidden — zero GPU.
   useEffect(() => {
     const v = videoRef.current;
     if (!v) return;
@@ -95,19 +81,11 @@ export function Wallpaper({ embedded = false, covering = false, agents = NO_AGEN
   const sceneEl: React.ReactElement | null = (() => {
     if (!wallpaperDrawn({ glass, wallpaper, themeId })) return null;
 
-    // A live scene (Shoal, Koi Pond …): drawn on a canvas in the theme's colours or its own, its
-    // creatures the agents. Only the full-window copy behind the app's own views runs it; a copy
-    // behind a fullscreen tile or a docked slot is covered by the tile, so it shows the water alone.
-    const shared = { colour: wallpaperColour, agents, paused, animate, frosted: glass, seeThrough: contentGlass, page: palette.bg, text: palette.fg, attention: palette.warn, dark: mode !== "light", monoFont, nameOf, onOpen };
-    if (isLiveScene(wallpaper)) {
-      return (
-        <div className={`hm-wallpaper${cls}`} data-scene={wallpaper} style={{ background: wallpaperColour ? waterCss(wallpaper, lightOf(cssColorToHex(palette.bg), cssColorToHex(palette.fg))) : "var(--color-bg)" }} aria-hidden="true">
-          {!embedded && live && <LiveWallpaper scene={wallpaper} {...shared} />}
-        </div>
-      );
-    }
     // A package's live wallpaper, in its frame, on the page colour till it draws. One that is not
     // installed, whose package is off or that was turned off for misbehaving draws as Mono does.
+    // Only the full-window copy behind the app's own views runs it; a copy behind a fullscreen tile
+    // or a docked slot is covered by the tile, so it shows the page colour alone.
+    const shared = { colour: wallpaperColour, agents, paused, animate, frosted: glass, seeThrough: contentGlass, page: palette.bg, text: palette.fg, attention: palette.warn, dark: mode !== "light", monoFont, nameOf, onOpen };
     const plugin = isPluginWallpaper(wallpaper) ? usableWallpaper(wallpapers, wallpaper) : null;
     if (plugin) {
       return (

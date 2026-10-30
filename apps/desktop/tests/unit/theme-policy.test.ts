@@ -73,9 +73,9 @@ test("a theme's wallpaper draws without glass, and glass stays off: it is the pe
   patchSettingsMany([{ path: "appearanceExtra.theme", value: undefined }]);
   assert.equal(wallpaperDrawn(getTheme()), false);
   assert.equal(slotWallpaper(getTheme()), false);
-  // Except Shoal, which pictures the agents: it shows without glass, solid panels over it, and with
-  // glass on the panels frost over it as over any other background.
-  setTheme({ wallpaper: "shoal" });
+  // Except a live wallpaper: it shows without glass, solid panels over it, and with glass on the
+  // panels frost over it as over any other background.
+  setTheme({ wallpaper: "@dip497/live-scenes/shoal" });
   assert.equal(wallpaperDrawn(getTheme()), true);
   assert.equal(effectiveGlass(getTheme()), false);
   setTheme({ glass: true });
