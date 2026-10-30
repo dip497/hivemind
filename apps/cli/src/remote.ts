@@ -3,7 +3,7 @@ import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import {
-  HiveError, PUBLISHED_PLATFORMS, hiveThere, installCopyCommand, installFetchCommand, localPlatform, parseProbe, personFolder, probeScript,
+  HiveError, PUBLISHED_PLATFORMS, WINDOWS_PROBE, hiveThere, installCopyCommand, installFetchCommand, isWindowsPlatform, localPlatform, parseProbe, personFolder, probeScript,
   readMachines, releaseAssetUrl as coreReleaseAssetUrl, resolveMachine, sshDestination, type Machine, type ProbeResult,
 } from "@hivemind/core";
 import { appData } from "@hivemind/core/app-data";
@@ -36,6 +36,9 @@ function person(): string {
 
 /** Runs this version's `hive` there, as this person's, and exits with its status; puts it there first when it is not. */
 export function execOnMachine(m: Machine, args: string[], tty: boolean): Promise<never> {
+  if (!m.installHive) {
+    throw new HiveError("machine_without_hive", `${m.label} runs its terminals over plain ssh, with no hive there — \`hive machine install-hive ${m.id}\` puts it there`);
+  }
   ensureHive(m.target);
   const cmd = hiveThere(pkg.version, person(), args);
   return new Promise(() => {
@@ -46,13 +49,24 @@ export function execOnMachine(m: Machine, args: string[], tty: boolean): Promise
   });
 }
 
-export function probe(target: string): ProbeResult {
-  const r = spawnSync("ssh", sshArgv(target, probeScript(pkg.version), false), { encoding: "utf8", timeout: 30_000 });
+function probeWith(target: string, command: string): ProbeResult {
+  const r = spawnSync("ssh", sshArgv(target, command, false), { encoding: "utf8", timeout: 30_000 });
   if (r.error) throw new HiveError("machine_unreachable", `ssh failed: ${r.error.message}`);
   if (r.status === 255) {
     throw new HiveError("machine_unreachable", `ssh ${target} failed: ${(r.stderr || "").trim().split("\n").pop() || "connection refused"} — check that plain \`ssh ${target}\` works (host key, keys/agent) first`);
   }
   return parseProbe(r.stdout);
+}
+
+/** What `target` is: asked as a POSIX shell, then, when none answers (Windows' cmd or
+ *  PowerShell), as Windows. */
+export function probe(target: string): ProbeResult {
+  try {
+    return probeWith(target, probeScript(pkg.version));
+  } catch (e) {
+    if (!(e instanceof HiveError) || e.code !== "machine_probe_failed") throw e;
+    return probeWith(target, WINDOWS_PROBE);
+  }
 }
 
 /** The compiled binary's path; `null` when running from source. */
@@ -72,6 +86,7 @@ export function releaseAssetUrl(platform: string, version = pkg.version): string
 export function ensureHive(target: string): ProbeResult & { put?: true } {
   const found = probe(target);
   if (found.daemon) return found;
+  if (isWindowsPlatform(found.platform)) throw new HiveError("machine_install_unavailable", "hive is not put on Windows machines yet: their terminals run over plain ssh");
   const self = compiledSelf();
   const copy = self !== null && localPlatform() === found.platform;
   if (!copy && !PUBLISHED_PLATFORMS.includes(found.platform)) {

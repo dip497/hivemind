@@ -76,6 +76,8 @@ function questionsAndAnswers(url: string, markdown: string) {
   const plain = (md: string) =>
     md
       .replace(/<[^>]+>/g, '')
+      // What a tag nested in another leaves behind: no angle bracket survives.
+      .replace(/[<>]/g, '')
       .replace(/^\s*[-*]\s+/gm, '')
       .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
       .replace(/[`*_]/g, '')

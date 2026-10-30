@@ -9,6 +9,10 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- **Breaking:** a new machine runs its terminals over plain ssh unless you turn on **Install hive there** when you add it: `hive machine add` puts `hive` there only with `--install-hive`, and `hive ps`, `attach`, `run` and `kill --machine` on a machine without it say how to turn it on. Turn it on later in **Manage machines…** or with `hive machine install-hive <machine>`. Machines you already have keep their `hive`.
+- Added: Windows machines over ssh (OpenSSH Server): the app checks them in cmd or PowerShell, opens their folders (`C:\work`, drives first in the picker), and runs terminals, agents and the Code tile's git there through PowerShell, also from `hive ctl frame add --machine` and `hive ctl spawn`. `hive` is not put on them yet, so their terminals end when the connection drops.
+- Fixed: Ctrl+A with no text field focused no longer selects the whole window, so a copy after it can no longer put every tile's name, button and terminal line on the clipboard to be pasted into an agent.
+
 ## [2026.10.8] — 2026-10-30
 
 - Fixed: on light themes other than Clean Light, such as Tokyo Night Day, Gruvbox Light and Catppuccin Latte, an issue's state on its state picker and its assignee's initial were a little too faint to read; they are darker now.

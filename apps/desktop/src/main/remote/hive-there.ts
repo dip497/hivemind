@@ -9,10 +9,10 @@ import path from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { app } from "electron";
-import { PUBLISHED_PLATFORMS, installCopyCommand, installFetchCommand, localPlatform, personFolder, releaseAssetUrl, type ProbeResult } from "@hivemind/core";
+import { PUBLISHED_PLATFORMS, installCopyCommand, installFetchCommand, isWindowsPlatform, localPlatform, personFolder, releaseAssetUrl, type ProbeResult } from "@hivemind/core";
 import type { RemoteTarget } from "@hivemind/core/remote-uri";
 import { remoteConns } from "@hivemind/host/remote/conn";
-import { probeCommand, probeRemote, type SshPaths } from "@hivemind/host/remote/ssh";
+import { probeMachine, type SshPaths } from "@hivemind/host/remote/ssh";
 import { machineIdentity } from "../identity.js";
 
 const run = promisify(execFile);
@@ -25,14 +25,17 @@ export const hivePerson = (): string => personFolder(machineIdentity().personId)
 
 /** What `t` is, and whether this app's `hive` is in place there. */
 export function probeHive(t: RemoteTarget, paths: SshPaths): Promise<ProbeResult> {
-  return probeRemote(probeCommand(t, remoteConns.resolveAuthFor(t.hostId), paths, hiveVersion()));
+  return probeMachine(t, remoteConns.resolveAuthFor(t.hostId), paths, hiveVersion());
 }
+
+export const NO_HIVE_ON_WINDOWS = "hive is not put on Windows machines yet: their terminals run over plain ssh";
 
 /** `t` with this app's `hive` in place: copied or downloaded there when it is not (`put`). `missing`
  *  says why it could not be put there; a failure to reach `t` at all is thrown. */
 export async function ensureHive(t: RemoteTarget, paths: SshPaths, putting?: () => void): Promise<{ found: ProbeResult; put?: true; missing?: string }> {
   const found = await probeHive(t, paths);
   if (found.daemon) return { found };
+  if (isWindowsPlatform(found.platform)) return { found, missing: NO_HIVE_ON_WINDOWS };
   putting?.();
   try {
     await installHive(t, found.platform);

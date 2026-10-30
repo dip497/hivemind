@@ -3,6 +3,8 @@
  * (stdout on exit 0, throw with stderr otherwise). git-adapter's rawGit() delegates
  * here for a remote repoPath, so every porcelain op works remotely unchanged.
  */
+import { isWindowsPlatform } from "@hivemind/core/remote-uri";
+import { machineAt } from "./catalog.js";
 import { remoteConns } from "./conn.js";
 import { remoteGit } from "./exec.js";
 import { remoteTarget } from "./targets.js";
@@ -10,7 +12,8 @@ import { remoteTarget } from "./targets.js";
 /** rawGit-over-ssh. `uri` is the remote repo (machine:// or ssh://); `args` is the git argv. */
 export async function runRemoteGit(uri: string, args: string[], timeoutMs: number): Promise<string> {
   const target = remoteTarget(uri);
-  const res = await remoteConns.exec(target, remoteGit(target.path, args), { timeoutMs });
+  const windows = isWindowsPlatform(machineAt(target.hostId)?.platform);
+  const res = await remoteConns.exec(target, remoteGit(target.path, args, windows), { timeoutMs });
   if (res.code !== 0) {
     const msg = res.stderr.trim() || res.stdout.toString("utf8").trim() || `git exited ${res.code}`;
     throw new Error(msg);

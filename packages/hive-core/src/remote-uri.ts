@@ -105,6 +105,24 @@ export function machineUri(machineId: string, path = "/"): string {
   return `${MACHINE_SCHEME}${machineId}${path.startsWith("/") ? path : `/${path}`}`;
 }
 
+/** Whether a machine's platform (`windows-x64`, as its probe found it) is Windows. */
+export const isWindowsPlatform = (platform: string | undefined): boolean => !!platform?.startsWith("windows-");
+
+/** A folder given in full on Windows: `C:\work`, `C:/work`, or a drive, `C:`. */
+export const isWindowsFolder = (folder: string): boolean => /^[A-Za-z]:([\\/]|$)/.test(folder);
+
+/** A folder as a machine's uri carries it: a Windows one, `C:\work`, as `/C:/work`. */
+export function folderInUri(folder: string): string {
+  return isWindowsFolder(folder) ? `/${folder.replace(/\\/g, "/")}` : folder;
+}
+
+/** The Windows folder a uri's path names, `/C:/work` as `C:\work`; null for any other path. */
+export function windowsFolder(uriPath: string): string | null {
+  const p = uriPath.startsWith("/") ? uriPath.slice(1) : uriPath;
+  if (!isWindowsFolder(p)) return null;
+  return p.length === 2 ? `${p}\\` : p.replace(/\//g, "\\");
+}
+
 /** The path a remote uri names on its machine or host. */
 export function remotePath(uri: string): string {
   return parseMachineUri(uri)?.path ?? parseRemote(uri).path;

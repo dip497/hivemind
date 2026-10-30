@@ -56,6 +56,16 @@ test("a folder on another machine runs as the person there: a program may not op
   assert.equal(result<{ path: string }>(await call(person, "frame.open", repo, { path: "/srv/api", machine: "build" })).path, "machine://m-1/srv/api");
 });
 
+test("a Windows folder on another machine is a frame there, named by its last part and found again by either spelling; on this machine it is no folder", async () => {
+  const opened = result<{ frame: string; path: string; opened: boolean }>(await call(person, "frame.open", repo, { path: "C:\\Users\\me\\api", machine: "build" }));
+  assert.equal(opened.path, "machine://m-1/C:/Users/me/api");
+  assert.equal(store.getCore(repo)!.frames.find((f) => f.id === opened.frame)?.title, "api");
+  const again = result<{ frame: string; opened: boolean }>(await call(person, "frame.open", repo, { path: "C:/Users/me/api", machine: "build" }));
+  assert.deepEqual([again.frame, again.opened], [opened.frame, false]);
+  const here = await call(person, "frame.open", repo, { path: "C:\\Users\\me\\api" });
+  assert.equal("error" in here && here.error.code, "BAD_REQUEST");
+});
+
 test("a folder of the workspace gets a frame of its own, found again by the folder; a program may not name one outside it, the person may", async () => {
   const docs = path.join(repo, "docs");
   const first = result<{ frame: string; opened: boolean }>(await call(program, "frame.open", repo, { path: docs }));

@@ -70,7 +70,8 @@ describe("notifications move into the one settings.json", () => {
     expect(fs.existsSync(path.join(t.root, "migrations", "backups", ID))).toBe(false);
     const file = path.join(t.root, "settings.json");
     fs.writeFileSync(file, JSON.stringify({ ...t.read("settings.json"), appearance: { preset: "dracula" } }));
-    expect((await restoreMigration(ID, { config: t.root, data: t.root })).restored).toEqual([ID]);
+    // The ones after it are restored first, so it is the last.
+    expect((await restoreMigration(ID, { config: t.root, data: t.root })).restored.at(-1)).toBe(ID);
     expect(t.read("settings.json").appearance.preset).toBe("dracula");
   });
 

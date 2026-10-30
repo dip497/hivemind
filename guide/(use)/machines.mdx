@@ -9,18 +9,18 @@ Run agents on a bigger or always-on computer while you watch them from your own.
 
 1. Ask me for the ssh destination (\`user@host\` or an alias from \`~/.ssh/config\`), a short name for it, and the folder on it to open.
 2. Check ssh works without questions: \`ssh -o BatchMode=yes user@host true\`. If it asks about the host key or for a password, stop. Ask me to run \`ssh user@host\` once myself and answer it. Never type a password.
-3. Check the platform: \`ssh user@host uname -sm\`. It must be Linux (x86_64 or arm64) or macOS on arm64. Otherwise stop and tell me.
-4. Add it: \`hive machine add user@host --label <name>\`. It puts this version's \`hive\` there. Then \`hive machine check <name>\` must print \`<name>: reachable\`, the platform and a hive version.
-5. With the Hivemind app open, open the folder as a frame: \`hive ctl frame add --machine <name> --folder <full path> --name <frame name>\`.
-6. Ask me which agent to start there. Its program must be installed on that machine: check with \`ssh user@host command -v <agent program>\`. Start it with \`hive ctl spawn --frame <frame name> --agent <agent> --prompt "<task>"\` only if I gave a task.
+3. Ask me whether it runs Linux, macOS or Windows, on x86_64 or arm64. Anything else: stop and tell me.
+4. Ask me whether its terminals should keep running when the connection drops. Add it: \`hive machine add user@host --label <name>\`, with \`--install-hive\` if I said yes and it is not Windows. Then \`hive machine check <name>\` must print \`<name>: reachable\` and the platform.
+5. With the Hivemind app open, open the folder as a frame: \`hive ctl frame add --machine <name> --folder <full path> --name <frame name>\`. On Windows the path is like \`C:\\work\`.
+6. Ask me which agent to start there. Its program must be installed on that machine. Start it with \`hive ctl spawn --frame <frame name> --agent <agent> --prompt "<task>"\` only if I gave a task.
 
-At the end, tell me the machine's name, what \`hive machine check\` printed, and the frame that opened. Tell me \`hive ps --machine <name>\` lists what runs there.`}</AgentPrompt>
+At the end, tell me the machine's name, what \`hive machine check\` printed, and the frame that opened.`}</AgentPrompt>
 
 How a machine runs your agents, and how it differs from a host: [Machines and hosts](/remote-machines).
 
 ## Before you start
 
-- The computer runs Linux (x86_64 or arm64) or macOS on Apple Silicon, with an ssh server you can log in to.
+- The computer runs Linux, macOS or Windows, on x86_64 or arm64, with an ssh server you can log in to. On Windows that is **OpenSSH Server**, under **Settings ▸ System ▸ Optional features**.
 - You answered its host-key question once, in a terminal: `ssh user@host`.
 - The agent programs you want to run there are installed on it.
 
@@ -33,15 +33,16 @@ Hivemind uses your own OpenSSH: your keys, your ssh agent and `~/.ssh/config`. A
     1. Open the <Tooltip tip="The list beside the canvas of your projects, frames and tiles." cta="Glossary" href="/glossary#layers-panel">Layers panel</Tooltip> (⌘B / Ctrl+B) and choose **Machines**.
     2. Press **New machine**.
     3. Fill in **Host** (`user@host` or an ssh alias) and **Name**.
-    4. Press **Add**. Hivemind puts its own `hive` on the machine.
+    4. Leave **Install hive there** off, or turn it on to [keep terminals running](#keep-terminals-running).
+    5. Press **Add**.
 
     Check: the machine shows in the **Machines** pane, not grey.
   </Tab>
   <Tab title="In a terminal">
-    1. Add it. `hive` puts its own version there:
+    1. Add it. `--install-hive` puts this version's `hive` there, to [keep terminals running](#keep-terminals-running):
 
        ```bash
-       hive machine add dev@build-box --label build
+       hive machine add dev@build-box --label build --install-hive
        ```
 
     2. Check it:
@@ -50,7 +51,7 @@ Hivemind uses your own OpenSSH: your keys, your ssh agent and `~/.ssh/config`. A
        hive machine check build
        ```
 
-       It prints a line like `build: reachable, linux-x86_64, hive 2026.10.6 at /home/dev/.hivemind/bin/2026.10.6/hive`.
+       It prints a line like `build: reachable, linux-x86_64, hive 2026.10.6 at /home/dev/.hivemind/bin/2026.10.6/hive`, or `terminals over plain ssh` without `hive`.
   </Tab>
 </Tabs>
 
@@ -63,7 +64,7 @@ Hivemind uses your own OpenSSH: your keys, your ssh agent and `~/.ssh/config`. A
 <Tabs>
   <Tab title="In the app">
     1. In the **Machines** pane, press **+** on the machine, or ⋯ → **Open folder here…**.
-    2. Pick a folder.
+    2. Pick a folder. On Windows the drives come first.
 
     Check: it opens as a new <Tooltip tip="A named area bound to one folder: the project, a git worktree, or a folder on another computer." cta="Glossary" href="/glossary#frame">frame</Tooltip>. Terminals, agents and the Code tile in it all run on the machine.
   </Tab>
@@ -72,6 +73,8 @@ Hivemind uses your own OpenSSH: your keys, your ssh agent and `~/.ssh/config`. A
     hive ctl frame add --machine build --folder /srv/web --name web
     hive ctl spawn --frame web --agent claude --prompt "Run the tests and fix what fails"
     ```
+
+    On Windows, give the folder as `--folder 'C:\work\web'`.
   </Tab>
 </Tabs>
 
@@ -79,10 +82,23 @@ Hivemind uses your own OpenSSH: your keys, your ssh agent and `~/.ssh/config`. A
 
 Run `pwd` in a terminal in the new frame. It prints the folder on the machine.
 
-## Sessions outlive the connection
+## Keep terminals running
 
-Terminals and agents on the machine keep running when the network drops, your laptop sleeps or
-the app quits, and reattach when you are back. To reach them without the app:
+A new machine runs each terminal as a plain ssh session. It ends when the network drops, your
+laptop sleeps or the app quits.
+
+With **Install hive there** on, the app copies its own `hive` (about 120 MB) to the machine.
+Terminals and agents then keep running there through all of that and reattach when you are back,
+and agents there can be put to sleep. Turn it on later with the **Terminals** switch in
+**Manage machines…**, or:
+
+```bash
+hive machine install-hive build          # --off: new terminals run over plain ssh again
+```
+
+Windows machines run over plain ssh only for now: `hive` is not put on them.
+
+With `hive` there, you reach its terminals without the app too:
 
 ```bash
 hive ps --machine build
@@ -91,10 +107,8 @@ hive run --machine build --cwd /srv/web -- npm test
 hive kill <session> --machine build
 ```
 
-## Nothing to install or update there
-
-Hivemind keeps `hive` on the machine itself, one copy per version in `~/.hivemind/bin/`. When you
-update the app, it puts its new version there the next time it connects, and keeps the two
+Hivemind keeps that `hive` up to date itself, one copy per version in `~/.hivemind/bin/`. When
+you update the app, it puts its new version there the next time it connects, and keeps the two
 before it.
 
 ## Several people on one login
@@ -128,7 +142,7 @@ hive push test
 | The machine is grey | It is paused or unreachable. Press **Check now**. |
 | **Sign in** on the machine | It asks for a password. Give it once, or set up an ssh key. |
 | **hive could not be put there** | The machine has no `curl` or `wget`, or its disk is full. Fix that and press **Check now**; until then its terminals end when the connection drops. |
-| `unsupported remote platform` | Windows cannot be a machine. |
+| `unsupported remote platform` | The computer is not Linux, macOS or Windows on x86_64 or arm64. |
 
 More in [Troubleshooting](/troubleshooting).
 

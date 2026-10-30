@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "machines": [
+    {
+      "id": "m_8fe81503dd0f",
+      "label": "build box",
+      "target": "dev@10.0.0.5",
+      "enabled": true,
+      "hivePath": "/home/dev/.hivemind/bin/2026.10.7/hive",
+      "platform": "linux-x86_64",
+      "kind": "laptop"
+    },
+    {
+      "id": "m_9fcbf9b6a162",
+      "label": "server load",
+      "target": "ops@10.0.0.6",
+      "enabled": false,
+      "platform": "linux-x86_64",
+      "kind": "virtual-machine"
+    }
+  ]
+}

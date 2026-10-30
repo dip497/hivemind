@@ -176,6 +176,8 @@ export interface MachineInfo {
   /** What kind of computer it said it is when last checked. */
   kind?: MachineKind;
   hivePath?: string;
+  /** This app puts its own `hive` there; off, its terminals run over plain ssh. */
+  installHive?: boolean;
   /** What its frames' ssh:// uris resolve to. */
   hostId: string;
 }
@@ -203,11 +205,15 @@ export interface MachineAddRequest {
   label?: string;
   /** For hosts without key auth; kept in the OS keychain, never in the catalog. */
   password?: string;
+  /** Put this app's `hive` there, so terminals keep running when the connection drops. */
+  installHive?: boolean;
 }
 export interface MachineAddResult {
   machine: MachineInfo;
   probe: MachineProbe;
   installed: boolean;
+  /** Why `hive` was not put there though it was asked for (a Windows machine). */
+  notInstalled?: string;
   /** Absent unless a password was given and no OS keychain could hold it (it lasts this session only). */
   passwordSaved?: false;
 }
@@ -754,7 +760,7 @@ export interface HiveIpc {
   /** Reach it, put this version's hive there, then save. Errors starting `[attention]` need the user to run `ssh <target>` once. */
   machineAdd(req: MachineAddRequest): Promise<MachineAddResult>;
   machineCheck(id: string): Promise<MachineProbe>;
-  machineUpdate(id: string, patch: { label?: string; enabled?: boolean }): Promise<void>;
+  machineUpdate(id: string, patch: { label?: string; enabled?: boolean; installHive?: boolean }): Promise<void>;
   /** Change where a machine is (tested before it is saved). The frames on it follow: they name the machine. */
   machineEdit(id: string, patch: { target: string; label?: string; password?: string }): Promise<{ machine: MachineInfo }>;
   /** View protocol 1.3: status ledger lines (see workspace/view-events.ts). */

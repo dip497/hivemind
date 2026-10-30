@@ -1,5 +1,6 @@
 /** The machines.json the app shares with `hive machine`: one writer at a time, and never over a file it could not read. */
 import { machinesPath, readMachines, writeMachines, type Machine } from "@hivemind/core";
+import { machineHostId } from "@hivemind/core/remote-uri";
 
 export class Catalog {
   list: Machine[] = [];
@@ -43,4 +44,9 @@ export const machines = new Catalog(machinesPath(), () => { for (const l of hear
 /** Hear each change to the machines: a reload, an edit here, or one `hive machine` made. */
 export function onMachinesChange(listener: () => void): void {
   heard.add(listener);
+}
+
+/** The saved machine at the address `hostId`, if one is. */
+export function machineAt(hostId: string): Machine | undefined {
+  return machines.list.find((m) => machineHostId(m.target) === hostId);
 }
