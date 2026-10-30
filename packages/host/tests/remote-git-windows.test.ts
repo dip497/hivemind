@@ -27,8 +27,10 @@ test("what git prints on a Windows machine reaches the Code tile byte for byte, 
   g("init", "-q", "-b", "main");
   fs.writeFileSync(path.join(repo, "naïve file.txt"), "line one\r\nline two\n\u0000binary-ish\n");
   fs.writeFileSync(path.join(repo, "plain.md"), "# hi\n");
+  fs.writeFileSync(path.join(repo, "it’s ‘q’; Write-Error x.txt"), "kept\n");
   g("add", "-A");
-  const message = `say "hi" \\ to C:\\work\\ and it's $(not run)`;
+  // A typographic quote is one to PowerShell too: it never ends the word to run what follows.
+  const message = `say "hi" \\ to C:\\work\\ and it's $(not run); it’s ‘done’ ‚or‛; Write-Error x`;
   g("commit", "-q", "-m", message);
   fs.writeFileSync(path.join(repo, "plain.md"), "# hi there\n");
 
@@ -37,9 +39,12 @@ test("what git prints on a Windows machine reaches the Code tile byte for byte, 
     ["show", "HEAD:naïve file.txt"],
     ["diff"],
     ["log", "-1", "--format=%s"],
+    ["show", "HEAD:it’s ‘q’; Write-Error x.txt"],
+    ["log", "-1", "--format=%s", "--fixed-strings", "--grep=it’s ‘done’ ‚or‛; Write-Error x"],
   ]) {
     const r = overSsh(args);
     assert.equal(r.code, 0, `${args.join(" ")}: ${r.err}`);
+    assert.equal(r.err, "", args.join(" "));
     assert.deepEqual(r.out, here(args), args.join(" "));
   }
   assert.equal(overSsh(["log", "-1", "--format=%s"]).out.toString("utf8").trim(), message);

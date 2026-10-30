@@ -82,6 +82,8 @@ test("on Windows a terminal is one command line cmd and PowerShell both pass on 
   // Nothing in it either shell reads: letters, digits and base64.
   assert.match(c, /^powershell -NoLogo -NoProfile -ExecutionPolicy Bypass -EncodedCommand [A-Za-z0-9+/=]+$/);
   assert.equal(scriptOf(c), "Set-Location -LiteralPath 'C:\\Users\\me\\it''s here'; & 'claude' '--name' 'a b' '$env:SECRET; calc'; exit $LASTEXITCODE");
+  // A typographic quote is a quote to PowerShell: doubled, as ' is.
+  assert.equal(scriptOf(plainTerminalCommand("/C:/it’s", "claude", ["‘x’; calc"], true)), "Set-Location -LiteralPath 'C:\\it’’s'; & 'claude' '‘‘x’’; calc'; exit $LASTEXITCODE");
   // A shell named as on Linux is PowerShell there.
   assert.equal(scriptOf(plainTerminalCommand("/C:/work", "/bin/bash", ["-il"], true)), "Set-Location -LiteralPath 'C:\\work'; & 'powershell.exe' '-NoLogo'; exit $LASTEXITCODE");
 });

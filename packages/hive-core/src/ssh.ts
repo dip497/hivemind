@@ -60,8 +60,9 @@ export function powershellCommand(script: string, interactive = false): string {
   return `powershell -NoLogo -NoProfile -ExecutionPolicy Bypass${interactive ? "" : " -NonInteractive"} -EncodedCommand ${encoded}`;
 }
 
-/** One word in PowerShell, whatever it holds. */
-export const psq = (s: string): string => `'${s.replace(/'/g, "''")}'`;
+/** One word in PowerShell, whatever it holds: each quote PowerShell reads as one (it takes the
+ *  typographic ‘ ’ ‚ ‛ as well as ') doubled. */
+export const psq = (s: string): string => `'${s.replace(/['\u2018\u2019\u201A\u201B]/g, "$&$&")}'`;
 
 /** The probe for a machine whose ssh is not a POSIX shell: Windows says what it is, as the POSIX
  *  probe's tagged lines do, and what kind of computer it is when Windows knows. */
