@@ -608,6 +608,9 @@ handleEffect("setBrowserCdpEnabled", (enabled) => ({ detail: enabled ? "on" : "o
   return { ok: true as const };
 }), { local: true });
 
+/** Set once this app's quit has handed a waiting update to the launcher. */
+let finishingUpdate = false;
+
 // What a restart starts: the version installed, which an update may have put beside this one.
 // On Linux the launcher (`~/.local/bin/hivemind`) starts the one `.installed-version` names; on
 // Windows that version's own folder. A plain app.relaunch() starts this same build again.
@@ -628,9 +631,11 @@ function resolveLauncherPath(): string | null {
   return null;
 }
 handle("relaunchApp", () => {
-  const launcher = resolveLauncherPath();
-  if (launcher) app.relaunch({ execPath: launcher, args: [] });
-  else app.relaunch();
+  if (!finishUpdateAfterQuit(true)) {
+    const launcher = resolveLauncherPath();
+    if (launcher) app.relaunch({ execPath: launcher, args: [] });
+    else app.relaunch();
+  }
   stopServices();
   app.exit(0);
 }, { local: true });
@@ -662,8 +667,23 @@ function isNewerVersion(latest: string, current: string): boolean {
 function stagedVersion(current: string): string | null {
   if (!app.isPackaged && !process.env.HIVEMIND_APP_DIR?.trim()) return null;
   const installed = installedReleaseTag();
-  if (!installed || installed === runningRelease(process.execPath, current)) return null;
+  if (!installed) return null;
+  // macOS keeps one bundle where the Dock finds it: an update waits under versions/ until it quits.
+  const waiting = process.platform === "darwin"
+    ? existsSync(path.join(installedAppDir(), "versions", installed, "hivemind.app"))
+    : installed !== runningRelease(process.execPath, current);
+  if (!waiting) return null;
   return installed.startsWith("nightly-") ? installed : installed.replace(/^v/, "");
+}
+
+/** On macOS, the launcher puts a waiting update in place of this bundle once this app has quit,
+ *  and opens it again when asked. Whether it was handed over. */
+function finishUpdateAfterQuit(reopen: boolean): boolean {
+  if (process.platform !== "darwin" || !stagedVersion(app.getVersion())) return false;
+  const launcher = resolveLauncherPath();
+  if (!launcher) return false;
+  spawn(launcher, ["finish-update", String(process.pid), ...(reopen ? ["--open"] : [])], { detached: true, stdio: "ignore" }).unref();
+  return true;
 }
 
 function installedAppDir(): string {
@@ -2047,6 +2067,7 @@ let quitting = false;
 // otherwise lose the canvas tile-layout (localStorage). Flush, then exit a beat
 // later. Closing the socket signals the daemon to detach; sessions keep running.
 function forceExitAfterFlush(): void {
+  if (!finishingUpdate) finishingUpdate = finishUpdateAfterQuit(false);
   stopServices();
   try {
     killAllPtys();

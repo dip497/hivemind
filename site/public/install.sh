@@ -256,6 +256,26 @@ write_launcher_mac() {
 # \`hivemind upgrade\` re-runs the official installer; \`hivemind uninstall\`
 # removes the app, launcher and ~/Applications alias (--purge also deletes your
 # settings/sessions). Anything else launches the app.
+
+# The version downloaded while the app was open, under versions/, goes in place of the bundle once
+# the app has quit: the Dock and ~/Applications keep one path. \`hivemind finish-update <pid>
+# [--open]\` waits for that app to quit first; the app runs it as it quits or restarts.
+app_open() {
+  ps -e -o args= 2>/dev/null | HIVEMIND_APP="$appdir/" awk 'index(\$0, ENVIRON["HIVEMIND_APP"]) && !/pty-daemon\.js/ { found = 1 } END { exit !found }'
+}
+finish_update() {
+  local next="$APP_DIR/versions/\$(cat "$APP_DIR/.installed-version" 2>/dev/null)/hivemind.app"
+  [ -d "\$next" ] || return 0
+  rm -rf "$appdir.old"
+  if [ -d "$appdir" ]; then mv "$appdir" "$appdir.old" || return 1; fi
+  mv "\$next" "$appdir" && rm -rf "$APP_DIR/versions" "$appdir.old"
+}
+if [ "\${1:-}" = "finish-update" ]; then
+  if [ -n "\${2:-}" ]; then while kill -0 "\$2" 2>/dev/null; do sleep 0.2; done; fi
+  app_open || finish_update
+  if [ "\${3:-}" = "--open" ]; then open "$appdir"; fi
+  exit 0
+fi
 if [ "\${1:-}" = "upgrade" ]; then
   shift
   exec bash -c 'curl -fsSL https://raw.githubusercontent.com/dip497/hivemind/main/install.sh | bash -s -- "\$@"' _ "\$@"
@@ -266,7 +286,7 @@ if [ "\${1:-}" = "uninstall" ]; then
   echo "hivemind: uninstalling…" >&2
   # Match on the app dir so we never kill THIS launcher (it lives in BIN_DIR).
   pkill -f "$appdir" 2>/dev/null || true
-  rm -rf "$appdir"
+  rm -rf "$appdir" "$APP_DIR/versions"
   rm -f "\$HOME/Applications/hivemind.app"
   if [ "\$purge" = 1 ]; then
     # Two homes on macOS: Electron's userData (Application Support) and the
@@ -280,6 +300,7 @@ if [ "\${1:-}" = "uninstall" ]; then
   rm -f "$BIN_DIR/hivemind"   # the launcher itself, LAST (safe: already in memory)
   exit 0
 fi
+app_open || finish_update
 exec "$appdir/Contents/MacOS/hivemind" "\$@"
 EOF
   chmod +x "$BIN_DIR/hivemind"
@@ -294,16 +315,9 @@ link_applications_mac() {
   ok "linked ~/Applications/hivemind.app"
 }
 
-# Unpack the downloaded .app zip into place.
-#
-# NO staged-upgrade path here, unlike Linux. On Linux the .desktop entry runs
-# our launcher, so the launcher can swap a staged dir in on the next start. On
-# macOS the Dock / Spotlight / ~/Applications all launch the BUNDLE directly —
-# the launcher is only on the `hivemind` CLI path — so a staged upgrade would
-# sit there unapplied while the user kept starting the old build. Instead the
-# caller refuses to touch a RUNNING app and asks the user to quit first;
-# swapping the bundle under a live Electron process is its own hazard (it
-# resolves app.asar and its resources lazily, by path).
+# Unpack the downloaded .app zip into versions/$TAG, beside the bundle in use: the Dock and
+# ~/Applications start $APP_DIR/hivemind.app itself, and an open app reads its files by path, so the
+# new one goes in place of it only once the app has quit (the launcher's finish-update).
 #
 # `ditto -xk` (not `unzip`): the bundle carries framework symlinks and was
 # archived with ditto on the build runner. Then strip the quarantine xattr curl
@@ -311,16 +325,29 @@ link_applications_mac() {
 # cert), so with quarantine set Gatekeeper refuses it outright with "hivemind
 # is damaged and can't be opened".
 unpack_app_macos() {
-  local zip="$1" live="$APP_DIR/hivemind.app" tmp="$APP_DIR/unpack"
-  rm -rf "$tmp"; mkdir -p "$tmp"
+  local zip="$1" next="$APP_DIR/versions/$TAG/hivemind.app" tmp="$APP_DIR/unpack"
+  rm -rf "$tmp" "$APP_DIR/versions"; mkdir -p "$tmp" "$APP_DIR/versions/$TAG"
   ditto -xk "$zip" "$tmp" || die "unpacking $zip failed"
   local newapp
   newapp=$(find "$tmp" -maxdepth 1 -name '*.app' | head -1)
   [ -n "$newapp" ] || { rm -rf "$tmp"; die "no .app inside $zip"; }
   xattr -dr com.apple.quarantine "$newapp" 2>/dev/null || true
-  rm -rf "$live"
-  mv "$newapp" "$live"
+  mv "$newapp" "$next"
   rm -rf "$tmp"
+}
+
+# versions/$TAG/hivemind.app is the one the next start runs: at once when the app is not open, else
+# when it quits or restarts.
+finish_version_mac() {
+  echo "$TAG" > "$INSTALLED_FILE"
+  write_launcher_mac "$APP_DIR/hivemind.app"
+  link_applications_mac "$APP_DIR/hivemind.app"
+  if hivemind_running; then
+    ok "downloaded $TAG — restart hivemind to finish"
+  else
+    "$BIN_DIR/hivemind" finish-update
+    ok "installed $TAG"
+  fi
 }
 
 # ── platform detection ────────────────────────────────────────────────────
@@ -548,6 +575,10 @@ install_prebuilt() {
   INSTALLED_FILE="$APP_DIR/.installed-version"
   if [ -f "$INSTALLED_FILE" ] && [ "$(cat "$INSTALLED_FILE")" = "$TAG" ]; then
     if [ "$OS_KIND" = "mac" ]; then
+      if [ -d "$APP_DIR/versions/$TAG/hivemind.app" ]; then
+        finish_version_mac
+        return 0
+      fi
       # Nothing to heal on macOS (no AppImage, no AppRun) — just make sure the
       # launcher + ~/Applications alias exist and point at the current bundle.
       if [ -x "$APP_DIR/hivemind.app/Contents/MacOS/hivemind" ]; then
@@ -615,25 +646,13 @@ install_prebuilt() {
   fi
 
   if [ "$OS_KIND" = "mac" ]; then
-    # Refuse to replace a LIVE bundle (see unpack_app_macos). Checked before the
-    # ~130MB download, and deliberately NOT stamped, so the retry re-downloads.
-    if hivemind_running; then
-      warn "hivemind is running — the app was NOT upgraded (macOS can't safely swap a live .app)."
-      warn "Quit hivemind, then re-run \`hivemind upgrade\` from Terminal. Your canvas + sessions are untouched."
-      warn "(the \`hive\` CLI above is already on $TAG)"
-      return 0
-    fi
     say "downloading desktop app ($APP_ASSET)"
     APPIMG_TMP="$APP_DIR/hivemind.app.$$.new"   # same trap-cleaned temp slot
     if curl -fL --progress-bar -o "$APPIMG_TMP" "$APP_URL" && [ -s "$APPIMG_TMP" ]; then
       say "unpacking app bundle"
       unpack_app_macos "$APPIMG_TMP"
       rm -f "$APPIMG_TMP"
-      write_launcher_mac "$APP_DIR/hivemind.app"
-      link_applications_mac "$APP_DIR/hivemind.app"
-      ok "installed launcher $BIN_DIR/hivemind → $APP_DIR/hivemind.app"
-      echo "$TAG" > "$INSTALLED_FILE"
-      ok "installed $TAG"
+      finish_version_mac
     else
       rm -f "$APPIMG_TMP"
       warn "app download failed or was empty (disk full / interrupted / rate-limited). The CLI is still installed — re-run \`hivemind upgrade\` later."
@@ -749,15 +768,12 @@ install_dev() {
     say "packaging .app"
     if pnpm --filter @hivemind/desktop run dist:mac 2>&1 | tail -5; then
       BUILT_APP=$(find "$HIVE_ROOT/apps/desktop/dist-electron" -maxdepth 2 -name 'hivemind.app' | head -1)
-      if [ -n "$BUILT_APP" ] && hivemind_running; then
-        warn "hivemind is running — built the app but did NOT install it (macOS can't safely"
-        warn "swap a live .app). Quit hivemind and re-run to install $BUILT_APP."
-      elif [ -n "$BUILT_APP" ]; then
-        rm -rf "$APP_DIR/hivemind.app"
-        ditto "$BUILT_APP" "$APP_DIR/hivemind.app"
-        write_launcher_mac "$APP_DIR/hivemind.app"
-        link_applications_mac "$APP_DIR/hivemind.app"
-        ok "installed launcher $BIN_DIR/hivemind → $APP_DIR/hivemind.app"
+      if [ -n "$BUILT_APP" ]; then
+        TAG="dev-$(date +%Y%m%d%H%M%S)"
+        INSTALLED_FILE="$APP_DIR/.installed-version"
+        rm -rf "$APP_DIR/versions"; mkdir -p "$APP_DIR/versions/$TAG"
+        ditto "$BUILT_APP" "$APP_DIR/versions/$TAG/hivemind.app"
+        finish_version_mac
       else
         warn "no .app produced; check electron-builder output"
       fi
