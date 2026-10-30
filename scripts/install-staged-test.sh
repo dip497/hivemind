@@ -253,4 +253,12 @@ run_installer --version v9.9.12 > "$TMP/out11"
 check "--version rolls back to an older build" "v9.9.12" "$(stamp .installed-version)"
 check "the app rolls back with it" "AppRun v9.9.12 release=v9.9.12" "$(starts)"
 
+# A version that would name a path is refused before anything is removed; one in the stamp is not started.
+mkdir -p "$TMP/outside" && echo kept > "$TMP/outside/file"
+run_installer --version "../../outside" > "$TMP/out12" || true
+check "a version that is a path is refused" "yes" "$(grep -q "not a version" "$TMP/out12" && echo yes || echo no)"
+check "and nothing outside is touched" "kept" "$(cat "$TMP/outside/file" 2>&1)"
+echo "../../outside" > "$APP/.installed-version"
+check "a stamp that is a path starts nothing from it" "no" "$(starts | grep -q AppRun && echo yes || echo no)"
+
 if [ "$fail" = 0 ]; then echo "staged upgrade: all ok"; else echo "staged upgrade: FAILED"; exit 1; fi

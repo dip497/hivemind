@@ -78,6 +78,7 @@ import { ControlPlane } from "@hivemind/host/control/plane";
 import { REATTACH_RESET } from "@hivemind/agent-host/daemon-endpoint";
 import type { ReadScreen } from "@hivemind/agent-host/session-relay";
 import { ipcPath, upgradeCommand, windowsStartMenuShortcut } from "./platform.js";
+import { notesFor, whatsNewSinceLastRun } from "./whats-new.js";
 import { driveSockPath, readOrCreateToken } from "@hivemind/agent-host/hooks/token";
 import { ApiError, isErrorCode } from "@hivemind/workspace-api/protocol";
 import { appViewsDir, handleViewProtocol, listViewPackages, startViewWatchdog, VIEW_SCHEME_PRIVILEGES, viewSdk } from "./view-packages.js";
@@ -635,6 +636,8 @@ handle("relaunchApp", () => {
 
 // ── app version + self-update ─────────────────────────────────────────────
 handle("getAppVersion", () => app.getVersion());
+handle("whatsNew", () => whatsNewSinceLastRun(), { local: true });
+handle("releaseNotes", (_e, version: unknown) => notesFor(String(version)), { local: true });
 
 // Strict "is `latest` newer than `current`" over dotted numeric versions.
 // Tolerant of differing segment counts and non-numeric junk (→ 0).

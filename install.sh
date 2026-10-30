@@ -105,6 +105,7 @@ fi
 # window keeps its own. It is told which it is (HIVEMIND_RELEASE), to say when a newer one waits
 # for a restart. A build installed before versions/ runs from hivemind-extracted.
 release=\$(cat "$APP_DIR/.installed-version" 2>/dev/null)
+case "\$release" in ""|.*|*[!A-Za-z0-9._-]*) release= ;; esac
 appdir="$APP_DIR/versions/\$release"
 if [ -z "\$release" ] || [ ! -x "\$appdir/AppRun" ]; then appdir="$APP_DIR/hivemind-extracted"; fi
 #
@@ -536,6 +537,8 @@ install_prebuilt() {
     TAG=$(latest_tag) || die "$LATEST_ERROR"
     [ -n "$TAG" ] || die "no published releases yet for $REPO. Try --dev to build from source."
   fi
+  # It names a folder under versions/ that an update makes and a later one removes: a word, never a path.
+  case "$TAG" in ""|.*|*[!A-Za-z0-9._-]*) die "not a version: $TAG" ;; esac
   say "target version: $TAG"
 
   # Skip download if already on this version — but SELF-HEAL the launcher

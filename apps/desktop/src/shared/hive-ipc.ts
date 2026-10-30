@@ -193,6 +193,8 @@ export function hiveOverIpc(port: IpcPort, workspace: WorkspaceClient): Omit<Hiv
     startViewOffers: local("plugins:start-view-offers", invoke("plugins:start-view-offers")),
     onViewRunaway: (cb) => port.on("views:runaway", cb),
     checkForUpdate: local("checkForUpdate", invoke("checkForUpdate")),
+    whatsNew: local("whatsNew", invoke("whatsNew")),
+    releaseNotes: local("releaseNotes", invoke("releaseNotes")),
     runUpgrade: local("runUpgrade", invoke("runUpgrade")),
     onUpdateProgress: (cb) => port.on("update:progress", cb),
     onBrowserPopup: (cb) => port.on("browser:popup", cb),
