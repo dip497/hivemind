@@ -181,3 +181,17 @@ test("Send gives an agent the open notes and how to answer them; its answers sho
   execFileSync("bun", [cli, "review", "resolve", open[1]!.id, "--summary", "one column now"], { cwd: repo, env });
   await expect.poll(pinsOnPage, { timeout: 10_000 }).toEqual(["pin resolved:✓", "pin seen:2", "pin resolved:✓"]);
 });
+
+test("Hold still stops the page's animations where they are, and Let go starts them again", async () => {
+  await run<void>(`(() => { const d = document.createElement("div"); d.id = "spin"; d.style.cssText = "width:20px;height:20px;background:red"; document.body.append(d);
+    d.animate([{ transform: "rotate(0)" }, { transform: "rotate(360deg)" }], { duration: 2000, iterations: Infinity }); })()`);
+  const time = () => run<number>(`document.getElementById("spin").getAnimations()[0].currentTime`);
+  const moves = async () => { const a = await time(); await page.waitForTimeout(400); return (await time()) - a; };
+  expect(await moves()).toBeGreaterThan(100);
+  await page.getByRole("button", { name: "Hold still" }).dispatchEvent("click");
+  await page.waitForTimeout(200);
+  expect(await moves()).toBe(0);
+  await page.getByRole("button", { name: "Let go" }).dispatchEvent("click");
+  await page.waitForTimeout(200);
+  expect(await moves()).toBeGreaterThan(100);
+});
