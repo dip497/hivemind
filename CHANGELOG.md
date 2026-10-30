@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Fixed: what an agent types into a Browser tile's page (the hive-browser skill, `hive ctl`) and what you type into it from your phone or a browser tab now lands in that page. It went to whatever you last typed in in the app, a terminal say, so a login's email and password could end up in an agent's prompt.
 - Fixed: the phone page updates itself. Kept open, as a phone keeps it, it looks for a new build each time you come back to it and opens it at once, or, while you have typed something, offers **Reload**. It ran the old page until opened again twice.
 - Added: **What's new**. The first start after an update shows what changed in every version since the one you last ran. **Settings ▸ About** shows this version's notes, and, with an update on offer, what is in it before you install it.
 - Fixed: **Restart to finish** after an update restarts into the new version, and you can update with the app open on Linux, macOS and Windows. Each version is a folder of its own, so an update never touches the open app's files, and the one before stays to go back to; on macOS the new app takes the place of the old one as it quits, so the Dock keeps it. A restart no longer came back on the old version, and macOS and Windows no longer refused to update until you quit.

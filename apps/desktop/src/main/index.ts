@@ -80,6 +80,8 @@ import type { ReadScreen } from "@hivemind/agent-host/session-relay";
 import { ipcPath, upgradeCommand, windowsStartMenuShortcut } from "./platform.js";
 import { notesFor, whatsNewSinceLastRun } from "./whats-new.js";
 import { runningRelease, windowsAppFolder } from "../shared/running-release.js";
+import { keyboardCommand } from "./page-keys.js";
+import { serveBrowserPort } from "./browser-port.js";
 import { driveSockPath, readOrCreateToken } from "@hivemind/agent-host/hooks/token";
 import { ApiError, isErrorCode } from "@hivemind/workspace-api/protocol";
 import { appViewsDir, handleViewProtocol, listViewPackages, startViewWatchdog, VIEW_SCHEME_PRIVILEGES, viewSdk } from "./view-packages.js";
@@ -550,6 +552,45 @@ function forgetBrowserPage(pageId: number): void {
   for (const tileId of pageStreams.watched()) void pageStreams.moved(tileId);
 }
 
+/** Each browser page's DevTools target id, as it says once asked. */
+const pageTargets = new WeakMap<WebContents, string>();
+async function targetOf(page: WebContents): Promise<string | null> {
+  const known = pageTargets.get(page);
+  if (known) return known;
+  const attached = page.debugger.isAttached();
+  try {
+    if (!attached) page.debugger.attach("1.3");
+    const { targetInfo } = (await page.debugger.sendCommand("Target.getTargetInfo")) as { targetInfo: { targetId: string } };
+    pageTargets.set(page, targetInfo.targetId);
+    return targetInfo.targetId;
+  } catch {
+    return null;
+  } finally {
+    if (!attached && page.debugger.isAttached()) page.debugger.detach();
+  }
+}
+/** The browser tile page that is DevTools target `targetId`, if one is. */
+async function browserPageOf(targetId: string): Promise<WebContents | null> {
+  for (const tileId of browserGuests.keys()) {
+    const page = browserGuestFor(tileId);
+    if (page && (await targetOf(page)) === targetId) return page;
+  }
+  return null;
+}
+/** The agents' DevTools port (browser-port.ts), in front of Chromium's own, which listens wherever
+ *  it finds room and says where in DevToolsActivePort. */
+async function serveAgentBrowserPort(): Promise<void> {
+  const file = path.join(app.getPath("userData"), "DevToolsActivePort");
+  let chromium = 0;
+  for (let i = 0; i < 50 && !chromium; i++) {
+    chromium = Number(readFileSyncSafe(file).split("\n")[0]) || 0;
+    if (!chromium) await new Promise((r) => setTimeout(r, 100));
+  }
+  if (!chromium) throw new Error("Chromium's DevTools port did not open");
+  await serveBrowserPort(Number(process.env.HIVEMIND_BROWSER_CDP_PORT), chromium, browserPageOf);
+}
+const readFileSyncSafe = (file: string): string => { try { return readFileSync(file, "utf8"); } catch { return ""; } };
+
 function browserGuestFor(tileId: string): Electron.WebContents | null {
   const g = browserGuests.get(tileId);
   if (!g) return null;
@@ -591,6 +632,7 @@ handleEffect(
         throw err;
       }
     }
+    if (await keyboardCommand(guest, method, params ?? {})) return {};
     return await guest.debugger.sendCommand(method, params ?? {});
   }), { local: true },
 );
@@ -1574,7 +1616,9 @@ async function writeSettings(patch: Record<string, unknown>): Promise<void> {
 // off by default and bound to 127.0.0.1.
 if (process.env.HIVEMIND_BROWSER_CDP === "1" || readSettings().browserCdp === true) {
   const port = process.env.HIVEMIND_BROWSER_CDP_PORT || "9333";
-  app.commandLine.appendSwitch("remote-debugging-port", port);
+  // Agents use `port`, served once the app is ready (serveAgentBrowserPort); Chromium's own is
+  // wherever there is room.
+  app.commandLine.appendSwitch("remote-debugging-port", "0");
   app.commandLine.appendSwitch("remote-debugging-address", "127.0.0.1");
   process.env.HIVEMIND_BROWSER_CDP = "1";
   process.env.HIVEMIND_BROWSER_CDP_PORT = port;
@@ -1652,6 +1696,11 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
       pushAppError(`Couldn't refresh the PTY daemon: ${(e as Error).message ?? "unknown error"}`, "pty-daemon");
     });
     refreshWindowsStartMenuShortcut();
+    if (process.env.HIVEMIND_BROWSER_CDP === "1") {
+      serveAgentBrowserPort().catch((e: unknown) => {
+        pushAppError(`Agent browser control could not start on port ${process.env.HIVEMIND_BROWSER_CDP_PORT}: ${(e as Error).message ?? e}`, "browser");
+      });
+    }
     handleViewProtocol();
     handleToolProtocol();
     installSettingsIpc(broadcast);

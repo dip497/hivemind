@@ -7,6 +7,7 @@
  * so its viewers are told why the picture stopped.
  */
 import { BrowserWindow, type WebContents } from "electron";
+import { pressKey, typeText } from "./page-keys.js";
 import { FRAME_EVENT, GONE_EVENT, SHOWN_EVENT, WATCHED_EVENT, type PageFrame, type PageInput } from "../shared/page-input.js";
 
 /** Who watches: a window, or a tab of the browser server. */
@@ -113,15 +114,10 @@ export class PageStreams {
         await send("Input.dispatchMouseEvent", { type: "mouseWheel", ...(await at(input.x, input.y)), deltaX: input.deltaX, deltaY: input.deltaY, modifiers: input.modifiers });
         return;
       case "key":
-        // A key that types sends its text with the press; any other is a raw press, as Chrome's own.
-        await send("Input.dispatchKeyEvent", {
-          type: input.type === "keyUp" ? "keyUp" : input.text ? "keyDown" : "rawKeyDown",
-          key: input.key, code: input.code, windowsVirtualKeyCode: input.keyCode, nativeVirtualKeyCode: input.keyCode,
-          modifiers: input.modifiers, ...(input.text ? { text: input.text, unmodifiedText: input.text } : {}),
-        });
+        pressKey(g, input);
         return;
       case "text":
-        await send("Input.insertText", { text: input.text });
+        await typeText(g, input.text);
         return;
       case "go":
         if (input.to === "back") g.navigationHistory.goBack();
