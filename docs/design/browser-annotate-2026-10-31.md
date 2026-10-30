@@ -1,6 +1,12 @@
 # Notes on a page: annotating a Browser tile for an agent
 
-Status: proposed, 2026-10-31. Nothing built yet.
+Status: built, 2026-10-31 (steps 1–6 below). Two choices differ from the plan:
+
+- Notes are review comments on a page, beside the diff's, in `.hivemind/review.json`. They are not
+  a store of their own. So the commands are `hive review` (with `seen`, `dismiss --reason` and
+  `--on page|diff` added), not a new `hive ctl notes`.
+- The pins are a layer the app adds to the page through DevTools, inside a shadow root. They
+  scroll with the page, and the phone sees them in its pictures.
 
 The person points at things on a page in a Browser tile, writes a note on each, and sends the
 notes to an agent tile. The agent works through them and marks each one done, dismissed or

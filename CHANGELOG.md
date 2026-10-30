@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Added: notes on a web page for an agent. In a Browser tile, press the notes button, then click what should change, Ctrl or ⌘ and click to pick several, or drag over an area, and say what to do. Numbered pins mark each note on the page and show whether the agent has seen it, done it or dismissed it. **Send to an agent** hands over the open notes with a picture of each. **Hold still** stops the page's animations so a moving thing can be clicked. Notes work from a phone or a browser tab the app serves, too. They are review comments: `hive review list --on page` lists them, and `hive review seen` and `hive review dismiss <id> --reason` are new for diff comments too.
 - Fixed: what an agent types into a Browser tile's page (the hive-browser skill, `hive ctl`) and what you type into it from your phone or a browser tab now lands in that page. It went to whatever you last typed in in the app, a terminal say, so a login's email and password could end up in an agent's prompt.
 - Fixed: the phone page updates itself. Kept open, as a phone keeps it, it looks for a new build each time you come back to it and opens it at once, or, while you have typed something, offers **Reload**. It ran the old page until opened again twice.
 - Added: **What's new**. The first start after an update shows what changed in every version since the one you last ran. **Settings ▸ About** shows this version's notes, and, with an update on offer, what is in it before you install it.

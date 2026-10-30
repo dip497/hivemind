@@ -328,11 +328,13 @@ hive network enrol-link [--data <dir>] [--uses n] [--expires 7d]
 To read and answer comments left on an agent's changes. Guide: [Review an agent's changes](/review).
 
 ```text
-hive review list [--file src/x.ts] [--status open|resolved|all]
-hive review show <id>                   # one comment with its replies
+hive review list [--file src/x.ts] [--status open|resolved|all] [--on page|diff]
+hive review show <id>                   # one comment with its replies; a page note's elements and picture
 hive review reply <id> "fixed in 3f2c1a"
+hive review seen <id>                   # an open comment you are on; refused once it is closed
 hive review resolve <id> [--summary "how it was addressed"]
-hive review reopen <id>
+hive review dismiss <id> --reason "why it is not done"
+hive review reopen <id>                 # only a resolved or dismissed one
 hive review watch [--timeout 300] [--file f]   # wait for the next comment; exit 4 on timeout
 ```
 
