@@ -102,8 +102,8 @@ if [ "\${1:-}" = "uninstall" ]; then
 fi
 # The version installed last is the one that starts. Each version is a folder of its own under
 # versions/, never changed while one runs, so starting the new one needs no swap, and an open
-# window keeps its own. It is told which it is (HIVEMIND_RELEASE), to say when a newer one waits
-# for a restart. A build installed before versions/ runs from hivemind-extracted.
+# window keeps its own, and knows which it is by the folder it runs from. A build installed before
+# versions/ runs from hivemind-extracted.
 release=\$(cat "$APP_DIR/.installed-version" 2>/dev/null)
 case "\$release" in ""|.*|*[!A-Za-z0-9._-]*) release= ;; esac
 appdir="$APP_DIR/versions/\$release"
@@ -114,7 +114,7 @@ if [ -z "\$release" ] || [ ! -x "\$appdir/AppRun" ]; then appdir="$APP_DIR/hivem
 # here, which is never a file, so the search collapses APPDIR to "" and it
 # tries to exec "/hivemind" (ENOENT). Setting APPDIR makes AppRun skip the
 # broken auto-detect.
-export APPDIR="\$appdir" HIVEMIND_RELEASE="\$release"
+export APPDIR="\$appdir"
 exec "\$appdir/AppRun" --no-sandbox "\$@"
 EOF
   chmod +x "$BIN_DIR/hivemind"

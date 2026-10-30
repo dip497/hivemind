@@ -79,6 +79,7 @@ import { REATTACH_RESET } from "@hivemind/agent-host/daemon-endpoint";
 import type { ReadScreen } from "@hivemind/agent-host/session-relay";
 import { ipcPath, upgradeCommand, windowsStartMenuShortcut } from "./platform.js";
 import { notesFor, whatsNewSinceLastRun } from "./whats-new.js";
+import { runningRelease } from "../shared/running-release.js";
 import { driveSockPath, readOrCreateToken } from "@hivemind/agent-host/hooks/token";
 import { ApiError, isErrorCode } from "@hivemind/workspace-api/protocol";
 import { appViewsDir, handleViewProtocol, listViewPackages, startViewWatchdog, VIEW_SCHEME_PRIVILEGES, viewSdk } from "./view-packages.js";
@@ -655,15 +656,13 @@ function isNewerVersion(latest: string, current: string): boolean {
 // Fetch the latest GitHub release in MAIN (the renderer's CSP blocks the
 // api.github.com request). Any failure — offline, DNS, rate-limit, non-200 —
 // resolves to a no-update result so the UI shows nothing rather than an error.
-/** A version installed since this app started, which starts at its next restart: the launcher
- *  says which release it started (HIVEMIND_RELEASE), and `.installed-version` which it starts
- *  next. Each is a folder of its own (`install.sh`), so they differ until the restart. A build run
- *  from source is not that install unless its folder is named. */
+/** A version installed since this app started, which starts at its next restart: `.installed-version`
+ *  says which the next start runs, and differs from this one's until then. A build run from
+ *  source is not that install unless its folder is named. */
 function stagedVersion(current: string): string | null {
   if (!app.isPackaged && !process.env.HIVEMIND_APP_DIR?.trim()) return null;
   const installed = installedReleaseTag();
-  const running = process.env.HIVEMIND_RELEASE?.trim() || `v${current}`;
-  if (!installed || installed === running) return null;
+  if (!installed || installed === runningRelease(process.execPath, current)) return null;
   return installed.startsWith("nightly-") ? installed : installed.replace(/^v/, "");
 }
 

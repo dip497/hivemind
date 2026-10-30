@@ -73,7 +73,7 @@ case "$url" in
     cat > "$out" <<IMG
 #!/usr/bin/env bash
 mkdir -p squashfs-root
-printf '#!/usr/bin/env bash\n# BIN= AppRun $want\necho "AppRun $want release=\$HIVEMIND_RELEASE"\n' > squashfs-root/AppRun
+printf '#!/usr/bin/env bash\n# BIN= AppRun $want\necho "AppRun $want"\n' > squashfs-root/AppRun
 chmod +x squashfs-root/AppRun
 IMG
     chmod +x "$out";;
@@ -104,7 +104,7 @@ versions() { ls "$APP/versions" 2>/dev/null | tr '\n' ' ' | sed 's/ $//'; }
 run_installer > "$TMP/out1"
 check "first install stamps what starts" "v9.9.9" "$(stamp .installed-version)"
 check "the build is a folder of its own" "v9.9.9" "$(versions)"
-check "the launcher starts it, and says which it is" "AppRun v9.9.9 release=v9.9.9" "$(starts)"
+check "the launcher starts it" "AppRun v9.9.9" "$(starts)"
 check "hive-net is on PATH beside hive" "hive-net v9.9.9" "$("$HIVEMIND_BIN_DIR/hive-net" 2>&1)"
 check "the npm SDK is under its stable name" "npm v9.9.9" "$(cat "$APP/sdk/hivemind-api.tgz" 2>&1)"
 check "the Python SDK is a folder pip installs" "# python v9.9.9" "$(cat "$APP/sdk/python/pyproject.toml" 2>&1)"
@@ -131,7 +131,7 @@ check "it is not downloaded twice" "no" "$(grep -q "AppImage" "$TMP_URLS" && ech
 check "nor unpacked again" "yes" "$([ "$(stat -c %Y "$APP/versions/v9.9.10")" = "$before" ] && echo yes || echo no)"
 
 # ── 4. the restart, the old app still on its way out: the new one starts ──
-check "a restart starts the new version, whatever of the old still runs" "AppRun v9.9.10 release=v9.9.10" "$(starts)"
+check "a restart starts the new version, whatever of the old still runs" "AppRun v9.9.10" "$(starts)"
 
 # ── 4b. a build nothing runs from goes; the one before stays, and one a daemon runs from ──
 nothing_runs
@@ -148,18 +148,18 @@ check "once nothing runs from them, old builds go" "v9.9.10b v9.9.10c" "$(versio
 # ── 4c. an install from before versions/, its update staged by an older installer ──
 rm -rf "$APP/versions"
 mkdir -p "$APP/hivemind-extracted" "$APP/hivemind-extracted.staged"
-printf '#!/usr/bin/env bash\n# BIN=\necho "AppRun v9.9.8 release=$HIVEMIND_RELEASE"\n' > "$APP/hivemind-extracted/AppRun"
-printf '#!/usr/bin/env bash\n# BIN=\necho "AppRun v9.9.10d release=$HIVEMIND_RELEASE"\n' > "$APP/hivemind-extracted.staged/AppRun"
+printf '#!/usr/bin/env bash\n# BIN=\necho "AppRun v9.9.8"\n' > "$APP/hivemind-extracted/AppRun"
+printf '#!/usr/bin/env bash\n# BIN=\necho "AppRun v9.9.10d"\n' > "$APP/hivemind-extracted.staged/AppRun"
 chmod +x "$APP/hivemind-extracted/AppRun" "$APP/hivemind-extracted.staged/AppRun"
 echo v9.9.8 > "$APP/.installed-version"
 echo v9.9.10d > "$APP/.staged-version"
-check "the build from before still starts" "AppRun v9.9.8 release=v9.9.8" "$(starts)"
+check "the build from before still starts" "AppRun v9.9.8" "$(starts)"
 window_of hivemind-extracted
 echo v9.9.10d > "$TMP_LATEST"
 : > "$TMP_URLS"
 run_installer > "$TMP/out4d"
 check "the staged build becomes its version, not downloaded again" "no" "$(grep -q "AppImage" "$TMP_URLS" && echo yes || echo no)"
-check "the restart starts it" "AppRun v9.9.10d release=v9.9.10d" "$(starts)"
+check "the restart starts it" "AppRun v9.9.10d" "$(starts)"
 check "the open one's folder stays while it runs" "yes" "$([ -x "$APP/hivemind-extracted/AppRun" ] && echo yes || echo no)"
 check "nothing is waiting under the old names" "(none)" "$(stamp .staged-version)"
 nothing_runs
@@ -251,7 +251,7 @@ check "stepping back is not 'nothing to do'" "no" "$(grep -q 'nothing to do' "$T
 # Rollback: --version installs exactly that build, an older one too.
 run_installer --version v9.9.12 > "$TMP/out11"
 check "--version rolls back to an older build" "v9.9.12" "$(stamp .installed-version)"
-check "the app rolls back with it" "AppRun v9.9.12 release=v9.9.12" "$(starts)"
+check "the app rolls back with it" "AppRun v9.9.12" "$(starts)"
 
 # A version that would name a path is refused before anything is removed; one in the stamp is not started.
 mkdir -p "$TMP/outside" && echo kept > "$TMP/outside/file"
