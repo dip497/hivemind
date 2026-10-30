@@ -25,6 +25,12 @@ const LEAST: Record<string, Role> = {
   "issue.list": "view",
   "issue.read": "view",
   "review.list": "view",
+  // Answering or closing a comment, as someone editing the work does.
+  "review.seen": "edit",
+  "review.resolve": "edit",
+  "review.dismiss": "edit",
+  "review.reopen": "edit",
+  "review.reply": "edit",
   // Handing a branch of one's own to the host: it lands as a branch of its own, and a Diff tile
   // shows it (M4). Nothing of the host's is changed.
   "git.handOff": "edit",

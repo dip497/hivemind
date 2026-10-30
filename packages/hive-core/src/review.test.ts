@@ -3,8 +3,8 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import {
-  addComment, listComments, normalizeComments, readComments, reopenComment,
-  replyTo, resolveComment, reviewPath, reviewRoot, writeComments,
+  addComment, dismissComment, listComments, markSeen, normalizeComments, readComments, reopenComment,
+  replyTo, resolveComment, reviewPath, reviewRoot, statusOf, writeComments,
 } from "./review.js";
 
 const root = async () => fs.mkdtemp(path.join(os.tmpdir(), "hm-review-"));
@@ -93,5 +93,52 @@ describe("review comments", () => {
     const r = await root();
     await writeComments(r, normalizeComments([{ id: "c-1", file: "a.ts", body: "b" }]));
     expect((await fs.readdir(r)).filter((f) => f.endsWith(".tmp"))).toEqual([]);
+  });
+
+  const pageNote = {
+    page: {
+      url: "http://localhost:3000/pricing",
+      viewport: { width: 1280, height: 800 },
+      elements: [{ name: 'button "Start trial"', selector: "main > .hero > button", text: "Start trial", box: { x: 10, y: 20, width: 120, height: 40 } }],
+      picture: "c-1.png",
+    },
+    body: "too small on phones", author: "you", intent: "fix" as const,
+  };
+
+  test("a note on a page round-trips with what it points at, and lists apart from the diff's", async () => {
+    const r = await root();
+    await addComment(r, seed);
+    const note = await addComment(r, pageNote);
+    const back = (await readComments(r)).find((c) => c.id === note.id)!;
+    expect(back).toMatchObject({ body: "too small on phones", intent: "fix", page: { url: "http://localhost:3000/pricing", picture: "c-1.png" } });
+    expect((await listComments(r, { on: "page" })).map((c) => c.id)).toEqual([note.id]);
+    expect(await listComments(r, { on: "diff" })).toHaveLength(1);
+    expect(await listComments(r, { file: "src/a.ts" })).toHaveLength(1);
+  });
+
+  test("a comment moves open → seen → resolved, or is dismissed with a reason, and only a closed one reopens", async () => {
+    const r = await root();
+    const a = await addComment(r, pageNote);
+    expect(statusOf((await markSeen(r, a.id))!)).toBe("seen");
+    expect(statusOf((await resolveComment(r, a.id, "bigger now"))!)).toBe("resolved");
+    await expect(markSeen(r, a.id)).rejects.toThrow("resolved");
+    await expect(resolveComment(r, a.id)).rejects.toThrow("reopen it first");
+    expect(statusOf((await reopenComment(r, a.id))!)).toBe("open");
+    await expect(reopenComment(r, a.id)).rejects.toThrow("only a resolved or dismissed comment");
+    await expect(dismissComment(r, a.id, "  ")).rejects.toThrow("needs a reason");
+    const dismissed = (await dismissComment(r, a.id, "works as intended"))!;
+    expect(statusOf(dismissed)).toBe("dismissed");
+    expect(dismissed.summary).toBe("works as intended");
+    // Dismissed is closed: it lists with the resolved ones.
+    expect((await listComments(r, { status: "resolved" })).map((c) => c.id)).toEqual([a.id]);
+  });
+
+  test("a page note's picture is a file name, never a path", () => {
+    const [kept, escaped] = normalizeComments([
+      { id: "c-1", ...pageNote },
+      { id: "c-2", ...pageNote, page: { ...pageNote.page, picture: "../../.ssh/id_rsa.png" } },
+    ]);
+    expect(kept!.page.picture).toBe("c-1.png");
+    expect(escaped!.page.picture).toBeUndefined();
   });
 });

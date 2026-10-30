@@ -81,6 +81,9 @@ import { ipcPath, upgradeCommand, windowsStartMenuShortcut } from "./platform.js
 import { notesFor, whatsNewSinceLastRun } from "./whats-new.js";
 import { runningRelease, windowsAppFolder } from "../shared/running-release.js";
 import { keyboardCommand } from "./page-keys.js";
+import { around, elementAt, elementsIn, highlightAt, holdStill, pictureOf, showPins } from "./page-notes.js";
+import { addComment, reviewRoot, writePicture } from "@hivemind/core/review";
+import type { PageNoteDraft, PagePin } from "../shared/ipc.js";
 import { serveBrowserPort } from "./browser-port.js";
 import { driveSockPath, readOrCreateToken } from "@hivemind/agent-host/hooks/token";
 import { ApiError, isErrorCode } from "@hivemind/workspace-api/protocol";
@@ -612,6 +615,50 @@ handle("browserInput", (e, tileId: unknown, input: unknown) => {
   if (!done) throw new Error("not an input a page takes");
   return pageStreams.input(tileIdOf(tileId), e.sender, done);
 });
+
+// Notes on a tile's page (page-notes.ts), from the app window or a page the app serves.
+const pageOfTile = (tileId: unknown): WebContents => {
+  const page = browserGuestFor(tileIdOf(tileId));
+  if (!page) throw new Error("this tile shows no page");
+  return page;
+};
+const fraction = (v: unknown): number => {
+  if (typeof v !== "number" || !Number.isFinite(v) || v < 0 || v > 1) throw new Error("a point is a fraction of the page, 0 to 1");
+  return v;
+};
+handle("browserPick", (_e, tileId: unknown, fx: unknown, fy: unknown) => elementAt(pageOfTile(tileId), fraction(fx), fraction(fy)));
+handle("browserPickArea", (_e, tileId: unknown, fx: unknown, fy: unknown, fw: unknown, fh: unknown) =>
+  elementsIn(pageOfTile(tileId), fraction(fx), fraction(fy), fraction(fw), fraction(fh)));
+handle("browserHighlight", (_e, tileId: unknown, point: unknown) => {
+  const p = point as { fx?: unknown; fy?: unknown } | null;
+  return highlightAt(pageOfTile(tileId), p ? { fx: fraction(p.fx), fy: fraction(p.fy) } : null);
+});
+handle("browserNote", async (_e, tileId: unknown, repoPath: unknown, note: unknown) => {
+  const page = pageOfTile(tileId);
+  const n = (note ?? {}) as Partial<PageNoteDraft>;
+  if (typeof repoPath !== "string" || !repoPath) throw new Error("a note needs the workspace it belongs to");
+  if (typeof n.body !== "string" || !n.body.trim()) throw new Error("a note needs words");
+  const elements = Array.isArray(n.elements) ? n.elements : [];
+  const boxes = n.area ? [n.area] : elements.map((el) => el.box);
+  if (!boxes.length) throw new Error("a note points at an element or an area");
+  const root = await reviewRoot(repoPath);
+  const id = `c-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+  const picture = await writePicture(root, id, await pictureOf(page, around(boxes))).catch(() => null);
+  const metrics = (await page.debugger.sendCommand("Page.getLayoutMetrics")) as { cssVisualViewport: { clientWidth: number; clientHeight: number } };
+  return addComment(root, {
+    id, body: n.body.trim(), author: "you", ...(n.intent ? { intent: n.intent } : {}),
+    page: {
+      url: page.getURL(), title: page.getTitle(),
+      viewport: { width: metrics.cssVisualViewport.clientWidth, height: metrics.cssVisualViewport.clientHeight },
+      elements, ...(n.area ? { area: n.area } : {}), ...(picture ? { picture } : {}),
+    },
+  });
+});
+handle("browserPins", (_e, tileId: unknown, pins: unknown) => {
+  if (!Array.isArray(pins) || pins.length > 500) throw new Error("pins must be a list");
+  return showPins(pageOfTile(tileId), pins as PagePin[]);
+});
+handle("browserHoldStill", (_e, tileId: unknown, still: unknown) => holdStill(pageOfTile(tileId), still === true));
 
 handleEffect(
   "browserCdp",

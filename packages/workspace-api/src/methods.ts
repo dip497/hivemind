@@ -78,8 +78,17 @@ export interface WorkspaceMethods {
   "issue.move": (root: string, id: string, prefix: string, mode: "move" | "copy") => TransferResult;
   /** The repo's review comments, resolved ones included. */
   "review.list": (repo: string) => ReviewComment[];
-  /** Replace the repo's review comments. */
+  /** Replace the repo's comments on a diff; its notes on pages are kept. */
   "review.save": (repo: string, comments: ReviewComment[]) => void;
+  /** One comment, changed by what it is: each refuses a comment not where the change starts from
+   *  (core's review rules). */
+  "review.seen": (repo: string, id: string) => ReviewComment;
+  "review.resolve": (repo: string, id: string, summary?: string) => ReviewComment;
+  "review.dismiss": (repo: string, id: string, reason: string) => ReviewComment;
+  "review.reopen": (repo: string, id: string) => ReviewComment;
+  "review.reply": (repo: string, id: string, body: string) => ReviewComment;
+  "review.edit": (repo: string, id: string, body: string) => ReviewComment;
+  "review.delete": (repo: string, id: string) => void;
   /** Every agent session's status there is. Each change after it is a `status.changed` event. */
   "status.all": () => Array<{ tileId: string; status: StatusChange["status"] }>;
   /** (0.34) Watch the last lines of `tiles` (at most 1024), in place of those the caller watched (none:
