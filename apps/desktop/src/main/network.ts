@@ -278,6 +278,11 @@ async function vouchFor(device: string): Promise<void> {
   }
 }
 
+/** Everyone let in here keeps their way onto the network's relays while they are away too: a phone
+ *  whose visit lapsed could not reach this computer to have it renewed. */
+const renewVisits = (): void => { for (const device of accessLists().admitted()) void vouchFor(device); };
+const RENEW_VISITS_MS = 24 * 3600_000;
+
 /** Take back the visit this device vouched `device` onto a closed network for. */
 async function unvouch(device: string): Promise<void> {
   vouched.delete(device);
@@ -290,6 +295,27 @@ async function unvouch(device: string): Promise<void> {
 }
 
 let current: Promise<HiveNet> | null = null;
+
+/** How long before hive-net, gone or failed to start, is started again: longer each time, the first
+ *  again once it stayed up as long as the longest. */
+const START_AGAIN_MS = [2_000, 5_000, 15_000, 60_000];
+let startAgainTries = 0;
+let startedAt = 0;
+let startingAgain: ReturnType<typeof setTimeout> | null = null;
+/** What is owed the person's devices once this computer is on the network again. */
+let backOnNetwork: () => void = () => {};
+
+/** Devices reach this computer only through hive-net, so one that stopped is started again. */
+function startNetworkAgain(): void {
+  if (startingAgain || !hiveNetBin()) return;
+  if (Date.now() - startedAt > START_AGAIN_MS.at(-1)!) startAgainTries = 0;
+  const wait = START_AGAIN_MS[Math.min(startAgainTries++, START_AGAIN_MS.length - 1)]!;
+  startingAgain = setTimeout(() => {
+    startingAgain = null;
+    void network().then(() => backOnNetwork(), (e: unknown) => console.warn(`[network] ${e instanceof Error ? e.message : String(e)}`));
+  }, wait);
+  startingAgain.unref();
+}
 
 /** hive-net's executable, or why there is none. */
 function hiveNet(): string {
@@ -328,7 +354,7 @@ export function network(): Promise<HiveNet> {
         if ((hello as { connect?: unknown } | null)?.connect) return connecting.answer(peer, hello);
         return sharingOf().answer(peer, hello);
       },
-      onExit: (why) => { current = null; records?.stop(); records = null; console.warn(`[network] ${why}`); },
+      onExit: (why) => { current = null; records?.stop(); records = null; console.warn(`[network] ${why}`); startNetworkAgain(); },
       onWarn: (message) => console.warn(`[network] ${message}`),
     });
     hn.admit(accessLists().admitted());
@@ -341,8 +367,9 @@ export function network(): Promise<HiveNet> {
       onWarn: (m) => console.warn(`[hosting] ${m}`),
     });
     records.start();
+    startedAt = Date.now();
     return hn;
-  })().catch((e: unknown) => { current = null; throw e; });
+  })().catch((e: unknown) => { current = null; startNetworkAgain(); throw e; });
   return current;
 }
 
@@ -376,6 +403,8 @@ export function stopNetwork(): void {
   records = null;
   void current?.then((n) => n.stop(), () => {});
   current = null;
+  if (startingAgain) clearTimeout(startingAgain);
+  startingAgain = null;
 }
 
 /** This computer, as the person's other devices know it: its id, and what it is called. */
@@ -729,12 +758,14 @@ export function installNetworkIpc(server: WorkspaceServer, { daemon, granted, st
   // is shared from here, the person has other devices or a host is owed word of one unpaired: as
   // this app starts (below), and as the computer wakes, once it is online again. Then each phone is
   // told it is back, and shows it if it found this computer away (spec/push.md).
+  backOnNetwork = () => { notices.back(); void tellDevices(); void payRevocations(); renewVisits(); };
   const reachable = () => {
     if (!accessLists().workspaces().some((ws) => accessLists().people(ws).length > 0) && pairedDevices().list().length === 0 && owedRevocations().list().length === 0) return;
-    void network().then(() => { notices.back(); void tellDevices(); void payRevocations(); }, (e: unknown) => console.warn(`[network] ${e instanceof Error ? e.message : String(e)}`));
+    void network().then(backOnNetwork, (e: unknown) => console.warn(`[network] ${e instanceof Error ? e.message : String(e)}`));
   };
   powerMonitor.on("resume", () => void online().then(reachable));
   setInterval(() => void payRevocations(), PAY_AGAIN_MS).unref();
+  setInterval(renewVisits, RENEW_VISITS_MS).unref();
   // The network in use, changed by `hive network use`: the daemon starts again on it. A change
   // made here has done that already (below).
   try {

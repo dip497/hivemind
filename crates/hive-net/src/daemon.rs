@@ -1087,13 +1087,18 @@ pub async fn run(socket: &Path, identity: &Path, key: SecretKey, reach: Reach) -
                 }
             })
             .collect(),
-        relay: here.addrs.iter().find_map(|a| {
-            if let TransportAddr::Relay(url) = a {
-                Some(url.to_string())
-            } else {
-                None
-            }
-        }),
+        // The network's relay, whether it answers yet or not: what devices are told lasts longer.
+        relay: here
+            .addrs
+            .iter()
+            .find_map(|a| {
+                if let TransportAddr::Relay(url) = a {
+                    Some(url.to_string())
+                } else {
+                    None
+                }
+            })
+            .or_else(|| reach.relays.first().map(|url| url.to_string())),
         lookup: daemon.lookup.as_ref().map(|u| u.to_string()),
     });
 

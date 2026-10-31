@@ -17,6 +17,7 @@ hive-phone = { path = "../hive-phone" }
 hive-net = { path = "../hive-net", default-features = false }
 # A browser sends no UDP: iroh's relay path only, as iroh's browser docs require.
 iroh = { version = "1.3.0", default-features = false, features = ["tls-ring"] }
+anyhow = "1"
 js-sys = "0.3"
 n0-future = "0.3"
 # A connect request's nonce.

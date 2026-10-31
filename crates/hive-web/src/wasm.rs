@@ -6,7 +6,7 @@ use hive_net::{
 };
 use hive_phone::{
     agents, connect, control, conversation, devices,
-    failure::Failure,
+    failure::{Failure, Lost},
     home, homes,
     identity::DeviceCertificate,
     markdown, network, notes, pairing, person,
@@ -16,7 +16,7 @@ use hive_phone::{
 };
 use iroh::{
     endpoint::{Connection, ConnectionError, RecvStream, SendStream},
-    Endpoint, EndpointAddr, RelayUrl, SecretKey, TransportAddr,
+    Endpoint, EndpointAddr, RelayUrl, SecretKey, TransportAddr, Watcher,
 };
 use serde_json::{json, Value};
 use std::{
@@ -54,6 +54,18 @@ fn unpaired(why: String) -> JsValue {
     let e = js_sys::Error::new(&why);
     e.set_name("Unpaired");
     e.into()
+}
+
+/// How following something on a device ended, for the page: the device's refusal is an error; `gone`,
+/// anything else, as the connection going, is not an end, and the page follows on.
+fn refused_or<T>(ended: anyhow::Result<T>, gone: T) -> Result<T, JsError> {
+    match ended {
+        Ok(ended) => Ok(ended),
+        Err(e) => match Lost::refusal(&e) {
+            Some(refused) => Err(err(refused)),
+            None => Ok(gone),
+        },
+    }
 }
 
 fn to_js(v: &Value) -> Result<JsValue, JsError> {
@@ -401,6 +413,23 @@ impl Device {
         Ok(Host { connection })
     }
 
+    /// Whether this browser is on its relay now: a device it cannot reach, while it is, is itself
+    /// away, not the way to it.
+    #[wasm_bindgen(js_name = onRelay)]
+    pub fn on_relay(&self) -> bool {
+        self.endpoint
+            .home_relay_status()
+            .get()
+            .iter()
+            .any(|status| status.is_connected())
+    }
+
+    /// The network may be another now: its relay connection is made again rather than found dead.
+    #[wasm_bindgen(js_name = networkChanged)]
+    pub async fn network_changed(&self) {
+        self.endpoint.network_change().await;
+    }
+
     pub async fn close(&self) {
         self.endpoint.close().await;
     }
@@ -678,7 +707,7 @@ impl Host {
             let _ = wasm_bindgen_futures::JsFuture::from(until).await;
             Ok(())
         };
-        n0_future::future::or(followed, stopped).await.map_err(err)
+        refused_or(n0_future::future::or(followed, stopped).await, ())
     }
 
     /// The views the device offers this browser in `workspace` (`view.list`): `[{id, name,
@@ -778,7 +807,7 @@ impl Host {
             };
             let ended =
                 n0_future::future::or(n0_future::future::or(watched, passed), stopped).await;
-            match ended.map_err(err)? {
+            match refused_or(ended, None)? {
                 Some(ended) => to_js(&json!({ "code": ended.code })).map_err(JsValue::from),
                 None => Ok(JsValue::NULL),
             }
@@ -787,6 +816,11 @@ impl Host {
 
     pub fn close(&self) {
         self.connection.close(0u32.into(), b"closed");
+    }
+
+    /// Whether this connection is gone.
+    pub fn closed(&self) -> bool {
+        self.connection.close_reason().is_some()
     }
 }
 

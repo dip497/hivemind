@@ -25,6 +25,11 @@ export class TermScreen {
     this.term.watch(this.app, workspace, tile);
   }
 
+  /** Start watching, if it could not yet be known which computer holds it. */
+  retry(): void {
+    this.term.retry();
+  }
+
   close(): void {
     this.shown = "";
     this.term.unwatch();

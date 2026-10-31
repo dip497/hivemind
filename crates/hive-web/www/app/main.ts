@@ -91,9 +91,8 @@ const app: App = {
   tool: (agent, use) => reached().tool(agent, use),
   commands: (agent) => reached().commands(agent),
   terminal(workspace, tile, changed, ended) {
-    if (!phone) return null;
-    const { term, stop } = phone.watch(workspace, tile, changed, ended);
-    return { source: term, stop };
+    const watched = phone?.watch(workspace, tile, changed, ended);
+    return watched ? { source: watched.term, stop: watched.stop } : null;
   },
   openTerminal(workspace, tile, name) {
     location.hash = new URLSearchParams({ terminal: tile, in: workspace, name }).toString();
@@ -225,6 +224,7 @@ function apply(first: First): void {
   overview = first.overview;
   home.show(first.shown, first.overview);
   agent.show(first.overview);
+  terminal.retry();
   tabDot.hidden = first.overview.needs.length === 0;
 }
 
@@ -427,10 +427,18 @@ async function start(): Promise<void> {
   else showUnpaired();
   warm();
   route();
-  addEventListener("online", () => phone?.retry());
-  document.addEventListener("visibilitychange", () => document.visibilityState === "visible" && phone?.retry());
+  addEventListener("online", () => phone?.retry(true));
+  let hiddenAt = 0;
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState !== "visible") return void (hiddenAt = Date.now());
+    phone?.retry(Date.now() - hiddenAt >= AWAY);
+  });
   if (link !== null) offer(link, name);
 }
+
+/** Hidden this long, the page takes it that the phone may have slept or moved: a quick look away
+ *  costs no new connection. */
+const AWAY = 15_000;
 
 /** A newer build of this page, once the server has one: opened again at once when nothing typed
  *  would be lost, else offered. Asked as the page comes back into view, as a phone keeps it open. */
