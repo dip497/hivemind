@@ -1,5 +1,5 @@
 {
-  "spec": "status 0.1",
+  "spec": "status 0.2",
   "cases": [
     {
       "name": "a plain turn",
@@ -57,6 +57,76 @@
       "name": "the next turn end recounts background tasks",
       "inputs": [{ "event": "turn.ended", "background": 2 }, { "event": "turn.started" }, { "event": "turn.ended" }],
       "expect": { "state": "done", "subagents": [], "background": 0, "compacting": false }
+    },
+    {
+      "name": "a turn ends with a workflow still running: working, until it comes back",
+      "inputs": [{ "event": "turn.started" }, { "event": "turn.ended", "background": 1, "awaiting": 1 }],
+      "expect": { "state": "working", "subagents": [], "background": 1, "awaiting": 1, "compacting": false }
+    },
+    {
+      "name": "a turn ends with only a dev server running: done, however long it runs",
+      "inputs": [{ "event": "turn.started" }, { "event": "turn.ended", "background": 1 }],
+      "expect": { "state": "done", "subagents": [], "background": 1, "compacting": false }
+    },
+    {
+      "name": "the work comes back as a turn that ends with none left: done",
+      "inputs": [{ "event": "turn.ended", "background": 1, "awaiting": 1 }, { "event": "turn.started" }, { "event": "turn.ended" }],
+      "expect": { "state": "done", "subagents": [], "background": 0, "compacting": false }
+    },
+    {
+      "name": "the turn it comes back as is working of its own, and may leave more to wait on",
+      "inputs": [{ "event": "turn.ended", "awaiting": 2 }, { "event": "turn.started" }],
+      "expect": { "state": "working", "subagents": [], "background": 0, "compacting": false }
+    },
+    {
+      "name": "a failed turn is failed whatever still runs",
+      "inputs": [{ "event": "turn.started" }, { "event": "turn.ended", "outcome": "failed", "background": 1, "awaiting": 1 }],
+      "expect": { "state": "failed", "subagents": [], "background": 1, "compacting": false }
+    },
+    {
+      "name": "an interrupt leaves the wait",
+      "inputs": [{ "event": "turn.ended", "awaiting": 1 }, { "fact": "interrupt" }],
+      "expect": { "state": "interrupted", "subagents": [], "background": 0, "compacting": false }
+    },
+    {
+      "name": "exiting leaves the wait",
+      "inputs": [{ "event": "turn.ended", "awaiting": 1 }, { "fact": "exited" }],
+      "expect": { "state": "exited", "subagents": [], "background": 0, "compacting": false }
+    },
+    {
+      "name": "hooks gone quiet leave the wait at rest, not finished",
+      "inputs": [{ "event": "turn.ended", "awaiting": 1 }, { "fact": "quiet" }],
+      "expect": { "state": "idle", "subagents": [], "background": 0, "compacting": false }
+    },
+    {
+      "name": "quiet changes nothing outside a wait",
+      "inputs": [{ "event": "turn.started" }, { "fact": "quiet" }],
+      "expect": { "state": "working", "subagents": [], "background": 0, "compacting": false }
+    },
+    {
+      "name": "a subagent's stop recounts the wait",
+      "inputs": [{ "event": "turn.ended", "awaiting": 3 }, { "event": "subagent.stopped", "agentId": "a1", "awaiting": 2 }],
+      "expect": { "state": "working", "subagents": [], "background": 0, "awaiting": 2, "compacting": false }
+    },
+    {
+      "name": "a subagent's stop that finds none left ends the wait: done",
+      "inputs": [{ "event": "turn.ended", "awaiting": 1 }, { "event": "subagent.stopped", "agentId": "a1", "awaiting": 0 }],
+      "expect": { "state": "done", "subagents": [], "background": 0, "compacting": false }
+    },
+    {
+      "name": "a subagent's stop that does not count leaves the wait as it is",
+      "inputs": [{ "event": "turn.ended", "awaiting": 1 }, { "event": "subagent.stopped", "agentId": "a1" }],
+      "expect": { "state": "working", "subagents": [], "background": 0, "awaiting": 1, "compacting": false }
+    },
+    {
+      "name": "a stop mid-turn counts nothing: the turn's end does",
+      "inputs": [{ "event": "turn.started" }, { "event": "subagent.stopped", "agentId": "a1", "awaiting": 0 }],
+      "expect": { "state": "working", "subagents": [], "background": 0, "compacting": false }
+    },
+    {
+      "name": "a background task asks mid-wait: waiting, and working again with the wait kept",
+      "inputs": [{ "event": "turn.ended", "awaiting": 1 }, { "event": "input.requested", "kind": "permission" }, { "event": "input.resolved" }],
+      "expect": { "state": "working", "subagents": [], "background": 0, "awaiting": 1, "compacting": false }
     },
     {
       "name": "a session start mid-turn (after automatic compaction) keeps the turn",

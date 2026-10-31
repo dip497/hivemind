@@ -282,6 +282,7 @@ A message sent while it works waits until its turn ends; \`--interrupt\` stops t
 \`\`\`bash
 hive ctl read <tileId> --timeout 90s --json
 # → {"text":"…","finalStatus":"turn","truncated":false}
+# with "awaiting":N it ended its turn still waiting on N background tasks it started; read again for what comes of them.
 # still working → exit 4 and {"text":null,"finalStatus":"timeout",…}; call again, nothing is lost.
 # stopped to wait on an answer → exit 8 and {"finalStatus":"waiting","waiting":{"kind","asks",…}}; answer it, then read again.
 # closed, or its agent exited → exit 5 and {"text":null,"finalStatus":"closed",…}; do not read it again.

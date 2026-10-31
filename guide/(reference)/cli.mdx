@@ -47,7 +47,7 @@ Every `hive` command exits with one of these. This is the one list; other pages 
 
 | Exit | Means | Do |
 |---:|---|---|
-| 0 | The agent replied. | Use the reply it printed. |
+| 0 | The agent replied. With `awaiting`, it still waits on that many background tasks it started. | Use the reply it printed. With `awaiting`, `read` again for what comes of them. |
 | 4 | It is still working. | Run `read` again. |
 | 5 | Its tile was closed. | Start it again if you still need it. |
 | 7 | It was sent nothing new, and is idle. | Send it a task. |

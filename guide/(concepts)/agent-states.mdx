@@ -23,7 +23,7 @@ Tell me what each of my Hivemind agents is doing right now. Do not change anythi
 
 | State | Colour | Means |
 |---|---|---|
-| **working** | white | busy on its task |
+| **working** | white | busy on its task, or its turn is over and it waits on work it started |
 | **needs you** | amber | waiting for a person: a permission question or a question with options |
 | **blocked** | amber | waiting on a person for another reason |
 | **review?** | amber | waiting for you to approve its plan |
@@ -45,6 +45,24 @@ urgent state inside it, so needs you wins.
 - working → **needs you**: it asks you. needs you → working: you answer.
 - idle → **asleep**: **Sleep**. asleep → idle: **Resume**.
 - Any state → **exited**: its program stops.
+
+## An agent waiting on work it started
+
+An agent can end its turn with work still running in the background. It stays **working** while it
+waits on work that comes back to it: a subagent, a workflow, a cloud session or an MCP task. You can
+still type to it, and you are told it finished when that work is over.
+
+A dev server, or anything else it left running on its own, keeps nothing working. Neither do a
+monitor or a teammate: a monitor only watches, and a teammate stays up while it sits idle.
+
+It stops showing **working** when:
+
+- a turn ends with none of that work left, usually the turn the work wakes it for
+- you press Esc, or Stop on your phone. The work itself goes on, and shows again if it wakes the agent
+- its program stops
+- its hooks say nothing for 30 minutes, which is what stopping a workflow from its own screen looks like
+
+Only agents that report it stay working this way, so far Claude.
 
 ## How it works
 

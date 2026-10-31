@@ -54,6 +54,36 @@ test("fanout: every item's worker, at most so many at once, replies in item orde
   expect(h.asked.filter((a) => a.startsWith("agent.close")).sort()).toEqual(["agent.close w1", "agent.close w3"]);
 });
 
+test("a worker whose turn ended waiting on work it started has not answered: it is read again, and closed only once it has", async () => {
+  const reads: AgentRead[] = [
+    { text: "started a workflow", finalStatus: "turn", truncated: false, awaiting: 1 },
+    { text: "the workflow found 3 bugs", finalStatus: "turn", truncated: false },
+  ];
+  const asked: string[] = [];
+  const call = async (method: string): Promise<unknown> => {
+    asked.push(method);
+    return method === "agent.start" ? { tile: "w1" } : method === "agent.read" ? reads.shift() : { closed: true };
+  };
+  const r = await runWorkflow({ call } as never, "/w", plan({ items: ["a"], prompt: "{item}", close: true, turnMs: 1000 }));
+  expect(r).toEqual({ shape: "fanout", items: [{ item: "a", tile: "w1", status: "turn", text: "the workflow found 3 bugs" }] });
+  expect(asked).toEqual(["agent.start", "agent.read", "agent.read", "agent.close"]);
+});
+
+test("a worker still waiting on that work when the time runs out says what it said, and is left running", async () => {
+  const asked: string[] = [];
+  const call = async (method: string, params: unknown[]): Promise<unknown> => {
+    asked.push(method);
+    if (method === "agent.start") return { tile: "w1" };
+    if (method !== "agent.read") return { closed: true };
+    return params[1] === 0 || asked.filter((m) => m === "agent.read").length > 1
+      ? { text: null, finalStatus: "working", truncated: false }
+      : { text: "started a workflow", finalStatus: "turn", truncated: false, awaiting: 1 };
+  };
+  const r = await runWorkflow({ call } as never, "/w", plan({ items: ["a"], prompt: "{item}", close: true, turnMs: 1 }));
+  expect(r).toEqual({ shape: "fanout", items: [{ item: "a", tile: "w1", status: "working", text: "started a workflow" }] });
+  expect(asked).not.toContain("agent.close");
+});
+
 test("a spawn turned away for coming too fast is tried again; one refused otherwise is that item's error, and the rest run", async () => {
   const waits: number[] = [];
   const h = host((p) => `did ${p}`, 2);

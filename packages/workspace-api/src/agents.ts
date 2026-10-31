@@ -205,6 +205,9 @@ export interface AgentRead {
   truncated: boolean;
   note?: string;
   waiting?: NonNullable<AgentItem["waiting"]>;
+  /** `turn`: how many background tasks it started that it still waits on; a later turn brings what
+   *  comes of them (0.38). */
+  awaiting?: number;
 }
 
 /** What another agent has for an agent (0.26): a turn's reply, a report, that it waits on an

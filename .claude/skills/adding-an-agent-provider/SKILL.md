@@ -167,6 +167,11 @@ field reference; `claude/agent.yaml` in the published fixtures is the richest ex
    - { name: hive-turn-end.cjs, file: hive-turn-end.cjs, hook: turnEnd, produces: [turn.ended] }
    ```
 
+   If the agent can end a turn with work running that wakes it when it finishes, say how many
+   with `awaiting` on `turn.ended`: its tile stays working until a turn ends with none
+   (`spec/status.md`). Count nothing that has no end, or the tile never comes back. A task the
+   agent's own screen can stop with no hook firing still ends, after a quiet spell.
+
    An app older than `emit` refuses such a manifest, so publishing one needs the registry to
    carry a `minAppVersion` for agents.
 

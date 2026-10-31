@@ -73,6 +73,7 @@ export function isSessionStatus(x: unknown): x is SessionStatus {
   return typeof s === "object" && s !== null && (SESSION_STATES as readonly unknown[]).includes(s.state)
     && Array.isArray(s.subagents) && s.subagents.every((a) => typeof a === "string")
     && typeof s.background === "number" && typeof s.compacting === "boolean"
+    && (s.awaiting === undefined || typeof s.awaiting === "number")
     && (s.kind === undefined || (INPUT_KINDS as readonly unknown[]).includes(s.kind))
     && (s.source === null || s.source === "hooks" || s.source === "screen") && typeof s.since === "number"
     && (s.title === undefined || typeof s.title === "string") && (s.says === undefined || typeof s.says === "string")
@@ -82,6 +83,10 @@ export function isSessionStatus(x: unknown): x is SessionStatus {
 /** Subagent starts and stops are not a matched pair: a stop is lost when a subagent errors, the
  *  turn is interrupted or the process dies. A set that hears no edge for this long has lost them. */
 export const SUBAGENT_GRACE_MS = 120_000;
+
+/** Background work stopped from the agent's own screen can end with no turn and no hook, and work
+ *  running elsewhere can say nothing for hours. A wait that hears no hook for this long is over. */
+export const AWAITING_QUIET_MS = 30 * 60_000;
 
 export class StatusStore {
   private sessions = new Map<string, SessionStatus>();
@@ -101,6 +106,8 @@ export class StatusStore {
 
   /** Each session's pending drain of subagents whose stop never came. */
   private lostStops = new Map<string, ReturnType<typeof setTimeout>>();
+  /** Each session waiting on background work: when a hook last spoke, and the timer that looks. */
+  private awaited = new Map<string, { heard: number; timer: ReturnType<typeof setTimeout> }>();
 
   constructor(private readonly opts: { now?: () => number; onLostStops?: (tileId: string, count: number) => void } = {}) {}
 
@@ -139,10 +146,38 @@ export class StatusStore {
     const running = cur?.state === "working" && !("event" in input && input.event.startsWith("session.")) ? { state: "working" as const } : {};
     this.apply(tileId, "hooks", (s) => ({ ...foldStatus(fromScreen ? { ...s, ...INITIAL_STATUS, kind: undefined, ...running } : s, input), ...session }));
     if ("event" in input && (input.event.startsWith("subagent.") || input.event === "turn.ended")) this.watchSubagents(tileId);
+    this.watchAwaiting(tileId);
+  }
+
+  /** One timer a session, however often its hooks speak: it looks at when they last did. */
+  private watchAwaiting(tileId: string): void {
+    if (!this.sessions.get(tileId)?.awaiting) return this.stopAwaiting(tileId);
+    const watch = this.awaited.get(tileId);
+    if (watch) watch.heard = this.now();
+    else this.awaited.set(tileId, { heard: this.now(), timer: this.lookAtAwaiting(tileId, AWAITING_QUIET_MS) });
+  }
+
+  private lookAtAwaiting(tileId: string, ms: number): ReturnType<typeof setTimeout> {
+    const timer = setTimeout(() => {
+      const watch = this.awaited.get(tileId);
+      if (!watch) return;
+      const left = watch.heard + AWAITING_QUIET_MS - this.now();
+      if (left > 0) { watch.timer = this.lookAtAwaiting(tileId, left); return; }
+      this.awaited.delete(tileId);
+      if (!this.mirrored.has(tileId)) this.apply(tileId, "hooks", (s) => foldStatus(s, { fact: "quiet" }));
+    }, ms);
+    (timer as { unref?: () => void }).unref?.();
+    return timer;
+  }
+
+  private stopAwaiting(tileId: string): void {
+    const watch = this.awaited.get(tileId);
+    if (watch) clearTimeout(watch.timer);
+    this.awaited.delete(tileId);
   }
 
   /** Every subagent edge, and a turn's end, push the drain out; a set that empties cancels it. A
-   *  subagent still running in the background keeps sending edges, so it is never drained. */
+   *  subagent quiet for longer than that reads as lost: what the agent still waits on is `awaiting`. */
   private watchSubagents(tileId: string): void {
     this.stopWatching(tileId);
     if (!this.sessions.get(tileId)?.subagents.length) return;
@@ -185,7 +220,7 @@ export class StatusStore {
         // Its chooser gave way to its prompt; the prompt alone may be the moment before it is drawn.
       } else if (!(waiting && cur.state === "working")) return;
       else this.screenHeld.add(tileId);
-      this.apply(tileId, "hooks", (s) => (waiting ? { ...s, state: "waiting", kind: SCREEN_KIND[state] } : { ...s, state, kind: undefined }), says);
+      this.apply(tileId, "hooks", (s) => (waiting ? { ...s, state: "waiting", kind: SCREEN_KIND[state] } : { ...s, state: s.awaiting ? "working" : state, kind: undefined }), says);
       return;
     }
     this.apply(tileId, "screen", (s) => (state === "idle" || state === "working"
@@ -200,7 +235,10 @@ export class StatusStore {
     if (this.mirrored.has(tileId)) return;
     const cur = this.sessions.get(tileId);
     if (!cur || cur.source !== "hooks") return;
-    if (isInterruptKey(data)) this.apply(tileId, "hooks", (s) => foldStatus(s, { fact: "interrupt" }));
+    if (isInterruptKey(data)) {
+      this.apply(tileId, "hooks", (s) => foldStatus(s, { fact: "interrupt" }));
+      this.stopAwaiting(tileId);
+    }
     else if (cur.state === "waiting" && cur.kind === "permission" && ANSWER_KEY.test(data)) {
       this.screenHeld.delete(tileId);
       this.apply(tileId, "hooks", (s) => foldStatus(s, { event: "input.resolved" }));
@@ -210,12 +248,14 @@ export class StatusStore {
   /** The process ended: nothing it was doing is still true. */
   exited(tileId: string): void {
     this.stopWatching(tileId);
+    this.stopAwaiting(tileId);
     const cur = this.sessions.get(tileId);
     this.apply(tileId, cur?.source ?? null, (s) => ({ ...foldStatus(s, { fact: "exited" }), title: undefined }));
   }
 
   /** Put to sleep: a turn it was in is interrupted, nothing runs, and it keeps its title. */
   slept(tileId: string): void {
+    this.stopAwaiting(tileId);
     const cur = this.sessions.get(tileId);
     this.apply(tileId, cur?.source ?? null, (s) => ({ ...foldStatus(s, { fact: "interrupt" }), subagents: [], background: 0, compacting: false }));
   }
@@ -264,6 +304,7 @@ export class StatusStore {
 
   forget(tileId: string): void {
     this.stopWatching(tileId);
+    this.stopAwaiting(tileId);
     this.hosted.delete(tileId);
     this.heldHere.delete(tileId);
     this.sessions.delete(tileId);
@@ -296,7 +337,7 @@ export class StatusStore {
 }
 
 function sameStatus(a: SessionStatus, b: SessionStatus): boolean {
-  return a.state === b.state && a.kind === b.kind && a.says === b.says && a.session === b.session && a.source === b.source && a.background === b.background && a.title === b.title
+  return a.state === b.state && a.kind === b.kind && a.says === b.says && a.session === b.session && a.source === b.source && a.background === b.background && a.awaiting === b.awaiting && a.title === b.title
     && a.compacting === b.compacting && a.subagents.length === b.subagents.length && a.subagents.every((x, i) => x === b.subagents[i]);
 }
 

@@ -22,12 +22,13 @@ const ENDED: Partial<Record<SessionStatus["state"], string>> = { failed: "turn f
 
 /**
  * A hosted status as a kind. `detail` says why a turn ended as it did; `synthetic` marks an
- * `idle` that is not the agent finishing (the user interrupted it), which is not announced.
+ * `idle` that is not the agent finishing (the user interrupted it, or its hooks went quiet), which
+ * is not announced.
  */
 export function tileStatusOf(s: SessionStatus): { status: TileStatusKind; synthetic?: boolean; detail?: string } {
   if (s.state === "exited") return { status: "exited" };
   if (s.state === "waiting") return { status: WAITING[s.kind ?? "other"] };
   if (s.state === "working" || s.subagents.length > 0) return { status: "working" };
   const detail = ENDED[s.state];
-  return { status: "idle", ...(detail ? { detail } : {}), ...(s.state === "interrupted" ? { synthetic: true } : {}) };
+  return { status: "idle", ...(detail ? { detail } : {}), ...(s.state === "interrupted" || (s.state === "idle" && s.source === "hooks") ? { synthetic: true } : {}) };
 }
