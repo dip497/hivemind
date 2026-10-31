@@ -79,6 +79,8 @@ hive task MYP-3 done 2                          # tail number or full id
 hive task MYP-3 list
 ```
 
+`.hivemind` has to be a real folder. A link there is not treated as a workspace, and `hive init` refuses it.
+
 ```text
 hive link MYP-4 --parent MYP-1          # re-parent, or --parent none
 hive relate MYP-4 OPS-7 [--type blocks] [--remove]

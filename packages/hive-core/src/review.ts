@@ -7,11 +7,10 @@
  * agent that cannot list a comment cannot resolve one, so the store moves here
  * and the review loop becomes something a plugin command can serve.
  */
-import { randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { findRoot, HiveError } from "./storage.js";
+import { findRoot, HiveError, replaceFile } from "./storage.js";
 
 export * from "./review-shape.js";
 import { onPage, REVIEW_INTENTS, statusOf, type DiffComment, type PageAnchor, type PageBox, type PageComment, type PageElement, type ReviewComment, type ReviewIntent, type ReviewReply, type CommentFields } from "./review-shape.js";
@@ -126,14 +125,6 @@ export async function readComments(root: string): Promise<ReviewComment[]> {
   } catch {
     return [];
   }
-}
-
-/** Write `file` by renaming a new file over it. A cloned project can commit a link at any of these
- *  names: a rename replaces the link, where writing through it would change what it points at. */
-async function replaceFile(file: string, data: string | Uint8Array): Promise<void> {
-  const tmp = path.join(path.dirname(file), `.${randomUUID()}.tmp`);
-  await fs.writeFile(tmp, data, { flag: "wx" });
-  await fs.rename(tmp, file).catch(async (e) => { await fs.rm(tmp, { force: true }); throw e; });
 }
 
 export async function writeComments(root: string, list: readonly ReviewComment[]): Promise<void> {

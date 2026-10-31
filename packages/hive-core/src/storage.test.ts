@@ -2,6 +2,7 @@ import { describe, expect, test, beforeEach } from "bun:test";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import os from "node:os";
+import { writeAgentContext } from "./agent-context.js";
 import {
   HiveError,
   allocateId,
@@ -11,6 +12,7 @@ import {
   deleteIssueFile,
   findRoot,
   issuePath,
+  requireRoot,
   listIssues,
   parseSections,
   readConfig,
@@ -555,5 +557,68 @@ describe("createIssue / updateIssue (CLI + UI write path)", () => {
     const updated = await updateIssue(root, created.id, { github: null }, "ui");
     expect(updated.github).toBe(null);
     expect(updated.sections.activity.map((a) => a.message)).toContain("github: 7 → —");
+  });
+});
+
+describe("links a cloned project committed in .hivemind", () => {
+  const dirs = async () => {
+    const repo = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), "hm-links-")));
+    const outside = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), "hm-outside-")));
+    return { repo, outside, home: path.dirname(repo) + "/not-home" };
+  };
+  const workspace = async (repo: string, next_id = 5) => {
+    const root = path.join(repo, ".hivemind");
+    await fs.mkdir(path.join(root, "issues"), { recursive: true });
+    await writeConfig(root, { prefix: "HIV", next_id, agents: {}, format: 2 });
+    return root;
+  };
+
+  test("a .hivemind that is a link is no workspace, and says so", async () => {
+    const { repo, outside, home } = await dirs();
+    await fs.symlink(outside, path.join(repo, ".hivemind"));
+    expect(await findRoot(repo, home)).toBeNull();
+    await expect(requireRoot(repo)).rejects.toMatchObject({ code: "linked_root" });
+  });
+
+  test("a new issue whose name is a committed link replaces the link, and what it points at is left alone", async () => {
+    const { repo, outside } = await dirs();
+    const root = await workspace(repo);
+    const precious = path.join(outside, "precious");
+    await fs.writeFile(precious, "keep");
+    await fs.symlink(precious, path.join(root, "issues", "HIV-5.md"));
+
+    const made = await createIssue(root, { title: "first" });
+
+    expect(made.id).toBe("HIV-5");
+    expect(await fs.readFile(precious, "utf8")).toBe("keep");
+    expect((await fs.lstat(path.join(root, "issues", "HIV-5.md"))).isFile()).toBe(true);
+    expect((await readIssue(root, "HIV-5")).title).toBe("first");
+  });
+
+  test("an issues folder that is a link is refused, and nothing lands where it points", async () => {
+    const { repo, outside } = await dirs();
+    const root = await workspace(repo);
+    await fs.rm(path.join(root, "issues"), { recursive: true });
+    await fs.symlink(outside, path.join(root, "issues"));
+
+    await expect(createIssue(root, { title: "first" })).rejects.toMatchObject({ code: "linked_folder" });
+    expect(await fs.readdir(outside)).toEqual([]);
+  });
+
+  test("config.yaml and the agents' context file replace a committed link", async () => {
+    const { repo, outside } = await dirs();
+    const root = await workspace(repo);
+    const precious = path.join(outside, "precious");
+    await fs.writeFile(precious, "keep");
+    await fs.rm(path.join(root, "config.yaml"));
+    await fs.symlink(precious, path.join(root, "config.yaml"));
+    await fs.symlink(precious, path.join(root, ".agent.md"));
+
+    await writeConfig(root, { prefix: "HIV", next_id: 1, agents: {}, format: 2 });
+    await writeAgentContext(root);
+
+    expect(await fs.readFile(precious, "utf8")).toBe("keep");
+    expect((await fs.lstat(path.join(root, "config.yaml"))).isFile()).toBe(true);
+    expect((await fs.lstat(path.join(root, ".agent.md"))).isFile()).toBe(true);
   });
 });

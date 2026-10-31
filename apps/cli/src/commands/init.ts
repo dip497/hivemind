@@ -4,6 +4,7 @@ import path from "node:path";
 import {
   HiveError,
   findRoot,
+  isLink,
   registerWorkspace,
   templates,
   writeConfig,
@@ -38,6 +39,9 @@ export const initCmd = defineCommand({
     const ctx = { json: !!args.json };
     const cwd = process.cwd();
     const root = path.join(cwd, ".hivemind");
+    if (await isLink(root)) {
+      return err(ctx, "linked_root", `${root} is a link. Hivemind keeps a workspace only in a real folder: replace the link with one.`);
+    }
 
     // Agentic-only (no --prefix): install/refresh the stack into an EXISTING
     // workspace, don't re-init storage. This is also the bare `hive init` path

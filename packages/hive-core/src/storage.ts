@@ -13,6 +13,7 @@
  *   └── .agent.md            <- auto-generated context for AI agents
  */
 
+import { randomUUID } from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import os from "node:os";
@@ -59,7 +60,8 @@ export async function findRoot(
     if (dir === home && !first) return null;
     const candidate = path.join(dir, DIR);
     try {
-      const st = await fs.stat(candidate);
+      // Never followed: a project can commit `.hivemind` as a link, and everything written here would land where it points.
+      const st = await fs.lstat(candidate);
       if (st.isDirectory()) return candidate;
     } catch {
       /* not here */
@@ -74,12 +76,28 @@ export async function findRoot(
 export async function requireRoot(cwd?: string): Promise<string> {
   const r = await findRoot(cwd);
   if (!r) {
+    const here = path.join(path.resolve(cwd ?? process.cwd()), DIR);
+    if (await isLink(here)) {
+      throw new HiveError("linked_root", `${here} is a link. Hivemind keeps a workspace only in a real folder: replace the link with one.`);
+    }
     throw new HiveError(
       "no_root",
       "no .hivemind/ found in this directory or any parent. run `hive init` first."
     );
   }
   return r;
+}
+
+export async function isLink(file: string): Promise<boolean> {
+  return fs.lstat(file).then((st) => st.isSymbolicLink(), () => false);
+}
+
+/** Write `file` by renaming a new file over it. A cloned project can commit a link at any name in
+ *  `.hivemind`: a rename replaces the link, where writing through it would change what it points at. */
+export async function replaceFile(file: string, data: string | Uint8Array): Promise<void> {
+  const tmp = path.join(path.dirname(file), `.${randomUUID()}.tmp`);
+  await fs.writeFile(tmp, data, { flag: "wx" });
+  await fs.rename(tmp, file).catch(async (e) => { await fs.rm(tmp, { force: true }); throw e; });
 }
 
 export class HiveError extends Error {
@@ -174,12 +192,9 @@ export async function writeConfig(root: string, cfg: Config): Promise<void> {
   const p = path.join(root, "config.yaml");
   // Validate before writing.
   const parsed = ConfigZ.parse(cfg);
-  // Atomic write: write to a sibling temp + rename. Bare `fs.writeFile` can
-  // produce a half-truncated file if two processes interleave (or a crash
-  // hits mid-write). rename is atomic on the same filesystem.
-  const tmp = `${p}.${process.pid}.${Date.now()}.tmp`;
-  await fs.writeFile(tmp, YAML.stringify(parsed), "utf8");
-  await fs.rename(tmp, p);
+  // Atomic write: bare `fs.writeFile` can produce a half-truncated file if two
+  // processes interleave (or a crash hits mid-write).
+  await replaceFile(p, YAML.stringify(parsed));
 }
 
 // Per-root async mutex serializing the next_id read-modify-write. Without it,
@@ -284,7 +299,7 @@ async function isoActivityTimestamps(root: string): Promise<void> {
       changed = true;
       return `${m[1]}${m[2]}T${m[3]}:00.000Z${m[4]}${line.slice(m[0].length)}`;
     });
-    if (changed) await fs.writeFile(file, lines.join("\n"));
+    if (changed) await replaceFile(file, lines.join("\n"));
   }
 }
 
@@ -357,8 +372,13 @@ export function serializeIssue(issue: Issue): string {
 }
 
 export async function writeIssue(issue: Issue): Promise<void> {
-  await fs.mkdir(path.dirname(issue.path), { recursive: true });
-  await fs.writeFile(issue.path, serializeIssue(issue), "utf8");
+  const dir = path.dirname(issue.path);
+  await fs.mkdir(dir, { recursive: true });
+  for (let d = dir; d !== path.dirname(d); d = path.dirname(d)) {
+    if (await isLink(d)) throw new HiveError("linked_folder", `${d} is a link: issues are kept only in real folders`);
+    if (path.basename(d) === "issues") break;
+  }
+  await replaceFile(issue.path, serializeIssue(issue));
 }
 
 export async function deleteIssueFile(root: string, id: string): Promise<void> {

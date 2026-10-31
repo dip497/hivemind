@@ -50,6 +50,15 @@ describe("review comments", () => {
     expect(await fs.readdir(elsewhere)).toEqual([]);
   });
 
+  test("a project whose .hivemind is a link keeps its notes in the config folder, not where the link points", async () => {
+    const repo = await root();
+    const elsewhere = await root();
+    const home = await root();
+    await fs.symlink(elsewhere, path.join(repo, ".hivemind"));
+    const r = await reviewRoot(repo, home);
+    expect(r.startsWith(path.join(process.env.XDG_CONFIG_HOME?.trim() || path.join(home, ".config"), "hivemind", "review"))).toBe(true);
+  });
+
   test("a comment round-trips through the file the CLI reads", async () => {
     const r = await root();
     const added = await addComment(r, seed);
