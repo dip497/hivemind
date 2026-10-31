@@ -120,6 +120,10 @@ The command waits until every worker has replied. `--close` closes their tiles a
     - `hive ctl browser sign-in github`: a sign-in you saved in **Sign-ins** on the same page. After
       **Sign in once** or **Always on this site**, the app types it, only on that site and only in
       the page's own visible fields. An agent can't choose where it goes.
+  - **An agent sees every tab of a tile it can reach,** and a link that opens a new tab opens one there.
+  - **Pages work as in a browser.** `agent-browser download`, `pdf`, `reload` and `vitals` work on
+    a tile's page. `agent-browser dialog accept` answers a page's `confirm` and closes the box you
+    see for it. A page's `prompt()` always fails: Electron does not have it.
   - **Settings on the same page:** install or update agent-browser, turn **Use these Browser
     tiles** off so it starts a Chrome of its own, or turn **Mark what pages say** off. The same
     settings are `hive config set agentBrowser.useTiles false` and

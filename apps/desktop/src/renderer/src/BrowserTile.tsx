@@ -12,6 +12,7 @@ import { keyLabel } from "./shortcut";
 import { WatchedPage } from "./WatchedPage";
 import { usePageAnnotate } from "./browser-notes";
 import { AgentAccessMenu, DrivingBar, PersonAskBar } from "./browser-agents";
+import { PageDownloads, usePageDownloads } from "./browser-downloads";
 
 interface Props {
   tileId: string;
@@ -118,10 +119,9 @@ function TabView({
       ref={ref as React.RefObject<HTMLElement>}
       src={initialUrl}
       partition="persist:browser"
-      // allowpopups must be present at attach time for window.open / target=_blank
-      // to fire the guest's window-open handler (main routes it back as a new tab).
-      // Without it the guest silently swallows popups → "links don't open".
-      allowpopups={true}
+      // A string, whatever its type says: React drops `true` on an attribute it does not know, and
+      // without it, at attach time, a page's pop-ups never reach main, which opens them as tabs.
+      allowpopups={"true" as unknown as boolean}
       className="w-full h-full"
       style={{ display: active ? "inline-flex" : "none", width: "100%", height: "100%" }}
     />
@@ -161,9 +161,11 @@ function WebView({ tileId, frameId, url, repoPath, selected, openReq, onClose, p
 
   const wvMap = useRef(new Map<string, WebviewTag>());
   // A page asks for the camera, the location… on this tile: one of its tabs, attached or loading.
-  const { ask, answer } = useBrowserAsks(useCallback((pageId: number) => [...(guestsRef.current?.querySelectorAll("webview") ?? [])].some((wv) => {
+  const ownsPage = useCallback((pageId: number) => [...(guestsRef.current?.querySelectorAll("webview") ?? [])].some((wv) => {
     try { return (wv as WebviewTag).getWebContentsId() === pageId; } catch { return false; }
-  }), []));
+  }), []);
+  const { ask, answer } = useBrowserAsks(ownsPage);
+  const { downloads, dismiss } = usePageDownloads(ownsPage);
   const activeIdRef = useRef(activeId);
   const addrFocused = useRef(false);
   activeIdRef.current = activeId;
@@ -430,6 +432,7 @@ function WebView({ tileId, frameId, url, repoPath, selected, openReq, onClose, p
       <div ref={guestsRef} className="flex-1 bg-white relative overflow-clip">
         {ask && <BrowserAsk ask={ask} answer={answer} />}
         {!ask && <PersonAskBar tileId={tileId} />}
+        <PageDownloads downloads={downloads} dismiss={dismiss} />
         {notes.layer}
         <div
           className="absolute left-0 top-0"

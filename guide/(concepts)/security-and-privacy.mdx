@@ -46,6 +46,9 @@ gets your USB, serial or input devices, a speaker or your screen: the app has no
 A view, or a page a tool shows in its tile, never gets any of these. A tool's own code runs in the
 app's page and gets what the app uses: notifications and copying.
 
+A link that opens a new tab, or `window.open`, opens a tab in the same tile. A page opens at most 5
+in 30 seconds, and only web pages.
+
 <Warning>
 With **Agent browser control** on, an agent drives the Browser tiles it can reach, signed in as you.
 These limits stop mistakes, and an agent steered by a page: it reaches only [the tiles beside
