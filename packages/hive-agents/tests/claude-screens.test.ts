@@ -101,6 +101,13 @@ const WORKING_ON = (message: string) => [
   "  ⏵⏵ auto mode on (shift+tab to cycle) · esc to interrupt",
 ].join("\n");
 
+test("its line saying it waits for background work reads as working, before its hooks have spoken", () => {
+  for (const line of ["Waiting for 2 background agents to finish", "Waiting for 1 dynamic workflow to finish", "Waiting for 1 background agent and 2 dynamic workflows to finish"]) {
+    expect(claude().detect!(`✻ Baked for 7s\n\n  ${line}\n\n❯ \n`)).toEqual({ status: "working" });
+  }
+  expect(claude().detect!("✻ Baked for 7s\n\n  1 dynamic workflow ran\n\n❯ \n")).toEqual({ status: "idle" });
+});
+
 test("a message that starts with a number is not a chooser's option, while Claude works on it or after", () => {
   expect(claude().detect!(WORKING_ON("25.04.1+1 GA check this version"))).toEqual({ status: "working" });
   expect(claude().detect!(WORKING_ON("1. fix the login, 2. then the logout"))).toEqual({ status: "working" });

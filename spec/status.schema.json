@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://hivemind.dev/spec/status/0.1.json",
+  "$id": "https://hivemind.dev/spec/status/0.2.json",
   "title": "Agent status",
   "description": "A session's status: the fold of its events and host facts (status.md).",
   "type": "object",
@@ -44,6 +44,11 @@
     "background": {
       "type": "integer",
       "minimum": 0
+    },
+    "awaiting": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Its turn over and still working: the background tasks it waits to hear from. Absent otherwise."
     },
     "compacting": {
       "type": "boolean"

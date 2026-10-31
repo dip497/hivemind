@@ -1,5 +1,5 @@
 import { expect, jest, test } from "bun:test";
-import { StatusStore, SUBAGENT_GRACE_MS, isSessionStatus, type SessionStatus, type StatusChange } from "../src/status-store.js";
+import { AWAITING_QUIET_MS, StatusStore, SUBAGENT_GRACE_MS, isSessionStatus, type SessionStatus, type StatusChange } from "../src/status-store.js";
 
 const store = () => { let t = 1000; const s = new StatusStore({ now: () => ++t }); return s; };
 
@@ -296,4 +296,76 @@ test("subagents whose stop never came stop counting once no subagent edge has co
   } finally {
     jest.useRealTimers();
   }
+});
+
+test("a wait on background work that hears no hook for so long is over: at rest, and any hook pushes that out", () => {
+  jest.useFakeTimers();
+  try {
+    const s = new StatusStore();
+    const seen: StatusChange[] = [];
+    s.subscribe((c) => seen.push(c));
+    s.event("a", { event: "turn.ended", outcome: "done", awaiting: 1 });
+    jest.advanceTimersByTime(AWAITING_QUIET_MS - 1);
+    s.event("a", { event: "input.resolved" }); // a tool of the work it waits on
+    jest.advanceTimersByTime(AWAITING_QUIET_MS - 1);
+    expect(s.get("a")).toMatchObject({ state: "working", awaiting: 1 });
+    const before = seen.length;
+    jest.advanceTimersByTime(1);
+    expect(s.get("a")?.state).toBe("idle");
+    expect(s.get("a")?.awaiting).toBeUndefined();
+    expect(seen.length).toBe(before + 1);
+
+    // Its work comes back after all: it is working, and finishes, as any turn.
+    s.event("a", { event: "turn.started" });
+    s.event("a", { event: "turn.ended", outcome: "done" });
+    expect(s.get("a")?.state).toBe("done");
+    jest.advanceTimersByTime(AWAITING_QUIET_MS * 2);
+    expect(s.get("a")?.state).toBe("done");
+  } finally {
+    jest.useRealTimers();
+  }
+});
+
+test("a turn that begins out of a wait is the agent's own: hearing nothing for so long does not end it", () => {
+  jest.useFakeTimers();
+  try {
+    const s = new StatusStore();
+    s.event("a", { event: "turn.ended", outcome: "done", awaiting: 1 });
+    s.event("a", { event: "turn.started" });
+    jest.advanceTimersByTime(AWAITING_QUIET_MS * 2);
+    expect(s.get("a")?.state).toBe("working");
+  } finally {
+    jest.useRealTimers();
+  }
+});
+
+test("an interrupt key or an exit leaves a wait, and says so", () => {
+  const s = store();
+  s.event("a", { event: "turn.ended", outcome: "done", awaiting: 2 });
+  s.input("a", "\x1b");
+  expect(s.get("a")?.state).toBe("interrupted");
+  expect(s.get("a")?.awaiting).toBeUndefined();
+  s.event("b", { event: "turn.ended", outcome: "done", awaiting: 2 });
+  s.exited("b");
+  expect(s.get("b")?.state).toBe("exited");
+  expect(s.get("b")?.awaiting).toBeUndefined();
+});
+
+test("a chooser answered mid-wait returns to the wait, not to rest", () => {
+  const s = store();
+  s.event("a", { event: "turn.ended", outcome: "done", awaiting: 1 });
+  s.event("a", { event: "input.requested", kind: "permission" });
+  s.screen("a", "permission");
+  s.screen("a", "idle");
+  expect(s.get("a")).toMatchObject({ state: "working", awaiting: 1 });
+});
+
+test("a recount of the wait is told, though its state stays", () => {
+  const s = store();
+  const told: Array<number | undefined> = [];
+  s.subscribe((c) => told.push(c.status.awaiting));
+  s.event("a", { event: "turn.ended", outcome: "done", awaiting: 3 });
+  s.event("a", { event: "subagent.stopped", agentId: "x", awaiting: 2 });
+  s.event("a", { event: "subagent.stopped", agentId: "y", awaiting: 2 });
+  expect(told).toEqual([3, 2]);
 });

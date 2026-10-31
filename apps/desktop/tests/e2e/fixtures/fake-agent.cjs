@@ -185,10 +185,15 @@ function steerable(prompt) {
   });
 }
 
+/** What it says is running in the background as a turn ends: `.fake-background.json`, in its folder. */
+function backgroundTasks() {
+  try { return { background_tasks: JSON.parse(fs.readFileSync(".fake-background.json", "utf8")) }; } catch { return {}; }
+}
+
 function reply(text) {
   record("assistant", [{ type: "text", text }]);
   process.stdout.write(`${text}\n`);
-  fire("Stop", { session_id: sessionId, transcript_path: transcriptPath, stop_hook_active: false, last_assistant_message: text });
+  fire("Stop", { session_id: sessionId, transcript_path: transcriptPath, stop_hook_active: false, last_assistant_message: text, ...backgroundTasks() });
   process.stdout.write(PROMPT);
 }
 

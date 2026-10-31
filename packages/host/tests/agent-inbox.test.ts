@@ -89,6 +89,67 @@ test("an agent that reports no turns takes a message while its screen shows it w
   assert.equal(typed("leader"), "", "an agent that reports its turns gets it at the end of this one");
 });
 
+test("a worker waiting on work it started reports what it says once that is over, not that it started it", async () => {
+  const { p, turn, hook, inbox } = plane();
+  (await p.api()).connect("w", "leader");
+  hook("w", "turn.started");
+  p.event("agent.reply", { tileId: "hm:w", text: "started a workflow" });
+  hook("w", "turn.ended", { background: 1, awaiting: 1 });
+  assert.deepEqual((await inbox("leader")).messages, []);
+  hook("w", "subagent.stopped", { agentId: "a1", awaiting: 1 });
+  assert.deepEqual((await inbox("leader")).messages, []);
+
+  turn("w", "the workflow found 3 bugs");
+  assert.deepEqual((await inbox("leader")).messages.map((m) => m.text), ["the workflow found 3 bugs"]);
+  assert.deepEqual((await inbox("leader")).messages, [], "told once");
+});
+
+test("a shell left running holds no report", async () => {
+  const { p, hook, inbox } = plane();
+  (await p.api()).connect("w", "leader");
+  hook("w", "turn.started");
+  p.event("agent.reply", { tileId: "hm:w", text: "the server is up" });
+  hook("w", "turn.ended", { background: 1 });
+  assert.deepEqual((await inbox("leader")).messages.map((m) => m.text), ["the server is up"]);
+});
+
+test("a wait that ends with no turn to report it reports what the worker last said: interrupted, exited or counted out", async () => {
+  const ways: Array<[string, (t: ReturnType<typeof plane>) => void]> = [
+    ["interrupted", ({ p }) => p.typed("hm:w", "\x1b")],
+    ["exited", ({ p }) => p.status.exited("w")],
+    ["counted out", ({ hook }) => hook("w", "subagent.stopped", { agentId: "a1", awaiting: 0 })],
+  ];
+  for (const [how, end] of ways) {
+    const t = plane();
+    (await t.p.api()).connect("w", "leader");
+    t.hook("w", "turn.started");
+    t.p.event("agent.reply", { tileId: "hm:w", text: "started a workflow" });
+    t.hook("w", "turn.ended", { awaiting: 1 });
+    assert.deepEqual((await t.inbox("leader")).messages, [], how);
+    end(t);
+    assert.deepEqual((await t.inbox("leader")).messages.map((m) => m.text), ["started a workflow"], how);
+    assert.deepEqual((await t.inbox("leader")).messages, [], `${how}: told once`);
+  }
+});
+
+test("a message for an agent at its prompt, waiting on work it started, is typed at once", async () => {
+  const { p, typed, hook } = plane();
+  hook("w", "turn.started");
+  hook("w", "turn.ended", { awaiting: 1 });
+  assert.equal((await p.api()).send("w", "also check the docs").held, false, "nothing it waits on holds a message");
+  await settle();
+  assert.match(typed("w"), /also check the docs/);
+  assert.equal(p.status.get("w")?.state, "working");
+});
+
+test("an agent already waiting on work it started when this app comes up is not taken to be in a turn", async () => {
+  const { p, typed } = plane();
+  p.fromMachine("agent.status", { tileId: "hm:leader", status: { state: "working", awaiting: 1, subagents: [], background: 1, compacting: false, source: "hooks", since: 1 } });
+  (await p.api()).send("leader", "also check the docs");
+  await settle();
+  assert.match(typed("leader"), /also check the docs/);
+});
+
 test("a worker's reply waits in its leader's inbox, read once; the leader's terminal is told only that some came", async () => {
   const { p, typed, hook, turn, inbox } = plane();
   hook("leader", "turn.started");

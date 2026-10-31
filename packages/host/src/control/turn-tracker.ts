@@ -8,6 +8,8 @@ export interface TurnRecord {
   seq: number;
   /** The turn's reply, as the agent's plugin reported it (`agent.reply`); null when none did. */
   text?: string | null;
+  /** Background tasks the agent was still waiting on when the turn ended; absent when none. */
+  awaiting?: number;
 }
 
 type Waiter = { afterSeq: number; resolve: (r: TurnRecord) => void; timer: NodeJS.Timeout };
@@ -58,10 +60,11 @@ export class TurnTracker {
    *  (agent.read) took it OR the worker authored an explicit report this turn —
    *  in both cases an auto-report banner would be a duplicate that spawns a spurious
    *  extra turn on the parent. */
-  recordTurn(tileId: string, text?: string | null): boolean {
+  recordTurn(tileId: string, text?: string | null, awaiting?: number): boolean {
     const r = this.get(tileId);
     r.seq += 1;
     r.text = text ?? this.pendingReply.get(tileId) ?? null;
+    r.awaiting = awaiting;
     this.pendingReply.delete(tileId);
     const reported = this.reportedThisTurn.delete(tileId); // explicit report this turn
     const ws = this.waiters.get(tileId);

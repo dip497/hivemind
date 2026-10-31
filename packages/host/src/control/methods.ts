@@ -993,8 +993,9 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
       // Held: it waits for the turn running now to end. One for an agent at its prompt is typed
       // once that prompt is read, a moment from now, and waits on nothing (#220 holds every
       // message for an agent that reports its turns, its first too).
-      const state = deps.status.get(bareOf(tile))?.state;
-      return { sent: ok, held: ok && !typed && (state === "working" || state === "waiting") };
+      const status = deps.status.get(bareOf(tile));
+      const inTurn = status?.state === "waiting" || (status?.state === "working" && !status.awaiting);
+      return { sent: ok, held: ok && !typed && inTurn };
     },
 
     keys(tile, keys) {
@@ -1067,8 +1068,11 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
         sentSinceRead.delete(pid);
         deps.inbox.given(bare, "reply", rec.seq);
       }
-      if (rec && typeof rec.text === "string" && rec.text.length > 0) return { text: rec.text, finalStatus: "turn", truncated: false };
-      if (rec) return { text: null, finalStatus: "turn", truncated: false, note: "turn completed but carried no readable reply" };
+      // Its turn is over, and work it started has yet to come back: a later turn brings that.
+      const awaiting = rec?.awaiting;
+      const coming = awaiting ? { awaiting, note: `still waiting on ${awaiting} background ${awaiting === 1 ? "task" : "tasks"} it started: read it again for what comes of that` } : {};
+      if (rec && typeof rec.text === "string" && rec.text.length > 0) return { text: rec.text, finalStatus: "turn", truncated: false, ...coming };
+      if (rec) return { text: null, finalStatus: "turn", truncated: false, note: "turn completed but carried no readable reply", ...coming };
       // No completed turn within the timeout: the agent is still working. Spawned with
       // report:true, its reply goes to its starter's inbox when done.
       if (timeoutMs === 0) return { text: null, finalStatus: "working", truncated: false, note: `still working: wait for its reply with hive ctl read ${bare}` };

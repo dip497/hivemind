@@ -16,4 +16,7 @@ test("the host's states read as the kinds tiles and views colour by", () => {
   expect(tileStatusOf(hosted({ state: "limited" }))).toEqual({ status: "idle", detail: "usage limit reached" });
   expect(tileStatusOf(hosted({ state: "interrupted" }))).toEqual({ status: "idle", detail: "interrupted", synthetic: true });
   expect(tileStatusOf(hosted({ state: "exited" })).status).toBe("exited");
+  expect(tileStatusOf(hosted({ state: "working", awaiting: 1 })).status).toBe("working");
+  expect(tileStatusOf(hosted({ state: "idle" }))).toEqual({ status: "idle", synthetic: true }); // its hooks went quiet: nothing finished
+  expect(tileStatusOf(hosted({ state: "idle", source: "screen" }))).toEqual({ status: "idle" }); // its screen shows it finished
 });

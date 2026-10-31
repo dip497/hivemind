@@ -173,6 +173,10 @@ describe("the posted event", () => {
     expect(parseAgentEvent({ tileId: "t", event: "turn.started", background: 2 })).toEqual({ tileId: "t", event: "turn.started" });
     expect(parseAgentEvent({ tileId: "t", event: "turn.ended", background: "3; rm -rf" })).toEqual({ tileId: "t", event: "turn.ended", outcome: "done" });
     for (const bad of [null, {}, { tileId: "", event: "turn.ended" }, { tileId: "t", event: "tool.called" }]) expect(parseAgentEvent(bad)).toBeNull();
+    expect(parseAgentEvent({ tileId: "t", event: "turn.ended", awaiting: 2 })).toEqual({ tileId: "t", event: "turn.ended", outcome: "done", awaiting: 2 });
+    expect(parseAgentEvent({ tileId: "t", event: "subagent.stopped", awaiting: 0 })).toEqual({ tileId: "t", event: "subagent.stopped", awaiting: 0 });
+    expect(parseAgentEvent({ tileId: "t", event: "turn.started", awaiting: 2 })).toEqual({ tileId: "t", event: "turn.started" });
+    for (const awaiting of ["3; rm -rf", -1, 1.5, 10_000]) expect(parseAgentEvent({ tileId: "t", event: "turn.ended", awaiting })).toEqual({ tileId: "t", event: "turn.ended", outcome: "done" });
   });
 
   test("names a session only by an id, never by what a restart would read as a flag or a path", () => {

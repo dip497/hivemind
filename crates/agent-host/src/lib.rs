@@ -24,11 +24,13 @@ pub struct Status {
     pub kind: Option<Kind>,
     pub subagents: Vec<String>,
     pub background: u32,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub awaiting: Option<u32>,
     pub compacting: bool,
 }
 
 impl Default for Status {
-    fn default() -> Self { Status { state: State::Idle, kind: None, subagents: vec![], background: 0, compacting: false } }
+    fn default() -> Self { Status { state: State::Idle, kind: None, subagents: vec![], background: 0, awaiting: None, compacting: false } }
 }
 
 /// One input to the fold: a canonical event, or a fact the host observed.
@@ -42,6 +44,7 @@ pub enum Input {
         #[serde(default)] kind: Option<Kind>,
         #[serde(default, rename = "agentId")] agent_id: Option<String>,
         #[serde(default)] background: Option<u32>,
+        #[serde(default)] awaiting: Option<u32>,
     },
 }
 
@@ -49,20 +52,25 @@ pub enum Input {
 pub fn fold(s: &Status, input: &Input) -> Status {
     if s.state == State::Exited { return s.clone(); }
     let to = |state: State, kind: Option<Kind>| Status { state, kind, ..s.clone() };
+    let leaving = |state: State| Status { state, kind: None, awaiting: None, ..s.clone() };
     match input {
         Input::Fact { fact } => match fact.as_str() {
-            "exited" => to(State::Exited, None),
-            "interrupt" if matches!(s.state, State::Working | State::Waiting) => to(State::Interrupted, None),
+            "exited" => leaving(State::Exited),
+            "interrupt" if matches!(s.state, State::Working | State::Waiting) => leaving(State::Interrupted),
+            "quiet" if s.state == State::Working && s.awaiting.is_some() => leaving(State::Idle),
             _ => s.clone(),
         },
-        Input::Event { event, outcome, kind, agent_id, background } => match event.as_str() {
-            "turn.started" => to(State::Working, None),
+        Input::Event { event, outcome, kind, agent_id, background, awaiting } => match event.as_str() {
+            "turn.started" => leaving(State::Working),
             "turn.ended" => {
-                let state = match outcome.unwrap_or(Outcome::Done) {
-                    Outcome::Done => State::Done, Outcome::Failed => State::Failed,
-                    Outcome::Interrupted => State::Interrupted, Outcome::Limited => State::Limited,
-                };
-                Status { background: background.unwrap_or(0), ..to(state, None) }
+                let background = background.unwrap_or(0);
+                match (outcome.unwrap_or(Outcome::Done), awaiting.unwrap_or(0)) {
+                    (Outcome::Done, n) if n > 0 => Status { background, awaiting: Some(n), ..leaving(State::Working) },
+                    (Outcome::Done, _) => Status { background, ..leaving(State::Done) },
+                    (Outcome::Failed, _) => Status { background, ..leaving(State::Failed) },
+                    (Outcome::Interrupted, _) => Status { background, ..leaving(State::Interrupted) },
+                    (Outcome::Limited, _) => Status { background, ..leaving(State::Limited) },
+                }
             }
             "input.requested" => to(State::Waiting, Some(kind.unwrap_or(Kind::Other))),
             "input.resolved" if s.state == State::Waiting => to(State::Working, None),
@@ -74,10 +82,18 @@ pub fn fold(s: &Status, input: &Input) -> Status {
                 }
                 _ => s.clone(),
             },
-            "subagent.stopped" => match agent_id {
-                Some(id) => Status { subagents: s.subagents.iter().filter(|x| *x != id).cloned().collect(), ..s.clone() },
-                None => s.clone(),
-            },
+            "subagent.stopped" => {
+                let left = match agent_id {
+                    Some(id) => Status { subagents: s.subagents.iter().filter(|x| *x != id).cloned().collect(), ..s.clone() },
+                    None => s.clone(),
+                };
+                match awaiting {
+                    Some(n) if s.state == State::Working && s.awaiting.is_some() => {
+                        if *n > 0 { Status { awaiting: Some(*n), ..left } } else { Status { state: State::Done, awaiting: None, ..left } }
+                    }
+                    _ => left,
+                }
+            }
             "compacting.started" => Status { compacting: true, ..s.clone() },
             "compacting.ended" => Status { compacting: false, ..s.clone() },
             _ => s.clone(),
