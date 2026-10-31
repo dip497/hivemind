@@ -340,7 +340,12 @@ test("the Browser tile an agent means: --tile, else the one in its frame; none t
   const lost = await hive(["ctl", "notes", "add", "--selector", "#trial", "--body", "x"], asAgent(away.json.tile));
   expect([lost.code, lost.json?.error?.code], lost.stderr).toEqual([5, "NO_BROWSER_TILE"]);
   expect(lost.json.error.fix).toContain("--tile");
+  // In another frame: named, it is still not this agent's until the person shares it.
+  const refused = await hive(["ctl", "notes", "add", "--selector", "#trial", "--body", "named", "--tile", tileId], asAgent(away.json.tile));
+  expect(refused.code).toBe(5);
+  await page.evaluate((id) => window.hive.settingsSet("agentBrowser.tiles", { [id]: "all" }), tileId);
   const named = await hive(["ctl", "notes", "add", "--selector", "#trial", "--body", "named", "--tile", tileId], asAgent(away.json.tile));
+  await page.evaluate(() => window.hive.settingsSet("agentBrowser.tiles", {}));
   expect(named.code, named.stderr).toBe(0);
   expect(named.json.author).toBe("away");
   // Starting that agent moved the canvas to it: the page is out of view, and still gives a picture.

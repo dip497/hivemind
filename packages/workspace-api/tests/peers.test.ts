@@ -42,6 +42,10 @@ const domain = {
       pipes: [{ src: "in-1", dst: "in-2" }, { src: "in-1", dst: "out-1" }, { src: "out-1", dst: "in-2" }],
       spawns: [{ parent: "in-1", child: "in-2" }, { parent: "out-1", child: "in-1" }],
     }),
+    "browser.asks": () => ({ asks: [] }),
+    "browser.answer": () => ({ answered: true }),
+    "browser.signIn": () => ({ ask: 1, tile: "b" }),
+    "browser.ask": () => ({ ask: 1, tile: "b" }),
     "agent.answer": (from: Connection, tile: unknown) => { ran.push({ what: "agent.answer", by: from.actor, args: [tile] }); return { answered: true }; },
     "agent.send": (from: Connection, tile: unknown) => { ran.push({ what: "agent.send", by: from.actor, args: [tile] }); return { sent: true }; },
     ...Object.fromEntries(["agent.startable", "agent.start", "agent.interrupt", "agent.close", "agent.diff", "agent.commands", "agent.conversation", "agent.tool", "agent.places", "agent.folders",
@@ -413,6 +417,23 @@ test("the machine's own methods are no peer's, the person's own devices included
   expect(await code(agent.client.call("tile.look", "out-1"))).toBe("NOT_FOUND");
   expect(await code(agent.client.call("page.note", "out-1", { body: "x", selector: "#x" }))).toBe("NOT_FOUND");
   expect(ran.map((r) => r.what)).toEqual(["plugin.call", "tools.rescan", "tile.focus", "tile.look", "page.note", "notifications.recentSounds"]);
+});
+
+test("a question on a Browser tile is the person's: their own devices answer it, a guest and an agent's tile cannot, and neither a peer nor anyone but an agent here starts a sign-in", async () => {
+  for (const access of ["view", "edit", "agents"] as const) {
+    const guest = connect(access);
+    expect(await code(guest.client.call("browser.asks"))).toBe("FORBIDDEN");
+    expect(await code(guest.client.call("browser.answer", 1, "yes"))).toBe("FORBIDDEN");
+  }
+  const phone = connect("owner");
+  expect(await code(phone.client.call("browser.asks"))).toBe("ok");
+  expect(await code(phone.client.call("browser.answer", 1, "yes"))).toBe("ok");
+  expect(await code(phone.client.call("browser.signIn", "github"))).toBe("FORBIDDEN");
+  expect(await code(phone.client.call("browser.ask", "sign in"))).toBe("FORBIDDEN");
+
+  const agent = connect("owner", undefined, REPO, "in-9");
+  expect(await code(agent.client.call("browser.answer", 1, "yes"))).toBe("FORBIDDEN");
+  expect(await code(agent.client.call("browser.signIn", "github"))).toBe("ok");
 });
 
 test("a peer is answered the statuses and links of its workspace's own agents, never another's", async () => {

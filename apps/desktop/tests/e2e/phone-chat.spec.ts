@@ -8,7 +8,7 @@
 // (fixtures/fake-agent.cjs) behind the real claude manifest and hooks, on a network of its own whose
 // server serves the page.
 import { test, expect, chromium, type Browser, type ElectronApplication, type Page } from "@playwright/test";
-import { execSync, type ChildProcess } from "node:child_process";
+import { execSync, spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -81,7 +81,7 @@ async function chatWith(steers: boolean, marks = false) {
   const sessionFile = () => path.join(transcripts, String(fs.readdirSync(transcripts, { recursive: true }).find((f) => String(f).endsWith(".jsonl"))));
   const prompts = () => recorded().split("\n").filter(Boolean).map((l) => JSON.parse(l) as { type: string; message?: { content: unknown } })
     .filter((r) => r.type === "user" && typeof r.message?.content === "string").map((r) => r.message!.content as string);
-  return { page, box, send, recorded, prompts, sessionFile, tile, home, person: page.locator('[data-chat] [data-who="person"]'), agent: page.locator('[data-chat] [data-who="agent"]') };
+  return { desktop, page, box, send, recorded, prompts, sessionFile, tile, home, person: page.locator('[data-chat] [data-who="person"]'), agent: page.locator('[data-chat] [data-who="agent"]') };
 }
 
 /** Photos as a phone's camera takes them: a `width` by `height` picture of noise, a PNG, far past
@@ -102,6 +102,37 @@ const cameraPhotos = (page: Page, count: number, width = 1600, height = 1200) =>
   }
   return shots;
 }, [count, width, height]).then((shots) => shots.map((bytes, n) => ({ name: `camera-${n}.png`, mimeType: "image/png", buffer: Buffer.from(bytes) })));
+
+test("a question on a Browser tile reaches the phone over the network, and the phone's answer ends it", async () => {
+  test.skip(!hiveNetBuilt() || !hiveWebBuilt(), "build hive-net (cargo build in crates/hive-net) and the page (crates/hive-web/build.sh)");
+  test.setTimeout(240_000);
+  const { desktop, page } = await chatWith(true);
+  await desktop.evaluate(() => window.hive.settingsSet("plugins.state.tool:@hivemind/web", { enabled: true }));
+  const frame = (await desktop.locator(".react-flow__node-frame").last().getAttribute("data-id"))!;
+  await desktop.evaluate((f) => window.dispatchEvent(new CustomEvent("hivemind:frame-open", { detail: { frameId: f, kind: "browser" } })), frame);
+  await expect(desktop.locator(".react-flow__node-browser")).toHaveCount(1, { timeout: 20_000 });
+  const browserTile = (await desktop.locator(".react-flow__node-browser").getAttribute("data-id"))!;
+  await expect.poll(() => desktop.evaluate(async (id) => {
+    try { await window.hive.browserCdp!(id, "Runtime.evaluate", { expression: "1" }); return true; } catch { return false; }
+  }, browserTile), { timeout: 25_000 }).toBe(true);
+
+  const data = await apps[apps.length - 1]!.evaluate(({ app }) => app.getPath("userData"));
+  const asked = new Promise<{ code: number | null; out: string }>((resolve) => {
+    const c = spawn("bun", [path.resolve("../cli/src/index.ts"), "ctl", "browser", "ask", "Please sign in", "--tile", browserTile, "--json"],
+      { env: { ...process.env, HIVEMIND_APP_DATA: data, HIVEMIND_TILE: "", HCP_TOKEN: "", HIVE_HCP_SOCK: "", HIVE_DRIVE_SOCK: "" }, stdio: ["ignore", "pipe", "pipe"] });
+    let out = "";
+    c.stdout.on("data", (d) => (out += d));
+    c.stderr.on("data", (d) => (out += d));
+    c.on("close", (code) => resolve({ code, out }));
+  });
+  const card = page.locator("[data-browser-asks]");
+  await expect(card).toContainText("Please sign in", { timeout: 20_000 });
+  await card.locator('[data-browser-ask-answer="done"]').click();
+  const r = await asked;
+  expect(r.out).toContain('"outcome":"done"');
+  expect(r.code).toBe(0);
+  await expect(card).toBeHidden({ timeout: 10_000 });
+});
 
 test("a message sent from the phone while Claude Code works shows in its chat at once, as the person's, and stays there once Claude Code takes it into the running turn", async ({}, testInfo) => {
   test.skip(!hiveNetBuilt() || !hiveWebBuilt(), "build hive-net (cargo build in crates/hive-net) and the page (crates/hive-web/build.sh) first");
