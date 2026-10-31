@@ -1,4 +1,4 @@
-//! Notes the person left on a page in a Browser tile on the computer: review comments on a page
+//! Notes left on a page in a Browser tile on the computer: review comments on a page
 //! (core's `review.ts`). The phone lists a workspace's, closes or reopens one, and sends the open
 //! ones to an agent, in the words the computer writes for it (`review.message`).
 
@@ -22,6 +22,12 @@ pub struct Note {
     /// What was done, or why it was dismissed.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub summary: Option<String>,
+    /// The agent that left it; none when the person did.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub agent: Option<String>,
+    /// The names of the files kept on it as proof, which stay on the computer.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub attachments: Vec<String>,
 }
 
 /// The notes on pages among a workspace's review comments, as `review.list` gives them.
@@ -52,6 +58,14 @@ pub fn read_notes(comments: &Value) -> Vec<Note> {
                 what,
                 url: text(page, "url")?,
                 summary: text(c, "summary"),
+                agent: text(c, "author").filter(|a| a != "you"),
+                attachments: c
+                    .get("attachments")
+                    .and_then(Value::as_array)
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|n| n.as_str().map(str::to_owned))
+                    .collect(),
             })
         })
         .collect()
@@ -138,5 +152,19 @@ mod tests {
             ]
         );
         assert_eq!(notes[2].summary.as_deref(), Some("now 48px"));
+    }
+
+    #[test]
+    fn a_note_says_which_agent_left_it_and_what_files_it_keeps_and_the_persons_says_neither() {
+        let listed = json!([
+            { "id": "c-1", "body": "broken", "author": "pi #2", "attachments": ["c-1-1.webm", "c-1-2.png"], "page": { "url": "http://x/", "elements": [{ "name": "img" }] } },
+            { "id": "c-2", "body": "bigger", "author": "you", "page": { "url": "http://x/", "elements": [{ "name": "img" }] } }
+        ]);
+        let notes = read_notes(&listed);
+        assert_eq!(notes[0].agent.as_deref(), Some("pi #2"));
+        assert_eq!(notes[0].attachments, ["c-1-1.webm", "c-1-2.png"]);
+        assert_eq!(notes[1].agent, None);
+        let shown = serde_json::to_value(&notes[1]).unwrap();
+        assert!(shown.get("agent").is_none() && shown.get("attachments").is_none());
     }
 }

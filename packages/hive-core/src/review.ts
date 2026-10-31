@@ -10,14 +10,22 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { findRoot, HiveError, replaceFile } from "./storage.js";
+import { findRoot, HiveError, replaceFile, replaceFileWithCopy } from "./storage.js";
 
 export * from "./review-shape.js";
-import { onPage, REVIEW_INTENTS, statusOf, type DiffComment, type PageAnchor, type PageBox, type PageComment, type PageElement, type ReviewComment, type ReviewIntent, type ReviewReply, type CommentFields } from "./review-shape.js";
+import { byAgent, onPage, REVIEW_INTENTS, statusOf, type DiffComment, type PageAnchor, type PageBox, type PageComment, type PageElement, type ReviewComment, type ReviewIntent, type ReviewReply, type CommentFields } from "./review-shape.js";
 
 export const REVIEW_FILE = "review.json";
 /** Where a page note's picture is kept, beside review.json. */
 export const PICTURES_DIR = "pages";
+/** What a note may keep as proof. */
+export const ATTACHMENT_KINDS = ["webm", "mp4", "png", "jpg", "gif"] as const;
+export const MAX_ATTACHMENT_BYTES = 200 * 1024 * 1024;
+
+// A file a note keeps is named in pages/, never by a path.
+const isPictureName = (v: unknown): v is string => typeof v === "string" && /^[\w.-]{1,120}\.png$/.test(v) && !v.startsWith(".");
+const attachmentName = new RegExp(`^[\\w-]{1,120}\\.(${ATTACHMENT_KINDS.join("|")})$`);
+const isAttachmentName = (v: unknown): v is string => typeof v === "string" && attachmentName.test(v);
 
 export function reviewPath(root: string): string {
   return path.join(root, REVIEW_FILE);
@@ -65,8 +73,7 @@ function anchor(raw: unknown): PageAnchor | null {
   const area = a.area === undefined ? null : box(a.area);
   if (!url || (!elements.length && !area)) return null;
   const v = (a.viewport ?? {}) as Record<string, unknown>;
-  // A picture is a file name in pages/, never a path.
-  const picture = typeof a.picture === "string" && /^[\w.-]{1,120}\.png$/.test(a.picture) && !a.picture.startsWith(".") ? a.picture : null;
+  const picture = isPictureName(a.picture) ? a.picture : null;
   return {
     url,
     ...(str(a.title, 300) ? { title: str(a.title, 300)! } : {}),
@@ -110,7 +117,11 @@ export function normalizeComments(raw: unknown): ReviewComment[] {
         : {}),
     };
     const page = c.page === undefined ? null : anchor(c.page);
-    if (page) { out.push({ ...fields, page }); continue; }
+    if (page) {
+      const attachments = Array.isArray(c.attachments) ? c.attachments.filter(isAttachmentName).slice(0, 50) : [];
+      out.push({ ...fields, page, ...(attachments.length ? { attachments } : {}) });
+      continue;
+    }
     const file = str(c.file, 4096);
     if (!file) continue;
     const start = line(c.startLine);
@@ -174,9 +185,10 @@ export function editComment(root: string, id: string, body: string): Promise<Rev
 
 export async function deleteComment(root: string, id: string): Promise<boolean> {
   const list = await readComments(root);
-  const next = list.filter((c) => c.id !== id);
-  if (next.length === list.length) return false;
-  await writeComments(root, next);
+  const gone = list.find((c) => c.id === id);
+  if (!gone) return false;
+  await writeComments(root, list.filter((c) => c !== gone));
+  if (onPage(gone)) await removePageFiles(root, [...(gone.page.picture ? [gone.page.picture] : []), ...(gone.attachments ?? [])]);
   return true;
 }
 
@@ -192,11 +204,17 @@ export function markSeen(root: string, id: string): Promise<ReviewComment | null
   });
 }
 
-export function resolveComment(root: string, id: string, summary?: string): Promise<ReviewComment | null> {
-  return mutate(root, id, ({ seen: _s, ...c }) => {
+/** Done, saying how, with any `proof` (paths of files to keep on it). */
+export function resolveComment(root: string, id: string, summary?: string, proof: readonly string[] = []): Promise<ReviewComment | null> {
+  return withAttachments(root, id, proof, ({ seen: _s, ...c }) => {
     open(c, "reopen it first");
     return { ...c, resolved: true, ...(summary ? { summary } : {}) };
   });
+}
+
+/** Keep `proof` (paths of files) on a note, however it stands. */
+export function attachToComment(root: string, id: string, proof: readonly string[]): Promise<ReviewComment | null> {
+  return withAttachments(root, id, proof, (c) => c);
 }
 
 /** Closed without doing it, saying why. */
@@ -233,19 +251,78 @@ export async function listComments(root: string, filter: CommentFilter = {}): Pr
   );
 }
 
-/** Keep a page note's picture beside review.json; the name to store on its anchor. */
-export async function writePicture(root: string, id: string, png: Uint8Array): Promise<string> {
-  const name = `${id.replace(/[^\w-]/g, "")}.png`;
+/** The folder a note's files go in, made if it is missing; one that is a link is refused. */
+async function picturesFolder(root: string): Promise<string> {
   const dir = path.join(root, PICTURES_DIR);
   await fs.mkdir(dir, { recursive: true });
   if (!(await fs.lstat(dir)).isDirectory()) throw new HiveError("REVIEW_PICTURES", `${dir} is not a folder`);
   // A picture can show a signed-in page: `git add -A` must not take it into the project's history.
   await replaceFile(path.join(dir, ".gitignore"), "*\n");
-  await replaceFile(path.join(dir, name), png);
+  return dir;
+}
+
+const fileStem = (id: string): string => id.replace(/[^\w-]/g, "");
+
+/** Keep a page note's picture beside review.json; the name to store on its anchor. */
+export async function writePicture(root: string, id: string, png: Uint8Array): Promise<string> {
+  const name = `${fileStem(id)}.png`;
+  await replaceFile(path.join(await picturesFolder(root), name), png);
   return name;
 }
 
 export const picturePath = (root: string, name: string): string => path.join(root, PICTURES_DIR, name);
+
+const kindOf = (file: string): string => path.extname(file).slice(1).toLowerCase();
+
+/** Refused, saying why, when `file` cannot be kept as proof on a note. */
+export async function checkAttachment(file: string): Promise<void> {
+  if (!(ATTACHMENT_KINDS as readonly string[]).includes(kindOf(file))) {
+    throw new HiveError("ATTACHMENT_TYPE", `${file}: a note keeps only ${ATTACHMENT_KINDS.map((k) => `.${k}`).join(", ")} files`);
+  }
+  const found = await fs.stat(file).catch(() => null);
+  if (!found?.isFile()) throw new HiveError("ATTACHMENT_MISSING", `${file} is not a file`);
+  if (found.size > MAX_ATTACHMENT_BYTES) throw new HiveError("ATTACHMENT_TOO_BIG", `${file} is ${Math.ceil(found.size / 1024 / 1024)} MB: a note keeps at most ${MAX_ATTACHMENT_BYTES / 1024 / 1024} MB per file`);
+}
+
+/** Copy `proof` in beside the note and make `change`, with the copies named on it. A change
+ *  refused, or a copy that fails, leaves nothing behind. */
+async function withAttachments(root: string, id: string, proof: readonly string[], change: (c: ReviewComment) => ReviewComment): Promise<ReviewComment | null> {
+  if (!proof.length) return mutate(root, id, change);
+  for (const file of proof) await checkAttachment(file);
+  const found = (await readComments(root)).find((c) => c.id === id);
+  if (!found) return null;
+  if (!onPage(found)) throw new HiveError("ATTACHMENT_NOT_A_NOTE", `comment ${id} is on a diff: only a note on a page keeps attachments`);
+  const dir = await picturesFolder(root);
+  const taken = found.attachments?.length ?? 0;
+  const names = proof.map((file, i) => `${fileStem(id)}-${taken + i + 1}.${kindOf(file)}`);
+  try {
+    for (const [i, file] of proof.entries()) await replaceFileWithCopy(path.join(dir, names[i]!), file);
+    return await mutate(root, id, (c) => {
+      const next = change(c);
+      return onPage(next) ? { ...next, attachments: [...(next.attachments ?? []), ...names] } : next;
+    });
+  } catch (e) {
+    await removePageFiles(root, names);
+    throw e;
+  }
+}
+
+/** Remove a note's files. Through a pictures folder that is a link, nothing. */
+async function removePageFiles(root: string, names: readonly string[]): Promise<void> {
+  const dir = path.join(root, PICTURES_DIR);
+  if (!names.length || !(await fs.lstat(dir).then((d) => d.isDirectory(), () => false))) return;
+  await Promise.all(names.map((name) => fs.rm(path.join(dir, name), { force: true }).catch(() => {})));
+}
+
+/** Where a note's file `name` is, to show it. None for a name no note could hold, for what is not
+ *  there, or for a link a cloned project committed in place of the folder or the file. */
+export async function pageFilePath(root: string, name: string): Promise<string | null> {
+  if (!isPictureName(name) && !isAttachmentName(name)) return null;
+  const dir = path.join(root, PICTURES_DIR);
+  const file = path.join(dir, name);
+  const real = await Promise.all([fs.lstat(dir), fs.lstat(file)]).then(([d, f]) => d.isDirectory() && f.isFile(), () => false);
+  return real ? file : null;
+}
 
 const boxText = (b: PageBox): string => `${b.width}×${b.height} at ${b.x},${b.y}`;
 
@@ -258,6 +335,8 @@ export function pageNoteText(c: PageComment, root: string): string {
     ...(p.area ? [`  area: ${boxText(p.area)}`] : []),
     ...p.elements.map((e) => `  - ${e.name}: \`${e.selector}\`, ${boxText(e.box)}${e.text ? `, text "${e.text}"` : ""}${e.nearby ? `, near "${e.nearby}"` : ""}`),
     ...(p.picture ? [`  picture: ${picturePath(root, p.picture)}`] : []),
+    ...(c.attachments ?? []).map((name) => `  attachment: ${picturePath(root, name)}`),
+    ...(byAgent(c) ? [`  left by an agent: ${c.author}`] : []),
     ...(c.replies ?? []).map((r) => `  ↳ ${r.author}: ${r.body}`),
   ].join("\n");
 }

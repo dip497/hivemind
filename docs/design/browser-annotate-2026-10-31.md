@@ -8,6 +8,10 @@ Status: built, 2026-10-31 (steps 1–6 below). Two choices differ from the plan:
 - The pins are a layer the app adds to the page through DevTools, inside a shadow root. They
   scroll with the page, and the phone sees them in its pictures.
 
+Added since: an agent leaves a note the same way (`hive ctl notes add`, the API's `page.note`), and a
+note keeps proof, videos or images in `pages/` beside its picture (`attachments`), shown in the
+tile's list through `hivemedia://note/<repo>/<name>`.
+
 The person points at things on a page in a Browser tile, writes a note on each, and sends the
 notes to an agent tile. The agent works through them and marks each one done, dismissed or
 answered, and the markers on the page show it.

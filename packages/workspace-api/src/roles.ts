@@ -120,7 +120,7 @@ const LEAST: Record<string, Role> = {
 /** The machine's own methods (0.23): a peer's device is another machine, so they are no peer's,
  *  the person's own devices included. An agent on this machine keeps them, but joining and serving
  *  a folder: those are the person's, since a tile is kept to its own workspace. */
-const MACHINE = new Set(["browser.signIns", "browser.ask", "browser.signIn", "browser.askState", "view.emit", "plugin.list", "plugin.commands", "plugin.open", "plugin.call", "plugin.close", "tile.focus", "tile.look", "views.rescan", "agents.rescan",
+const MACHINE = new Set(["browser.signIns", "browser.ask", "browser.signIn", "browser.askState", "view.emit", "plugin.list", "plugin.commands", "plugin.open", "plugin.call", "plugin.close", "tile.focus", "tile.look", "page.note", "views.rescan", "agents.rescan",
   "widgets.rescan", "tools.rescan", "settings.reload", "host.status", "host.join", "host.add", "notifications.play", "notifications.recentSounds"]);
 
 /** The machine's methods that are the person's alone: an agent's tile is refused them too. */

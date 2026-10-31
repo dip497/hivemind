@@ -67,9 +67,31 @@ with `hive ctl notes`:
 ```bash
 hive ctl notes list
 hive ctl notes seen <id>
-hive ctl notes done <id> --summary "what was done"
+hive ctl notes done <id> --summary "what was done" --attach fixed.webm
 hive ctl notes dismiss <id> --reason "why not"
 ```
+
+`--attach` keeps a video or image on the note as proof (`.webm`, `.mp4`, `.png`, `.jpg` or `.gif`,
+up to 200 MB each; repeat it for several). The note's list plays or shows it, and
+`hive ctl notes show <id>` prints where it is. The phone says how many there are and their names;
+it does not play them.
+
+### Notes an agent leaves
+
+An agent that finds a problem on a page leaves a note the same way, on the Browser tile in its
+frame:
+
+```bash
+hive ctl notes add --selector "#checkout" --body "this button does nothing" --intent fix --attach broken.webm
+hive ctl notes add --area 0,400,800,300 --body "this part is cut off"
+```
+
+Check: a pin with square corners and a star shows on the page, and the list names the agent. These
+notes go out with yours when you press **Send to an agent**. Deleting a note deletes its picture
+and what is attached to it.
+
+A selector that finds nothing or several elements, or no Browser tile in the frame, is refused
+with what to do next. `--tile` names a Browser tile, and `--area` is in page pixels.
 
 ## Approve an agent's plan
 

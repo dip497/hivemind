@@ -188,8 +188,8 @@ function WebView({ tileId, frameId, url, repoPath, selected, openReq, onClose, p
     if (!wv) return;
     let curUrl = "";
     try { curUrl = wv.getURL(); } catch { /* not ready */ }
-    try { window.hive.browserRegister?.(tileId, wv.getWebContentsId(), frameId ?? null, curUrl); } catch { /* not ready */ }
-  }, [tileId, frameId]);
+    try { window.hive.browserRegister?.(tileId, wv.getWebContentsId(), frameId ?? null, curUrl, repoPath); } catch { /* not ready */ }
+  }, [tileId, frameId, repoPath]);
 
   const onReady = useCallback((id: string, wv: WebviewTag) => {
     wvMap.current.set(id, wv);

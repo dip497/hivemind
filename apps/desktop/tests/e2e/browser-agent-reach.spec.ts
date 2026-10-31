@@ -6,7 +6,9 @@ import fs from "node:fs";
 import http from "node:http";
 import os from "node:os";
 import path from "node:path";
+import { spawn } from "node:child_process";
 import { WebSocket as Socket } from "ws";
+import { tileToken } from "@hivemind/agent-host/hooks/token";
 
 const PORT = String(9800 + Math.floor(Math.random() * 150));
 const ud = fs.mkdtempSync(path.join(os.tmpdir(), "hm-reach-"));
@@ -193,6 +195,21 @@ test("the person shares a tile with every agent from the tile, and takes it back
   await choose(elsewhere, "Agents in this frame");
   await closed;
   expect((await list(agentQuery)).map((t) => t.id)).toEqual([besideTarget]);
+});
+
+test("a note on a page is a picture of it: an agent cannot leave one on a tile it may not use", async () => {
+  const shell = new URLSearchParams(agentQuery).get("tile")!;
+  const token = tileToken(fs.readFileSync(path.join(ud, "hcp.token"), "utf8").trim(), `hm:${shell}`);
+  const r = await new Promise<{ code: number | null; out: string }>((resolve) => {
+    const c = spawn("bun", [path.resolve("../cli/src/index.ts"), "ctl", "notes", "add", "--tile", elsewhere, "--selector", "input", "--body", "see this", "--json"],
+      { env: { ...process.env, HIVEMIND_APP_DATA: ud, HIVEMIND_TILE: shell, HCP_TOKEN: token }, stdio: ["ignore", "pipe", "pipe"] });
+    let out = "";
+    c.stdout.on("data", (d) => (out += d));
+    c.stderr.on("data", (d) => (out += d));
+    c.on("close", (code) => resolve({ code, out }));
+  });
+  expect(r.code).not.toBe(0);
+  expect(r.out).toContain("that you can use");
 });
 
 test("while an agent changes the page the tile says so, and Stop ends it and shuts the agents out", async () => {

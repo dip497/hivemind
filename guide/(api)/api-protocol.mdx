@@ -90,6 +90,8 @@ A line without an `id` is an event, `{"event": "…", "params": [...]}`, about t
 | `RATE_LIMITED` | Too many started at once. Ask again later. |
 | `DEPTH_EXCEEDED` | Agents started by agents, too many levels deep. Start it from higher up. |
 | `OCCLUDED` | Something is drawn over the tile `tile.look` would picture; the message names it. Nothing was pictured. |
+| `NO_BROWSER_TILE`, `SEVERAL_BROWSER_TILES` | `page.note`, an agent's: no Browser tile showing a page is where it asked, or several are. |
+| `NO_ELEMENT`, `SEVERAL_ELEMENTS` | `page.note`: the selector finds no element the page draws, or more than one. |
 | `FAILED` | It ran and failed. `message` says why. |
 
 ## A whole example

@@ -27,6 +27,8 @@ every call, and a method that returns nothing answers `{"result": null}`. `code`
 | `TIMEOUT` | What it waited on did not come in time (0.23). |
 | `UNAVAILABLE` | It needs one of the person's windows, and none is open here (0.23). |
 | `OCCLUDED` | Something is drawn over the tile `tile.look` would picture (a pinned tile, a dialog): the message names it, and nothing was pictured (0.32). |
+| `NO_BROWSER_TILE`, `SEVERAL_BROWSER_TILES` | `page.note` names no Browser tile showing a page and its frame holds none, or several: name the one meant (0.38). It never ran. |
+| `NO_ELEMENT`, `SEVERAL_ELEMENTS` | The selector `page.note` was given finds no element the page draws, or more than one (0.38). It never ran. |
 | `FAILED` | It ran and failed: git refused, a file could not be written. `message` says why, ending in the system's code when there is one (`… (ENOENT)`). |
 
 A **notice** is a call that asks for no answer, `{method, params}` sent one way: the hot path (a
@@ -228,7 +230,7 @@ sends, and one participant per device.
 | `issue.link` | `root`, `id`, `other`, `type` | `{from, to, type, reciprocal}` | target `id->other`, detail the type |
 | `issue.unlink` | `root`, `id`, `other` | `{removed}` | target `id->other` |
 | `issue.move` | `root`, `id`, `prefix`, `mode` (`move` \| `copy`) | `{newId, newIssue, mode, from}` | target `id`, detail `move to PREFIX` |
-| `review.list` | `repo` | `[{id, file, startLine, endLine, side, body, author, at, resolved?, summary?, replies?}]` | read |
+| `review.list` | `repo` | `[{id, file, startLine, endLine, side, body, author, at, resolved?, summary?, replies?}]`, and notes on pages with `page` in place of the file and lines and, (0.38), `attachments?`: file names beside their picture | read |
 | `review.save` | `repo`, `comments` | `null` (the list replaces the repo's comments) | target `repo` |
 
 `root` is a workspace's `.hivemind` directory. An issue's `state` is one of `backlog`, `todo`,
@@ -330,6 +332,7 @@ says it is asked at the machine itself.
 | `host.join` | `link` | what joining a workspace by its link answers, as `hive join` | target the link's workspace |
 | `tile.focus` | `tile` | `null`: the tile brought forward in the window showing it | — |
 | `tile.look` | `tile` | `{tile, state, reason?, drew, console, png, width, height}` (0.32): the tile brought into view in the window, waited for (8 s at most) until its plugin drew or failed, then pictured: `png` base64, cropped to its box. `state` is its plugin's (`null` for a tile no plugin draws, which counts as drawn); `console` the last 100 lines its plugin's code wrote and the errors it threw, oldest first, kept in the window and read only here. An agent looks only at its own workspace's tiles. The tile is raised above the others first; `OCCLUDED`, naming it, when anything else is still drawn over part of it, a notification too (nothing the person sees is hidden for a picture); `UNSUPPORTED` where no window shows tiles | read |
+| `page.note` | `tile`, `{body, intent?, selector}` or `{body, intent?, area}` | `{note, kept}` (0.38): a note on the page in the Browser tile `tile`, or an agent's tile beside the one Browser tile in its frame, holding what a person's holds, by the agent asking or `you`. `area` is `{x, y, width, height}` in page pixels. `kept`: the folder its review is in. `UNSUPPORTED` where no window shows pages | target `tile` |
 | `plugin.list` | | `{plugins: [{plugin, kind, instance, label, state, reason?, since, drew, commands}], views: [{id, label, active}]}`: every plugin running in a window (a tool's tile, a widget with code, a community view), `state` `starting` until its code connects, then `ready`; `drew` once a tool's tile painted its first content (0.32); `failed` with its `reason` when it did not start in 15 s or was disabled; and the views the window can show (0.27) | read |
 | `plugin.commands` | | the commands each ready plugin running in a window offers | read |
 | `plugin.open` | `plugin` (`tool:<owner>/<name>[/<tool>]`, `widget:@<owner>/<name>` or `view:<id>`), `frame`? (a tool's tile's) | what opening it answers: a tool's tile placed (`{tile}`), a widget added to the board (`{widget}`), a view switched to (`{view}`); for one with code, once it can be called or 10 s pass, with its `instance`, `state`, `reason`? and `commands` (0.27) | target the plugin |
