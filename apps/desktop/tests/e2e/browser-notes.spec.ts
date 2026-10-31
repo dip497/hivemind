@@ -56,9 +56,19 @@ test.afterAll(async () => {
 async function run<T>(expression: string): Promise<T> {
   return page.evaluate(async ([id, expr]) => ((await window.hive.browserCdp(id, "Runtime.evaluate", { expression: expr, returnByValue: true })) as { result: { value: T } }).result.value, [tileId, expression] as const) as Promise<T>;
 }
+/** Call a function in the page with these values as its arguments. */
+async function callOnPage<T>(fn: string, ...args: string[]): Promise<T> {
+  return page.evaluate(async ([id, fnText, values]) => {
+    const page = (await window.hive.browserCdp(id, "Runtime.evaluate", { expression: "window" })) as { result: { objectId: string } };
+    const done = (await window.hive.browserCdp(id, "Runtime.callFunctionOn", {
+      objectId: page.result.objectId, functionDeclaration: fnText, arguments: values.map((value) => ({ value })), returnByValue: true,
+    })) as { result: { value: T } };
+    return done.result.value;
+  }, [tileId, fn, args] as const);
+}
 /** The middle of an element, as fractions of the page's view. */
 async function middleOf(selector: string): Promise<[number, number]> {
-  return run<[number, number]>(`(() => { const r = document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect(); return [(r.left + r.width / 2) / innerWidth, (r.top + r.height / 2) / innerHeight]; })()`);
+  return callOnPage<[number, number]>("(selector) => { const r = document.querySelector(selector).getBoundingClientRect(); return [(r.left + r.width / 2) / innerWidth, (r.top + r.height / 2) / innerHeight]; }", selector);
 }
 const pick = async (selector: string) => {
   const [fx, fy] = await middleOf(selector);
@@ -66,7 +76,7 @@ const pick = async (selector: string) => {
 };
 /** Whether `selector` finds exactly the element `original` finds. */
 const findsAlone = (selector: string, original: string) =>
-  run<boolean>(`(() => { const m = document.querySelectorAll(${JSON.stringify(selector)}); return m.length === 1 && m[0] === document.querySelector(${JSON.stringify(original)}); })()`);
+  callOnPage<boolean>("(selector, original) => { const m = document.querySelectorAll(selector); return m.length === 1 && m[0] === document.querySelector(original); }", selector, original);
 
 test("what is at a point is named by its role and name, and found again by a selector that matches it alone", async () => {
   const cases: [string, string][] = [
