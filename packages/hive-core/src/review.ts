@@ -7,6 +7,7 @@
  * agent that cannot list a comment cannot resolve one, so the store moves here
  * and the review loop becomes something a plugin command can serve.
  */
+import { randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -127,12 +128,18 @@ export async function readComments(root: string): Promise<ReviewComment[]> {
   }
 }
 
+/** Write `file` by renaming a new file over it. A cloned project can commit a link at any of these
+ *  names: a rename replaces the link, where writing through it would change what it points at. */
+async function replaceFile(file: string, data: string | Uint8Array): Promise<void> {
+  const tmp = path.join(path.dirname(file), `.${randomUUID()}.tmp`);
+  await fs.writeFile(tmp, data, { flag: "wx" });
+  await fs.rename(tmp, file).catch(async (e) => { await fs.rm(tmp, { force: true }); throw e; });
+}
+
 export async function writeComments(root: string, list: readonly ReviewComment[]): Promise<void> {
   const file = reviewPath(root);
-  const tmp = `${file}.tmp`;
   await fs.mkdir(path.dirname(file), { recursive: true });
-  await fs.writeFile(tmp, `${JSON.stringify(list, null, 2)}\n`, "utf8");
-  await fs.rename(tmp, file);
+  await replaceFile(file, `${JSON.stringify(list, null, 2)}\n`);
 }
 
 /** Read → change → write. The whole file is one document, so callers never
@@ -238,10 +245,12 @@ export async function listComments(root: string, filter: CommentFilter = {}): Pr
 /** Keep a page note's picture beside review.json; the name to store on its anchor. */
 export async function writePicture(root: string, id: string, png: Uint8Array): Promise<string> {
   const name = `${id.replace(/[^\w-]/g, "")}.png`;
-  await fs.mkdir(path.join(root, PICTURES_DIR), { recursive: true });
+  const dir = path.join(root, PICTURES_DIR);
+  await fs.mkdir(dir, { recursive: true });
+  if (!(await fs.lstat(dir)).isDirectory()) throw new HiveError("REVIEW_PICTURES", `${dir} is not a folder`);
   // A picture can show a signed-in page: `git add -A` must not take it into the project's history.
-  await fs.writeFile(path.join(root, PICTURES_DIR, ".gitignore"), "*\n");
-  await fs.writeFile(path.join(root, PICTURES_DIR, name), png);
+  await replaceFile(path.join(dir, ".gitignore"), "*\n");
+  await replaceFile(path.join(dir, name), png);
   return name;
 }
 

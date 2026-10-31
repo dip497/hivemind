@@ -25,6 +25,31 @@ describe("review comments", () => {
     expect(await fs.readFile(path.join(reviews, "pages", "c1.png"))).toHaveLength(3);
   });
 
+  test("a link a cloned project committed is replaced, and what it points at is left alone", async () => {
+    const outside = path.join(await root(), "precious");
+    await fs.writeFile(outside, "keep");
+    const reviews = await root();
+    await fs.mkdir(path.join(reviews, "pages"));
+    await fs.symlink(outside, path.join(reviews, "pages", ".gitignore"));
+    await fs.symlink(outside, path.join(reviews, "pages", "c1.png"));
+    await fs.symlink(outside, reviewPath(reviews));
+
+    await writePicture(reviews, "c1", new Uint8Array([1, 2, 3]));
+    await writeComments(reviews, []);
+
+    expect(await fs.readFile(outside, "utf8")).toBe("keep");
+    expect((await fs.lstat(path.join(reviews, "pages", "c1.png"))).isFile()).toBe(true);
+    expect((await fs.lstat(reviewPath(reviews))).isFile()).toBe(true);
+  });
+
+  test("a pictures folder that is a link is refused, and nothing lands where it points", async () => {
+    const elsewhere = await root();
+    const reviews = await root();
+    await fs.symlink(elsewhere, path.join(reviews, "pages"));
+    await expect(writePicture(reviews, "c1", new Uint8Array([1]))).rejects.toThrow("not a folder");
+    expect(await fs.readdir(elsewhere)).toEqual([]);
+  });
+
   test("a comment round-trips through the file the CLI reads", async () => {
     const r = await root();
     const added = await addComment(r, seed);
