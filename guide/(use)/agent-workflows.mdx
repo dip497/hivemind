@@ -106,7 +106,13 @@ The command waits until every worker has replied. `--close` closes their tiles a
   - **Each terminal already points at the tiles.** Every terminal gets its own session, which
     starts on the Browser tile in its frame.
   - **A new tab is a tile.** `agent-browser tab new <url>` opens a Browser tile beside the agent.
-  - **Agents see only Browser tiles,** never the Hivemind window itself.
+  - **An agent reaches only the Browser tiles beside it:** those in its frame, or loose on the same
+    board when it is loose. It never sees the Hivemind window, your tiles in other frames, or the
+    cookies of a site it has no tile on.
+  - **You choose per tile.** The robot button in a tile's toolbar offers **Agents in this frame**,
+    **Every agent** and **No agents**. The same setting is
+    `hive config set agentBrowser.tiles.<tile> all` (or `none`). While an agent changes the page,
+    the tile says so, and **Stop** ends it and shuts agents out of that tile.
   - **Settings on the same page:** install or update agent-browser, turn **Use these Browser
     tiles** off so it starts a Chrome of its own, or turn **Mark what pages say** off. The same
     settings are `hive config set agentBrowser.useTiles false` and

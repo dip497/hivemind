@@ -24,10 +24,10 @@ const hive = (...args: string[]) => {
   if (!result.stdout.trim()) throw new Error(result.stderr);
   return { status: result.status, data: JSON.parse(result.stdout) };
 };
-/** The browser tiles the discovery file tells agents about. */
-const targets = (): string[] => {
-  try { return JSON.parse(fs.readFileSync(path.join(userData, "browser-targets.json"), "utf8")).tiles.map((t: { tileId: string }) => t.tileId); } catch { return []; }
-};
+/** Whether a page answers for this Browser tile. */
+const answers = (tile: string) => page.evaluate(async (t) => {
+  try { await window.hive.browserCdp(t, "Runtime.evaluate", { expression: "1" }); return true; } catch { return false; }
+}, tile);
 
 test.beforeAll(async () => {
   app = await electron.launch({ args: [path.join(process.cwd(), "out/main/index.js"), "--no-sandbox"], cwd: root, env });
@@ -75,13 +75,12 @@ test("an app window cannot be registered as a browser tile's page, so the debugg
   const opened = hive("ctl", "open-tool", "@hivemind/web/browser", "--url", "about:blank");
   expect(opened.status).toBe(0);
   const tile: string = opened.data.tile;
-  await expect.poll(targets, { timeout: 15_000 }).toContain(tile);
-  expect(targets()).not.toContain("tile-browser-posing");
+  await expect.poll(() => answers(tile), { timeout: 15_000 }).toBe(true);
   expect(await page.evaluate((t) => window.hive.browserCdp(t, "Runtime.evaluate", { expression: "location.href", returnByValue: true }), tile))
     .toMatchObject({ result: { value: "about:blank" } });
 
   expect(hive("ctl", "close", tile).status).toBe(0);
-  await expect.poll(targets, { timeout: 10_000 }).not.toContain(tile);
+  await expect.poll(() => answers(tile), { timeout: 10_000 }).toBe(false);
 });
 
 test("a window that is not one of the app's cannot type into a terminal; the app's own window can", async () => {

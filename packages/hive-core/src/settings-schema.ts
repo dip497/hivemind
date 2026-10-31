@@ -520,11 +520,16 @@ export interface BrowserAppSettings {
 }
 /** How `agent-browser` in this computer's terminals uses the Browser tiles, while agent browser
  *  control is on (the Browser tool's page). */
+export const AGENT_ACCESS = ["frame", "all", "none"] as const;
+/** Which agents may drive a Browser tile: those in its frame, every agent, or none. */
+export type AgentAccess = (typeof AGENT_ACCESS)[number];
 export interface AgentBrowserSettings {
   /** Its sessions drive the Browser tiles, each terminal a session of its own, with no setup. */
   useTiles: boolean;
   /** Page text it prints is marked as the page's, so an agent tells it from instructions. */
   markPageText: boolean;
+  /** Browser tiles that differ from the default, which is the agents in their frame. */
+  tiles: Record<string, AgentAccess>;
 }
 /** What quitting the app does while terminals or agents run on this computer. */
 export const QUIT_CHOICES = ["ask", "keep-running", "stop-everything"] as const;
@@ -580,7 +585,7 @@ export const DEFAULT_SETTINGS: Settings = {
   profile: { name: "", color: "" },
   network: { updateCheck: true },
   browserApp: { enabled: false, port: 4483, names: [] },
-  agentBrowser: { useTiles: true, markPageText: true },
+  agentBrowser: { useTiles: true, markPageText: true, tiles: {} },
   quit: { whenRunning: "ask" },
   notifications: DEFAULT_NOTIFICATION_SETTINGS,
 };
@@ -929,6 +934,7 @@ export function mergeSettings(raw: unknown, base: Settings = DEFAULT_SETTINGS): 
     agentBrowser: {
       useTiles: bool((isObj(p.agentBrowser) ? p.agentBrowser : {}).useTiles, base.agentBrowser.useTiles),
       markPageText: bool((isObj(p.agentBrowser) ? p.agentBrowser : {}).markPageText, base.agentBrowser.markPageText),
+      tiles: agentAccessOf((isObj(p.agentBrowser) ? p.agentBrowser : {}).tiles, base.agentBrowser.tiles),
     },
     quit: { whenRunning: quitChoiceOf((isObj(p.quit) ? p.quit : {}).whenRunning, base.quit.whenRunning) },
     notifications: normalizeNotificationSettings(p.notifications, base.notifications),
@@ -943,6 +949,11 @@ const HOST_NAME_RE = /^(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9]
 function isHostAndPort(n: string): boolean {
   const [, name, port] = /^([^:]*)(?::(\d{1,5}))?$/.exec(n) ?? [];
   return name !== undefined && HOST_NAME_RE.test(name) && (port === undefined || (Number(port) >= 1 && Number(port) <= 65535));
+}
+
+function agentAccessOf(v: unknown, fallback: Record<string, AgentAccess>): Record<string, AgentAccess> {
+  if (!isObj(v)) return fallback;
+  return Object.fromEntries(Object.entries(v).filter((e): e is [string, AgentAccess] => e[1] !== "frame" && AGENT_ACCESS.includes(e[1] as AgentAccess)));
 }
 
 function browserAppOf(raw: unknown, base: BrowserAppSettings): BrowserAppSettings {

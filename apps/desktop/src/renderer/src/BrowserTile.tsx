@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { WebviewTag } from "electron";
-import { ArrowLeft, ArrowRight, RotateCw, X as XIcon, Plus, Search, Wrench, Bot, GripVertical } from "./components/icons";
+import { ArrowLeft, ArrowRight, RotateCw, X as XIcon, Plus, Search, Wrench, GripVertical } from "./components/icons";
 import { HeaderPinButton, type PinRect } from "./canvas-nodes";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
@@ -11,6 +11,7 @@ import { siteOf } from "../../shared/site";
 import { keyLabel } from "./shortcut";
 import { WatchedPage } from "./WatchedPage";
 import { usePageAnnotate } from "./browser-notes";
+import { AgentAccessMenu, DrivingBar } from "./browser-agents";
 
 interface Props {
   tileId: string;
@@ -144,7 +145,6 @@ function WebView({ tileId, frameId, url, repoPath, selected, openReq, onClose, p
   const [findOpen, setFindOpen] = useState(false);
   const [findText, setFindText] = useState("");
   const [zoom, setZoom] = useState(1);
-  const [cdpMsg, setCdpMsg] = useState<string | null>(null);
   const [watched, setWatched] = useState(false);
   useEffect(() => window.hive.onBrowserWatched((id, on) => { if (id === tileId) setWatched(on); }), [tileId]);
   const placeRef = useRef<HTMLDivElement>(null);
@@ -290,23 +290,6 @@ function WebView({ tileId, frameId, url, repoPath, selected, openReq, onClose, p
     try { wv.isDevToolsOpened() ? wv.closeDevTools() : wv.openDevTools(); } catch { /* ignore */ }
   };
 
-  // Visible proof CDP drives the VISIBLE tab: attach the debugger and run a tiny
-  // script (read title → navigate via CDP). Same path an agent uses.
-  const cdpSelfTest = async () => {
-    setCdpMsg("running…");
-    try {
-      const t = await window.hive.browserCdp!(tileId, "Runtime.evaluate", {
-        expression: "document.title", returnByValue: true,
-      }) as { result?: { value?: string } };
-      const title = t?.result?.value ?? "(no title)";
-      await window.hive.browserCdp!(tileId, "Page.navigate", { url: "https://example.com" });
-      setCdpMsg(`CDP ok · read "${title}" · navigated to example.com`);
-    } catch (e) {
-      setCdpMsg(`CDP failed: ${(e as Error).message}`);
-    }
-    setTimeout(() => setCdpMsg(null), 6000);
-  };
-
   // Keyboard shortcuts — only fire when focus is in our chrome (the guest
   // renderer swallows keys when the page itself has focus; the toolbar buttons
   // cover that case).
@@ -405,8 +388,7 @@ function WebView({ tileId, frameId, url, repoPath, selected, openReq, onClose, p
         {notes.button}
         <Button variant="ghost" size="icon-2xs" className="nodrag" onClick={() => setFindOpen((v) => !v)} aria-label="find" title={`Find in page (${keyLabel("mod+f")})`}><Search /></Button>
         <Button variant="ghost" size="icon-2xs" className="nodrag" onClick={toggleDevtools} aria-label="devtools" title="Toggle DevTools"><Wrench /></Button>
-        {/* Visible CDP proof — runs the same bridge an agent uses against the visible tab. */}
-        <Button variant="ghost" size="icon-2xs" className="nodrag" onClick={cdpSelfTest} aria-label="cdp test" title="CDP self-test (drive this tab like an agent)"><Bot /></Button>
+        <AgentAccessMenu tileId={tileId} />
         <span aria-hidden className="w-px h-4 bg-[var(--color-line2)] mx-0.5" />
         {/* Pin toggle — docked in the toolbar (not a floating chip). Filled = pinned. */}
         <HeaderPinButton tileId={tileId} pinned={pinned} onToggle={onTogglePin} />
@@ -427,6 +409,7 @@ function WebView({ tileId, frameId, url, repoPath, selected, openReq, onClose, p
       </div>
 
       {notes.bar}
+      <DrivingBar tileId={tileId} />
       {findOpen && (
         <div className="h-8 flex items-center gap-2 px-2 bg-[var(--color-bg4)] border-b border-[var(--color-line)]">
           <Input
@@ -438,12 +421,6 @@ function WebView({ tileId, frameId, url, repoPath, selected, openReq, onClose, p
             className="nodrag flex-1 min-w-0"
           />
           <Button variant="ghost" size="xs" className="nodrag" onClick={closeFind}>Done</Button>
-        </div>
-      )}
-
-      {cdpMsg && (
-        <div className="px-2 py-1 text-chip font-mono bg-[var(--color-bg4)] border-b border-[var(--color-line)] text-[var(--color-fg2)] truncate" title={cdpMsg}>
-          🤖 {cdpMsg}
         </div>
       )}
 

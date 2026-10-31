@@ -29,7 +29,7 @@ import { promises as fsp, statSync, readFileSync, writeFileSync, existsSync, cpS
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { keepOnAppPage } from "./app-navigation.js";
 import { APP_PAGE_ARG } from "../shared/app-page.js";
-import { createHash } from "node:crypto";
+import { createHash, createHmac, randomBytes } from "node:crypto";
 import { execFile, spawn } from "node:child_process";
 import {
   findRoot,
@@ -271,10 +271,6 @@ async function createWindow(target: string | null = cliLaunchTarget): Promise<vo
   // only hides it until Alt; this kills it outright). No app actions live there
   // — everything is in the in-app toolbar and the keymap (shared/keymap.ts).
   Menu.setApplicationMenu(null);
-  // Export the browser-targets discovery path so spawned PTY agents inherit it
-  // (set here — post-ready — because userData is only reliable now). Harmless
-  // when the CDP enabler is off; the file just lists tiles with no endpoint.
-  process.env.HIVEMIND_BROWSER_TARGETS = path.join(app.getPath("userData"), "browser-targets.json");
   const state = await loadWinState();
   const devUrl = process.env["ELECTRON_RENDERER_URL"];
   const appPage = appPageUrl();
@@ -515,39 +511,11 @@ const browserGuests = new Map<string, BrowserGuest>();
 /** Each app window's browser pages (its <webview> guests), by id, as they attach. */
 const browserPages = new WeakMap<WebContents, Set<number>>();
 
-// Discovery file the `hive-browser` skill reads so a spawned agent can find the
-// right tab to drive: which BrowserTile lives in which frame, its current URL
-// (used to match the CDP target via `agent-browser tab`), and the loopback CDP
-// port. Written on every register/unregister/navigate so it never goes stale.
-// Path is exported as $HIVEMIND_BROWSER_TARGETS into every PTY's environment.
-function browserTargetsPath(): string {
-  return path.join(app.getPath("userData"), "browser-targets.json");
-}
-async function writeBrowserTargets(): Promise<void> {
-  const tiles = [...browserGuests.entries()].map(([tileId, g]) => {
-    const page = browserGuestFor(tileId);
-    const targetId = page ? pageTargets.get(page) : undefined;
-    return { tileId, frameId: g.frameId, url: g.url, ...(targetId ? { targetId } : {}) };
-  });
-  const doc = {
-    cdpEnabled: process.env.HIVEMIND_BROWSER_CDP === "1",
-    cdpPort: process.env.HIVEMIND_BROWSER_CDP_PORT ?? null,
-    cdpEndpoint: process.env.HIVEMIND_BROWSER_CDP === "1"
-      ? `http://127.0.0.1:${process.env.HIVEMIND_BROWSER_CDP_PORT ?? "9333"}`
-      : null,
-    tiles,
-  };
-  await fsp.writeFile(browserTargetsPath(), JSON.stringify(doc, null, 2)).catch(() => {});
-}
-
 // A browser tile names the page it shows: one of its own window's browser pages, never another
 // window's nor a window itself, which the debugger below would then drive.
 on("browser:register", (e, tileId: unknown, webContentsId: unknown, frameId: unknown, url: unknown) => {
   if (typeof tileId !== "string" || typeof webContentsId !== "number" || !browserPages.get(e.sender)?.has(webContentsId)) return;
   browserGuests.set(tileId, { webContentsId, frameId: typeof frameId === "string" ? frameId : null, url: typeof url === "string" ? url : "" });
-  // Its DevTools target, which the hive-browser skill binds an agent-browser session to.
-  const page = browserGuestFor(tileId);
-  void (page ? targetOf(page) : Promise.resolve(null)).then(() => writeBrowserTargets());
   void pageStreams.moved(tileId);
 }, { local: true });
 /** A page that has gone takes its tile's registration with it (the tile closed, or its tab did). */
@@ -555,7 +523,6 @@ function forgetBrowserPage(pageId: number): void {
   let gone = false;
   for (const [tileId, g] of browserGuests) if (g.webContentsId === pageId) { browserGuests.delete(tileId); gone = true; }
   if (!gone) return;
-  void writeBrowserTargets();
   for (const tileId of pageStreams.watched()) void pageStreams.moved(tileId);
 }
 
@@ -576,11 +543,11 @@ async function targetOf(page: WebContents): Promise<string | null> {
     if (!attached && page.debugger.isAttached()) page.debugger.detach();
   }
 }
-/** The browser tile page that is DevTools target `targetId`, if one is. */
-async function browserPageOf(targetId: string): Promise<WebContents | null> {
-  for (const tileId of browserGuests.keys()) {
+/** The Browser tile showing DevTools target `targetId`, if one does, and its page. */
+async function browserTileOf(targetId: string): Promise<{ tileId: string; guest: BrowserGuest; page: WebContents } | null> {
+  for (const [tileId, guest] of browserGuests) {
     const page = browserGuestFor(tileId);
-    if (page && (await targetOf(page)) === targetId) return page;
+    if (page && (await targetOf(page)) === targetId) return { tileId, guest, page };
   }
   return null;
 }
@@ -594,8 +561,33 @@ async function serveAgentBrowserPort(): Promise<void> {
     if (!chromium) await new Promise((r) => setTimeout(r, 100));
   }
   if (!chromium) throw new Error("Chromium's DevTools port did not open");
-  await serveBrowserPort(Number(process.env.HIVEMIND_BROWSER_CDP_PORT), chromium, { pageOf: browserPageOf, near: inFrameOf, open: openPageFor });
+  const port = await serveBrowserPort(Number(process.env.HIVEMIND_BROWSER_CDP_PORT), chromium, {
+    pageOf: async (targetId) => (await browserTileOf(targetId))?.page ?? null,
+    agentOf: (tile, key) => (tile && key && key === agentKey(tile) ? tile : null),
+    reaches: async (agent, targetId) => {
+      const tile = await browserTileOf(targetId);
+      return !!tile && agentReaches(agent, tile.tileId, tile.guest);
+    },
+    hostsOf: async (agent) => {
+      const hosts = new Set<string>();
+      for (const [tileId, guest] of browserGuests) {
+        if (!agentReaches(agent, tileId, guest)) continue;
+        const url = browserGuestFor(tileId)?.getURL();
+        try { if (url) hosts.add(new URL(url).hostname.toLowerCase()); } catch { /* not an address */ }
+      }
+      return hosts;
+    },
+    near: inFrameOf,
+    open: openPageFor,
+    acted: agentActed,
+  });
   agentBrowserPort = true;
+  let tiles = JSON.stringify(getAppSettings().agentBrowser.tiles);
+  onSettingsChange((s) => {
+    const now = JSON.stringify(s.agentBrowser.tiles);
+    if (now !== tiles) void port.recheck();
+    tiles = now;
+  });
 }
 /** Whether the agents' port is serving: what `agent-browser` in a terminal is pointed at. */
 let agentBrowserPort = false;
@@ -604,6 +596,54 @@ let agentBrowserPort = false;
 function frameOfTile(bare: string): string | null {
   for (const b of heldBoards(workspaceStore())) { const f = b.core?.frameOf?.[bare]; if (f) return f; }
   return null;
+}
+/** The board `bare` is on, by its folder; null for none. */
+function boardOfTile(bare: string): string | null {
+  return heldBoards(workspaceStore()).find((b) => b.core?.tiles.some((t) => t.id === bare))?.repo ?? null;
+}
+/** Whether an agent may drive this Browser tile. The person says so for the tile, or else it is the
+ *  agents beside it: in its frame, or loose on the same board. */
+function agentReaches(agent: string | null, tileId: string, guest: BrowserGuest): boolean {
+  const access = getAppSettings().agentBrowser.tiles[tileId] ?? "frame";
+  if (access !== "frame") return access === "all";
+  if (!agent) return false;
+  const frame = frameOfTile(agent);
+  if (frame || guest.frameId) return frame === guest.frameId;
+  return boardOfTile(agent) !== null && boardOfTile(agent) === boardOfTile(tileId);
+}
+/** What proves a terminal is the agent tile it says it is, for as long as this computer's key lasts,
+ *  so a terminal that outlives the app keeps working. */
+function agentKey(bare: string): string {
+  return createHmac("sha256", agentPortSecret()).update(bare).digest("base64url");
+}
+let portSecret: string | null = null;
+function agentPortSecret(): string {
+  if (portSecret) return portSecret;
+  const file = path.join(app.getPath("userData"), "browser-port-key");
+  portSecret = readFileSyncSafe(file).trim();
+  if (!portSecret) {
+    portSecret = randomBytes(32).toString("base64url");
+    writeFileSync(file, portSecret, { mode: 0o600 });
+  }
+  return portSecret;
+}
+
+/** How long a page says who is driving it after their last action. */
+const DRIVING_FOR_MS = 4000;
+const driving = new Map<string, { by: string | null; ends: ReturnType<typeof setTimeout> }>();
+/** An agent has just changed what a Browser tile shows: the tile says so, and offers to stop it. */
+function agentActed(agent: string | null, targetId: string): void {
+  for (const [tileId] of browserGuests) {
+    const page = browserGuestFor(tileId);
+    if (!page || pageTargets.get(page) !== targetId) continue;
+    const now = driving.get(tileId);
+    if (now) clearTimeout(now.ends);
+    const by = agent ? (heldBoards(workspaceStore()).flatMap((b) => b.core?.tiles ?? []).find((t) => t.id === agent)?.label ?? null) : null;
+    const ends = setTimeout(() => { driving.delete(tileId); broadcast("browser:driving", { tileId, driving: false, by: null }); }, DRIVING_FOR_MS);
+    driving.set(tileId, { by, ends });
+    if (!now) broadcast("browser:driving", { tileId, driving: true, by });
+    return;
+  }
 }
 /** Whether the Browser tile showing target `targetId` is in the frame of the agent of `agentTile`. */
 function inFrameOf(agentTile: string, targetId: string): boolean {
@@ -643,7 +683,7 @@ function agentBrowserEnv(bare: string): Record<string, string> | null {
   const s = getAppSettings().agentBrowser;
   if (!agentBrowserPort || !s.useTiles) return null;
   return {
-    AGENT_BROWSER_CDP: `http://127.0.0.1:${process.env.HIVEMIND_BROWSER_CDP_PORT}/?tile=${encodeURIComponent(bare)}`,
+    AGENT_BROWSER_CDP: `http://127.0.0.1:${process.env.HIVEMIND_BROWSER_CDP_PORT}/?tile=${encodeURIComponent(bare)}&key=${agentKey(bare)}`,
     AGENT_BROWSER_SESSION: `hivemind-${bare}`,
     ...(s.markPageText ? { AGENT_BROWSER_CONTENT_BOUNDARIES: "1" } : {}),
   };
@@ -1727,10 +1767,8 @@ app.commandLine.appendSwitch("max-active-webgl-contexts", "32");
 // ── Agent browser-use (CDP) enabler ───────────────────────────
 // Opt-in (HIVEMIND_BROWSER_CDP=1): expose a LOOPBACK Chrome DevTools Protocol
 // port so a spawned agent in a PTY tile can drive a BrowserTile with
-// `agent-browser --cdp <port>` (see the `hive-browser` skill). The port + the
-// discovery-file path are exported into the environment, which every PTY
-// inherits (the daemon starts from this env) — so the agent sees
-// $HIVEMIND_BROWSER_CDP_PORT and $HIVEMIND_BROWSER_TARGETS with no extra wiring.
+// `agent-browser --cdp <port>` (see the `hive-browser` skill). The port is exported
+// into the environment, which every PTY inherits (the daemon starts from this env).
 // SECURITY: a remote-debugging port also exposes the app's OWN window, so this
 // is off by default and bound to 127.0.0.1 — only enable it for agents you trust.
 // Persisted app settings live in <userData>/settings.json. Read SYNC here
@@ -1759,8 +1797,6 @@ if (process.env.HIVEMIND_BROWSER_CDP === "1" || readSettings().browserCdp === tr
   app.commandLine.appendSwitch("remote-debugging-address", "127.0.0.1");
   process.env.HIVEMIND_BROWSER_CDP = "1";
   process.env.HIVEMIND_BROWSER_CDP_PORT = port;
-  // $HIVEMIND_BROWSER_TARGETS is set post-ready in createWindow (userData path
-  // is only reliable then) — before any PTY spawns, so agents still inherit it.
 }
 // NOTE: we intentionally do NOT set disable-gpu-vsync / ignore-gpu-blocklist /
 // disable-frame-rate-limit / enable-zero-copy / force_high_performance_gpu /

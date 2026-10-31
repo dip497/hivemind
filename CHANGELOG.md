@@ -9,6 +9,9 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- **Breaking:** an agent reaches only the Browser tiles beside it, in its frame. It no longer sees your tiles in other frames, the cookies of sites it has no tile on, or `$HIVEMIND_BROWSER_TARGETS`; `agent-browser tab list` shows what it can use. Share a tile with every agent, or keep agents out of it, from the robot button in its toolbar.
+- Added: while an agent changes a Browser tile's page, the tile says so, and **Stop** ends it.
+- Fixed: an agent could close the Hivemind window, quit the browser or clear all your cookies through the agents' browser port. These are refused now.
 - **Breaking:** a `.hivemind` that is a link is no longer used as a workspace, and `hive init` refuses it. A project you clone could otherwise redirect what Hivemind writes. Replace the link with a folder. Files inside `.hivemind` are written so that a committed link is replaced, never written through.
 - Added: agents drive the Browser tiles with agent-browser with no setup. Every terminal points it at the tiles, in a session of its own that starts on the tile in its frame. `agent-browser tab new <url>` opens a Browser tile beside the agent. **Settings ▸ Plugins ▸ Browser** shows which agent-browser is installed, installs or updates it, and has **Use these Browser tiles** and **Mark what pages say** (`hive config set agentBrowser.useTiles|markPageText`). The hive-browser skill uses all of it, and the official agent-browser guide for the installed version.
 - Changed: the agents' browser port shows only Browser tiles. An agent can no longer land on, or drive, the Hivemind window itself.

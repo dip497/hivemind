@@ -95,6 +95,7 @@ export function hiveOverIpc(port: IpcPort, workspace: WorkspaceClient): Omit<Hiv
     onBrowserPageShown: (cb) => port.on(SHOWN_EVENT, cb),
     onBrowserPageGone: (cb) => port.on(GONE_EVENT, cb),
     onBrowserWatched: (cb) => port.on(WATCHED_EVENT, cb),
+    onBrowserDriving: (cb) => port.on("browser:driving", cb),
     answerBrowserPermission: local("browser:permission-answer", send("browser:permission-answer")),
     browserSiteRights: local("browser:site-rights", invoke("browser:site-rights")),
     setBrowserSiteRight: local("browser:set-site-right", invoke("browser:set-site-right")),

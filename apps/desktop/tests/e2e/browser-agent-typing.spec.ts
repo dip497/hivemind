@@ -58,6 +58,8 @@ test("what an agent types into a browser tile's page lands in that page, not in 
   await expect.poll(() => page.evaluate(async (id) => {
     try { await window.hive.browserCdp(id!, "Runtime.evaluate", { expression: "1" }); return true; } catch { return false; }
   }, tileId), { timeout: 25_000 }).toBe(true);
+  // This suite's connections name no agent: a tile shared with every agent is what they reach.
+  await page.evaluate((id) => window.hive.settingsSet("agentBrowser.tiles", { [id!]: "all" }), tileId);
   await page.evaluate(([id, url]) => window.hive.browserCdp(id!, "Page.navigate", { url }), [tileId, LOGIN]);
 
   // The person was typing somewhere else in the app: a terminal, here a field that stands for one.
@@ -171,9 +173,11 @@ test("a terminal's agent-browser drives the Browser tiles with no setup: its fra
 
   // Its environment names its own tile and a session of its own.
   await term.locator(".xterm-screen").click();
-  const screen = () => term.evaluate((el) => ([el, ...el.querySelectorAll("*")].find((e) => "__hmScreen" in e) as (Element & { __hmScreen(): string }) | undefined)?.__hmScreen() ?? "");
-  await expect.poll(async () => { await page.keyboard.type('echo "[$AGENT_BROWSER_CDP|$AGENT_BROWSER_SESSION]"\n'); return screen(); }, { timeout: 20_000, intervals: [1500] })
-    .toContain(`[http://127.0.0.1:${PORT}/?tile=${shell}|hivemind-${shell}]`);
+  const printed = path.join(ud, "agent-env.txt");
+  await expect.poll(async () => { await page.keyboard.type(`echo "$AGENT_BROWSER_CDP|$AGENT_BROWSER_SESSION" > ${printed}\n`); return fs.existsSync(printed) && fs.readFileSync(printed, "utf8"); }, { timeout: 20_000, intervals: [1500] })
+    .toContain(`http://127.0.0.1:${PORT}/?tile=${shell}&key=`);
+  const [cdp, agentSession] = fs.readFileSync(printed, "utf8").trim().split("|");
+  expect(agentSession).toBe(`hivemind-${shell}`);
 
   // Connected as it would be: the tile in its frame comes first, the one a session takes.
   const target = (tile: string) => page.evaluate(async (id) => {
@@ -184,8 +188,9 @@ test("a terminal's agent-browser drives the Browser tiles with no setup: its fra
   }, tile);
   const mineTarget = await target(mine);
   const { WebSocket: Socket } = await import("ws");
-  const version = (await (await fetch(`http://127.0.0.1:${PORT}/json/version`)).json()) as { webSocketDebuggerUrl: string };
-  const ws = new Socket(`${version.webSocketDebuggerUrl}?tile=${shell}`);
+  const query = new URL(cdp!).search;
+  const version = (await (await fetch(`http://127.0.0.1:${PORT}/json/version${query}`)).json()) as { webSocketDebuggerUrl: string };
+  const ws = new Socket(version.webSocketDebuggerUrl);
   await new Promise((r) => ws.once("open", r));
   let n = 0;
   const send = (method: string, params: object = {}) => new Promise<{ result?: { targetId?: string; targetInfos?: { targetId: string }[] }; error?: { message: string } }>((resolve) => {

@@ -936,6 +936,8 @@ export interface HiveIpc {
   onBrowserPageGone: (cb: (tileId: string) => void) => () => void;
   /** In the app window: a tile's page is watched from elsewhere, so it must keep drawing. */
   onBrowserWatched: (cb: (tileId: string, watched: boolean) => void) => () => void;
+  /** An agent is changing what a Browser tile shows, or has stopped. */
+  onBrowserDriving: (cb: (e: { tileId: string; driving: boolean; by: string | null }) => void) => () => void;
   /** The person's answer to a Browser tile page's ask (`onBrowserPermission`). */
   answerBrowserPermission?(askId: number, allowed: boolean): void;
   /** The rights a site (an origin) in a Browser tile is asked about, each with the person's answer. */
