@@ -9,6 +9,7 @@
 // server serves the page.
 import { test, expect, chromium, type Browser, type ElectronApplication, type Page } from "@playwright/test";
 import { execSync, spawn, type ChildProcess } from "node:child_process";
+import { addComment } from "@hivemind/core/review";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -132,6 +133,14 @@ test("a question on a Browser tile reaches the phone over the network, and the p
   expect(r.out).toContain('"outcome":"done"');
   expect(r.code).toBe(0);
   await expect(card).toBeHidden({ timeout: 10_000 });
+
+  // The notes on pages there, over the same network: listed, and one marked done.
+  const reviews = path.join(root, "api", ".hivemind");
+  fs.mkdirSync(reviews, { recursive: true });
+  await addComment(reviews, { id: "c-phone", body: "bigger on phones", author: "you", page: { url: "http://x/", viewport: { width: 1, height: 1 }, elements: [{ name: 'button "Go"', selector: "#go", box: { x: 0, y: 0, width: 1, height: 1 } }] } });
+  await page.locator("[data-more]").click();
+  await page.locator("[data-open-notes]").click();
+  await expect(page.locator('[data-page-notes] [data-note="c-phone"]')).toContainText("bigger on phones", { timeout: 20_000 });
 });
 
 test("a message sent from the phone while Claude Code works shows in its chat at once, as the person's, and stays there once Claude Code takes it into the running turn", async ({}, testInfo) => {

@@ -87,7 +87,8 @@ const NO_FACTS: AgentFacts = { program: () => undefined, decides: () => false, i
  *  folders in a project), interrupt its turn, close it, see what it changed and the commands it takes, follow what it says and
  *  unfold a tool it used (spec/agents.md); and to show the community views here that work on a
  *  phone, which may do there what the phone may (P8, `views.ts`), and to press the board's widgets
- *  from one (`widget.press`). To pace the output it is sent, and to fit a terminal to its screen
+ *  from one (`widget.press`); to answer the notes left on pages there and the questions an agent
+ *  puts on a Browser tile. To pace the output it is sent, and to fit a terminal to its screen
  *  until it goes (`terminal.fit`); never otherwise to size one, or to give or take a keyboard. */
 const PHONE_MAY = new Set([
   "agent.answer", "agent.send", "terminal.write", "terminal.keyboard.ask", "terminal.ack", "terminal.fit", "terminal.photo",
@@ -95,6 +96,10 @@ const PHONE_MAY = new Set([
   "view.list", "view.file", "view.open", "view.post", "view.screen", "view.close", "widget.press",
   // Someone asking to join, answered from the notice that told it (spec/push.md "Join").
   "people.answer",
+  // The notes left on pages, listed, sent to an agent and closed or reopened; and what an agent asks
+  // on a Browser tile, answered.
+  "review.list", "review.message", "review.resolve", "review.dismiss", "review.reopen",
+  "browser.asks", "browser.answer",
 ]);
 export const phoneMay = (method: string, params: unknown[]): boolean =>
   (method === "terminal.open" && (params[0] as { attachOnly?: unknown } | null)?.attachOnly === true) || PHONE_MAY.has(method);

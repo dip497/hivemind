@@ -370,6 +370,8 @@ test("in a folder with no workspace, where no watch sees its review, an agent's 
   const browser = await hive(["ctl", "open-tool", "@hivemind/web/browser", "--frame", frame.json.frame, "--url", "about:blank"]);
   expect(browser.code, browser.stderr).toBe(0);
   const onTheDisk = notesOnDisk().length;
+  // That tile is in another frame: shared with every agent, so this one may use it.
+  await page.evaluate((id) => window.hive.settingsSet("agentBrowser.tiles", { [id]: "all" }), browser.json.tile);
   await expect(async () => {
     const r = await hive(["ctl", "notes", "add", "--area", "0,0,200,100", "--body", "nothing here", "--tile", browser.json.tile], scout);
     expect(r.code, r.stderr).toBe(0);
