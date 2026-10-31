@@ -95,6 +95,9 @@ export async function pairUnder(key: string, text: string, name: string, shown: 
 const PATIENCE = 15_000;
 /** How long the computer has to answer before the person is told it is not reached. */
 const REACH = 10_000;
+/** How long a connection has to answer as the page comes back, before it is taken for dead: left
+ *  alone, it would say connected until its idle timeout, half a minute. */
+const STILL_LIVE = 6_000;
 
 function within<T>(p: Promise<T>, ms: number, why: string): Promise<T> {
   let timer = 0;
@@ -189,9 +192,16 @@ export class Phone {
     this.devices.clear();
   }
 
-  /** Dial again now rather than after the wait: the page is shown again, or the network is back. */
-  retry(): void {
-    for (const link of this.links.values()) link.wake?.();
+  /** Dial again now rather than after the wait: the page is shown again, or the network is back.
+   *  With `networkChanged`, the way to the relay is made again too, and each connection asked once
+   *  whether it still answers: one stream per computer, as often as the page comes back. */
+  retry(networkChanged: boolean): void {
+    if (networkChanged) for (const device of this.devices.values()) void device.then((d) => d.networkChanged(), () => {});
+    for (const link of this.links.values()) {
+      link.wake?.();
+      const host = link.host;
+      if (networkChanged && host) void within(host.workspaces(), STILL_LIVE, "no answer").catch(() => link.host === host && host.close());
+    }
   }
 
   /** Forget the account's computers, and tell each to forget this browser when it is reached
@@ -213,8 +223,9 @@ export class Phone {
 
   private async dial(link: Link): Promise<void> {
     for (let tries = 0; !this.closed && this.links.get(link.device) === link; ) {
+      let device: Device | null = null;
       try {
-        const device = await this.deviceOf(link);
+        device = await this.deviceOf(link);
         const reaching = device.reach(link.device, link.relay ?? undefined);
         // Reached after the wait was given up on: let go of.
         const host = await within(reaching, REACH, `no answer in ${REACH / 1000} s`).catch((e: unknown) => {
@@ -241,7 +252,7 @@ export class Phone {
           this.told.refused(link.paired);
           break;
         }
-        link.error = message(e);
+        link.error = device && !device.onRelay() ? "this phone cannot reach your server" : `${message(e)}. Your server answers this phone: is the computer awake and online?`;
       } finally {
         link.host?.close();
         link.host = null;
@@ -407,16 +418,18 @@ export class Phone {
   }
 
   /** Watch the terminal of `tile` in `workspace`, again after each reconnection: its screen is
-   *  `term`'s, `changed` when it may have changed, `ended` how it ended. `stop` stops it. */
-  watch(workspace: string, tile: string, changed: () => void, ended: (why: string) => void): { term: Term; stop: () => void } {
-    const w = new Watched(new Term(), workspace, tile, changed, ended);
+   *  `term`'s, `changed` when it may have changed, `ended` how it ended. `stop` stops it. Null until
+   *  it is known which computer holds `workspace`. */
+  watch(workspace: string, tile: string, changed: () => void, ended: (why: string) => void): { term: Term; stop: () => void } | null {
     const link = this.links.get(this.holds.get(workspace) ?? this.homes.deviceOf(workspace) ?? "");
-    link?.followed.add(w);
-    if (link?.host) w.start(link.host);
+    if (!link) return null;
+    const w = new Watched(new Term(), workspace, tile, changed, ended);
+    link.followed.add(w);
+    if (link.host) w.start(link.host);
     return {
       term: w.term,
       stop: () => {
-        link?.followed.delete(w);
+        link.followed.delete(w);
         w.stop();
         w.term.free();
       },
@@ -437,22 +450,28 @@ export class Phone {
   }
 }
 
-class Watched {
+/** How long a stream the computer ended waits to be opened again, the connection staying. */
+const AGAIN = 1000;
+
+/** What is followed on a computer: on each connection, until stopped. Told `ended` only when the
+ *  computer refuses or it really ended: a connection going is not an end. */
+abstract class Following {
   private end: (() => void) | null = null;
 
-  constructor(
-    readonly term: Term,
-    private readonly workspace: string,
-    private readonly tile: string,
-    private readonly changed: () => void,
-    private readonly ended: (why: string) => void,
-  ) {}
+  constructor(protected readonly ended: (why: string) => void) {}
+
+  /** Follow on `host` until `until`: whether it ended for good. */
+  protected abstract follow(host: Host, until: Promise<void>): Promise<boolean>;
 
   start(host: Host): void {
     this.stop();
     const until = new Promise<void>((resolve) => (this.end = resolve));
-    host.watch(this.workspace, this.tile, this.term, this.changed, until).then(
-      (how: { code: number | null } | null) => how && this.ended(how.code === null ? "No session runs there." : `The session ended (${how.code}).`),
+    const mine = this.end;
+    this.follow(host, until).then(
+      (done) => {
+        if (done || this.end !== mine || host.closed()) return;
+        setTimeout(() => this.end === mine && !host.closed() && this.start(host), AGAIN);
+      },
       (e: unknown) => this.ended(message(e)),
     );
   }
@@ -463,23 +482,35 @@ class Watched {
   }
 }
 
-class Followed {
-  private end: (() => void) | null = null;
+class Watched extends Following {
+  constructor(
+    readonly term: Term,
+    private readonly workspace: string,
+    private readonly tile: string,
+    private readonly changed: () => void,
+    ended: (why: string) => void,
+  ) {
+    super(ended);
+  }
 
+  protected async follow(host: Host, until: Promise<void>): Promise<boolean> {
+    const how = (await host.watch(this.workspace, this.tile, this.term, this.changed, until)) as { code: number | null } | null;
+    if (how) this.ended(how.code === null ? "No session runs there." : `The session ended (${how.code}).`);
+    return !!how;
+  }
+}
+
+class Followed extends Following {
   constructor(
     private readonly agent: Agent,
     private readonly said: (p: Piece) => void,
-    private readonly ended: (why: string) => void,
-  ) {}
-
-  start(host: Host): void {
-    this.stop();
-    const until = new Promise<void>((resolve) => (this.end = resolve));
-    host.conversation(this.agent.workspace, this.agent.tile, this.said, until).catch((e: unknown) => this.ended(message(e)));
+    ended: (why: string) => void,
+  ) {
+    super(ended);
   }
 
-  stop(): void {
-    this.end?.();
-    this.end = null;
+  protected async follow(host: Host, until: Promise<void>): Promise<boolean> {
+    await host.conversation(this.agent.workspace, this.agent.tile, this.said, until);
+    return false;
   }
 }

@@ -94,6 +94,8 @@ The first answer counts, from the phone or the computer.
 | The **Phone browser** tab offers **Set it up with an agent** | The server does not serve the page yet. Set it up: [network server](/self-hosting). |
 | The page does not open on the phone | `https://<address>/phone/manifest.webmanifest` must answer 200, with a trusted certificate. |
 | The three words differ | Press **Deny**. Someone else used the code. Make a new one. |
+| **this phone cannot reach your server** | Check the phone's network, and its VPN if your server is behind one. The page connects by itself once it can. |
+| **Your server answers this phone: is the computer awake and online?** | Wake the computer and check its network. The page connects by itself within about half a minute. There is nothing to open on the computer. |
 
 More in [Troubleshooting](/troubleshooting).
 

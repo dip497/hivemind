@@ -9,6 +9,13 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Fixed: the phone connects again by itself when the computer's network process stops. The app starts hive-net again on its own; it stayed down, with the phone saying **not reached**, until you restarted the app or made a new offer.
+- Fixed: a terminal or chat on the phone page carries on after the connection drops, and no longer shows **connection lost** once it is back.
+- Fixed: coming back to the phone page, or its network returning, notices a dead connection in seconds. It said **connected** for up to half a minute.
+- Changed: the phone page says which side does not answer: **this phone cannot reach your server**, or that your server answers and the computer may be asleep or offline.
+- Fixed: a phone or guest connecting just as hive-net starts waits to be let in. Turned away, the phone page forgot its pairing, and a guest's workspace showed as removed.
+- Fixed: a phone away for a month keeps its place on a closed network. The computer renews it each day, connected or not.
+- Fixed: an offer to connect names your relay even when the relay was not answering as the app started.
 - Added: agents drive the Browser tiles with agent-browser with no setup. Every terminal points it at the tiles, in a session of its own that starts on the tile in its frame. `agent-browser tab new <url>` opens a Browser tile beside the agent. **Settings ▸ Plugins ▸ Browser** shows which agent-browser is installed, installs or updates it, and has **Use these Browser tiles** and **Mark what pages say** (`hive config set agentBrowser.useTiles|markPageText`). The hive-browser skill uses all of it, and the official agent-browser guide for the installed version.
 - Changed: the agents' browser port shows only Browser tiles. An agent can no longer land on, or drive, the Hivemind window itself.
 - Added: notes on a web page for an agent. In a Browser tile, press the notes button, then click what should change, Ctrl or ⌘ and click to pick several, or drag over an area, and say what to do. Numbered pins mark each note on the page and show whether the agent has seen it, done it or dismissed it. **Send to an agent** hands over the open notes with a picture of each. **Hold still** stops the page's animations so a moving thing can be clicked. Notes work from a browser tab the app serves, too. On the phone page, an agent's ⋯ ▸ **Notes on pages** lists its workspace's notes, sends the open ones to it, and marks each done, dismissed with a reason, or reopened. An agent answers them with `hive ctl notes list|show|seen|done|dismiss|reply`. They are review comments, so `hive review` gains `seen`, `dismiss <id> --reason` and `--on page|diff` for diff comments too.
