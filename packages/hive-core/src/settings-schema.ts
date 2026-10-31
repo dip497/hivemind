@@ -518,6 +518,14 @@ export interface BrowserAppSettings {
    *  uses when it is not 443: the machine's tailnet name as `tailscale serve` gives it. */
   names: string[];
 }
+/** How `agent-browser` in this computer's terminals uses the Browser tiles, while agent browser
+ *  control is on (the Browser tool's page). */
+export interface AgentBrowserSettings {
+  /** Its sessions drive the Browser tiles, each terminal a session of its own, with no setup. */
+  useTiles: boolean;
+  /** Page text it prints is marked as the page's, so an agent tells it from instructions. */
+  markPageText: boolean;
+}
 /** What quitting the app does while terminals or agents run on this computer. */
 export const QUIT_CHOICES = ["ask", "keep-running", "stop-everything"] as const;
 export type QuitChoice = (typeof QUIT_CHOICES)[number];
@@ -552,6 +560,7 @@ export interface Settings {
   profile: ProfileSettings;
   network: NetworkSettings;
   browserApp: BrowserAppSettings;
+  agentBrowser: AgentBrowserSettings;
   quit: QuitSettings;
   /** Toasts, OS pop-ups and sounds (`notification-settings.ts`). Before 2026-10 the app kept them
    *  in a settings.json of its data folder; migration 0006 moved them here. */
@@ -571,6 +580,7 @@ export const DEFAULT_SETTINGS: Settings = {
   profile: { name: "", color: "" },
   network: { updateCheck: true },
   browserApp: { enabled: false, port: 4483, names: [] },
+  agentBrowser: { useTiles: true, markPageText: true },
   quit: { whenRunning: "ask" },
   notifications: DEFAULT_NOTIFICATION_SETTINGS,
 };
@@ -916,6 +926,10 @@ export function mergeSettings(raw: unknown, base: Settings = DEFAULT_SETTINGS): 
     profile: profileOf(p.profile, base.profile),
     network: { updateCheck: bool((isObj(p.network) ? p.network : {}).updateCheck, base.network.updateCheck) },
     browserApp: browserAppOf(p.browserApp, base.browserApp),
+    agentBrowser: {
+      useTiles: bool((isObj(p.agentBrowser) ? p.agentBrowser : {}).useTiles, base.agentBrowser.useTiles),
+      markPageText: bool((isObj(p.agentBrowser) ? p.agentBrowser : {}).markPageText, base.agentBrowser.markPageText),
+    },
     quit: { whenRunning: quitChoiceOf((isObj(p.quit) ? p.quit : {}).whenRunning, base.quit.whenRunning) },
     notifications: normalizeNotificationSettings(p.notifications, base.notifications),
   };

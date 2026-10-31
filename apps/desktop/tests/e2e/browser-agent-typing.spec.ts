@@ -114,3 +114,97 @@ test("a web page cannot drive the app through the agents' port", async () => {
   const status = await new Promise<number>((resolve) => http.get({ host: "127.0.0.1", port: Number(PORT), path: "/json", headers: { Host: `evil.example:${PORT}` } }, (r) => { r.resume(); resolve(r.statusCode ?? 0); }));
   expect(status).toBe(403);
 });
+
+test("the agents' port shows only Browser tiles: the app's own window is neither listed nor reachable", async () => {
+  const appWindow = await app.evaluate(async ({ BrowserWindow }) => {
+    const wc = BrowserWindow.getAllWindows()[0]!.webContents;
+    if (!wc.debugger.isAttached()) wc.debugger.attach("1.3");
+    return ((await wc.debugger.sendCommand("Target.getTargetInfo")) as { targetInfo: { targetId: string } }).targetInfo.targetId;
+  });
+  const listed = (await (await fetch(`http://127.0.0.1:${PORT}/json`)).json()) as { id: string; url: string }[];
+  expect(listed.length).toBeGreaterThan(0);
+  expect(listed.map((t) => t.id)).not.toContain(appWindow);
+  expect(listed.every((t) => !t.url.includes("index.html"))).toBe(true);
+
+  const { WebSocket: Socket } = await import("ws");
+  const opened = (url: string) => new Promise<boolean>((resolve) => {
+    const ws = new Socket(url);
+    ws.once("open", () => { ws.close(); resolve(true); });
+    ws.once("error", () => resolve(false));
+  });
+  expect(await opened(`ws://127.0.0.1:${PORT}/devtools/page/${listed[0]!.id}`)).toBe(true);
+  expect(await opened(`ws://127.0.0.1:${PORT}/devtools/page/${appWindow}`)).toBe(false);
+
+  // The browser's own connection, as agent-browser uses it.
+  const version = (await (await fetch(`http://127.0.0.1:${PORT}/json/version`)).json()) as { webSocketDebuggerUrl: string };
+  const ws = new Socket(version.webSocketDebuggerUrl);
+  await new Promise((r) => ws.once("open", r));
+  let n = 0;
+  const send = (method: string, params: object = {}) => new Promise<{ result?: { targetInfos?: { targetId: string }[] }; error?: { message: string } }>((resolve) => {
+    const id = ++n;
+    const hear = (d: Buffer) => { const m = JSON.parse(d.toString()); if (m.id === id) { ws.off("message", hear); resolve(m); } };
+    ws.on("message", hear);
+    ws.send(JSON.stringify({ id, method, params }));
+  });
+  const targets = (await send("Target.getTargets")).result!.targetInfos!.map((t) => t.targetId);
+  expect(targets).not.toContain(appWindow);
+  expect(targets).toContain(listed[0]!.id);
+  expect((await send("Target.attachToTarget", { targetId: appWindow, flatten: true })).error?.message).toContain("No target");
+  ws.close();
+});
+
+test("a terminal's agent-browser drives the Browser tiles with no setup: its frame's tile first, and a new tab is a tile beside it", async () => {
+  // A second frame, with a Browser tile and a terminal in it.
+  const before = await page.locator(".react-flow__node-frame").count();
+  await page.evaluate(() => { document.getElementById("elsewhere")?.remove(); (document.activeElement as HTMLElement | null)?.blur(); });
+  await page.keyboard.press("6");
+  await expect(page.locator(".react-flow__node-frame")).toHaveCount(before + 1);
+  const frame = (await page.locator(".react-flow__node-frame").last().getAttribute("data-id"))!;
+  const browsers = page.locator(".react-flow__node-browser");
+  const tilesBefore = await browsers.count();
+  await page.evaluate((f) => window.dispatchEvent(new CustomEvent("hivemind:frame-open", { detail: { frameId: f, kind: "browser" } })), frame);
+  await expect(browsers).toHaveCount(tilesBefore + 1);
+  const mine = (await browsers.last().getAttribute("data-id"))!;
+  await page.evaluate((f) => window.dispatchEvent(new CustomEvent("hivemind:frame-open", { detail: { frameId: f, kind: "shell" } })), frame);
+  const term = page.locator(".react-flow__node-terminal").last();
+  const shell = (await term.getAttribute("data-id"))!;
+
+  // Its environment names its own tile and a session of its own.
+  await term.locator(".xterm-screen").click();
+  const screen = () => term.evaluate((el) => ([el, ...el.querySelectorAll("*")].find((e) => "__hmScreen" in e) as (Element & { __hmScreen(): string }) | undefined)?.__hmScreen() ?? "");
+  await expect.poll(async () => { await page.keyboard.type('echo "[$AGENT_BROWSER_CDP|$AGENT_BROWSER_SESSION]"\n'); return screen(); }, { timeout: 20_000, intervals: [1500] })
+    .toContain(`[http://127.0.0.1:${PORT}/?tile=${shell}|hivemind-${shell}]`);
+
+  // Connected as it would be: the tile in its frame comes first, the one a session takes.
+  const target = (tile: string) => page.evaluate(async (id) => {
+    for (let i = 0; i < 100; i++) {
+      try { return ((await window.hive.browserCdp(id, "Target.getTargetInfo", {})) as { targetInfo: { targetId: string } }).targetInfo.targetId; } catch { await new Promise((r) => setTimeout(r, 200)); }
+    }
+    return null;
+  }, tile);
+  const mineTarget = await target(mine);
+  const { WebSocket: Socket } = await import("ws");
+  const version = (await (await fetch(`http://127.0.0.1:${PORT}/json/version`)).json()) as { webSocketDebuggerUrl: string };
+  const ws = new Socket(`${version.webSocketDebuggerUrl}?tile=${shell}`);
+  await new Promise((r) => ws.once("open", r));
+  let n = 0;
+  const send = (method: string, params: object = {}) => new Promise<{ result?: { targetId?: string; targetInfos?: { targetId: string }[] }; error?: { message: string } }>((resolve) => {
+    const id = ++n;
+    const hear = (d: Buffer) => { const m = JSON.parse(d.toString()); if (m.id === id) { ws.off("message", hear); resolve(m); } };
+    ws.on("message", hear);
+    ws.send(JSON.stringify({ id, method, params }));
+  });
+  expect((await send("Target.getTargets")).result!.targetInfos![0]!.targetId).toBe(mineTarget);
+
+  // A new tab is a Browser tile, opened in the terminal's frame.
+  const made = await send("Target.createTarget", { url: "about:blank" });
+  expect(made.error).toBeUndefined();
+  await expect(browsers).toHaveCount(tilesBefore + 2);
+  const opened = (await browsers.last().getAttribute("data-id"))!;
+  expect(await target(opened)).toBe(made.result!.targetId);
+  expect(await page.evaluate(([t, f]) => document.querySelector(`.react-flow__node-frame[data-id="${f}"]`) !== null && !!document.querySelector(`.react-flow__node[data-id="${t}"]`), [opened, frame] as const)).toBe(true);
+  // Only a web address: not a file of this computer's.
+  expect((await send("Target.createTarget", { url: "file:///etc/passwd" })).error?.message).toContain("http and https");
+  await expect(browsers).toHaveCount(tilesBefore + 2);
+  ws.close();
+});

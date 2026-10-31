@@ -30,7 +30,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { keepOnAppPage } from "./app-navigation.js";
 import { APP_PAGE_ARG } from "../shared/app-page.js";
 import { createHash } from "node:crypto";
-import { spawn } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import {
   findRoot,
   listWorkspaces,
@@ -524,9 +524,11 @@ function browserTargetsPath(): string {
   return path.join(app.getPath("userData"), "browser-targets.json");
 }
 async function writeBrowserTargets(): Promise<void> {
-  const tiles = [...browserGuests.entries()].map(([tileId, g]) => ({
-    tileId, frameId: g.frameId, url: g.url,
-  }));
+  const tiles = [...browserGuests.entries()].map(([tileId, g]) => {
+    const page = browserGuestFor(tileId);
+    const targetId = page ? pageTargets.get(page) : undefined;
+    return { tileId, frameId: g.frameId, url: g.url, ...(targetId ? { targetId } : {}) };
+  });
   const doc = {
     cdpEnabled: process.env.HIVEMIND_BROWSER_CDP === "1",
     cdpPort: process.env.HIVEMIND_BROWSER_CDP_PORT ?? null,
@@ -543,7 +545,9 @@ async function writeBrowserTargets(): Promise<void> {
 on("browser:register", (e, tileId: unknown, webContentsId: unknown, frameId: unknown, url: unknown) => {
   if (typeof tileId !== "string" || typeof webContentsId !== "number" || !browserPages.get(e.sender)?.has(webContentsId)) return;
   browserGuests.set(tileId, { webContentsId, frameId: typeof frameId === "string" ? frameId : null, url: typeof url === "string" ? url : "" });
-  void writeBrowserTargets();
+  // Its DevTools target, which the hive-browser skill binds an agent-browser session to.
+  const page = browserGuestFor(tileId);
+  void (page ? targetOf(page) : Promise.resolve(null)).then(() => writeBrowserTargets());
   void pageStreams.moved(tileId);
 }, { local: true });
 /** A page that has gone takes its tile's registration with it (the tile closed, or its tab did). */
@@ -590,7 +594,59 @@ async function serveAgentBrowserPort(): Promise<void> {
     if (!chromium) await new Promise((r) => setTimeout(r, 100));
   }
   if (!chromium) throw new Error("Chromium's DevTools port did not open");
-  await serveBrowserPort(Number(process.env.HIVEMIND_BROWSER_CDP_PORT), chromium, browserPageOf);
+  await serveBrowserPort(Number(process.env.HIVEMIND_BROWSER_CDP_PORT), chromium, { pageOf: browserPageOf, near: inFrameOf, open: openPageFor });
+  agentBrowserPort = true;
+}
+/** Whether the agents' port is serving: what `agent-browser` in a terminal is pointed at. */
+let agentBrowserPort = false;
+
+/** The frame `bare` is in on a board held here; null for none. */
+function frameOfTile(bare: string): string | null {
+  for (const b of heldBoards(workspaceStore())) { const f = b.core?.frameOf?.[bare]; if (f) return f; }
+  return null;
+}
+/** Whether the Browser tile showing target `targetId` is in the frame of the agent of `agentTile`. */
+function inFrameOf(agentTile: string, targetId: string): boolean {
+  const frame = frameOfTile(agentTile);
+  if (!frame) return false;
+  for (const [tileId, g] of browserGuests) {
+    const page = browserGuestFor(tileId);
+    if (page && pageTargets.get(page) === targetId) return g.frameId === frame;
+  }
+  return false;
+}
+/** A Browser tile beside the agent of `agentTile`, showing `url`: its page's target, once it shows. */
+async function openPageFor(agentTile: string, url: string): Promise<string> {
+  let scheme = "";
+  try { scheme = new URL(url).protocol; } catch { /* not an address */ }
+  if (url !== "about:blank" && scheme !== "http:" && scheme !== "https:") throw new Error("a Browser tile opens http and https pages, or about:blank");
+  const repo = heldBoards(workspaceStore()).find((b) => b.core?.tiles.some((t) => t.id === agentTile))?.repo;
+  if (!repo) throw new Error(`no tile ${agentTile} is open here to open a Browser tile beside`);
+  // Blank first, which shows at once; the page is then loaded in it, as a tab's would be.
+  const tile = await (await control.api()).openTool(agentTile, repo, "@hivemind/web/browser", { url: "about:blank" });
+  for (let waited = 0; waited < 20_000; waited += 100) {
+    const page = browserGuestFor(tile);
+    const target = page ? await targetOf(page) : null;
+    if (page && target) {
+      if (url !== "about:blank") page.loadURL(url).catch(() => { /* the page says why itself */ });
+      return target;
+    }
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  throw new Error("the Browser tile did not open in time");
+}
+
+/** What points `agent-browser` in the terminal of `bare` at the Browser tiles, in a session of its
+ *  own: the agents' port, said with the tile it is for, so a new tab opens beside it. Null when
+ *  agent browser control is off, or the person turned this off. */
+function agentBrowserEnv(bare: string): Record<string, string> | null {
+  const s = getAppSettings().agentBrowser;
+  if (!agentBrowserPort || !s.useTiles) return null;
+  return {
+    AGENT_BROWSER_CDP: `http://127.0.0.1:${process.env.HIVEMIND_BROWSER_CDP_PORT}/?tile=${encodeURIComponent(bare)}`,
+    AGENT_BROWSER_SESSION: `hivemind-${bare}`,
+    ...(s.markPageText ? { AGENT_BROWSER_CONTENT_BOUNDARIES: "1" } : {}),
+  };
 }
 const readFileSyncSafe = (file: string): string => { try { return readFileSync(file, "utf8"); } catch { return ""; } };
 
@@ -728,6 +784,36 @@ handle("relaunchApp", () => {
   }
   stopServices();
   app.exit(0);
+}, { local: true });
+
+// ── agent-browser, the CLI agents drive the Browser tiles with ─────────────
+/** The agent-browser on this computer's PATH: its version, or null when there is none. */
+function agentBrowserVersion(): Promise<string | null> {
+  return new Promise((resolve) => execFile("agent-browser", ["--version"], { timeout: 10_000, env: process.env }, (err, out) => {
+    resolve(err ? null : /(\d+\.\d+\.\d+)/.exec(String(out))?.[1] ?? null);
+  }));
+}
+/** The newest agent-browser on npm; null when it cannot be asked, or update checks are off. */
+async function agentBrowserLatest(): Promise<string | null> {
+  if (!getAppSettings().network.updateCheck) return null;
+  try {
+    const r = await net.fetch("https://registry.npmjs.org/agent-browser/latest", { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(8000) });
+    const v = r.ok ? ((await r.json()) as { version?: unknown }).version : null;
+    return typeof v === "string" && /^\d+\.\d+\.\d+$/.test(v) ? v : null;
+  } catch { return null; }
+}
+handle("agentBrowserStatus", async () => {
+  const [installed, latest] = await Promise.all([agentBrowserVersion(), agentBrowserLatest()]);
+  return { installed, latest };
+}, { local: true });
+// Its own `upgrade` knows how it was installed (npm, Homebrew, Cargo); a first install is npm's.
+handleEffect("agentBrowserInstall", () => ({}), async () => {
+  const had = await agentBrowserVersion();
+  const [file, args] = had ? ["agent-browser", ["upgrade"]] : [process.platform === "win32" ? "npm.cmd" : "npm", ["install", "-g", "agent-browser@latest"]];
+  const said = await new Promise<{ ok: boolean; out: string }>((resolve) => execFile(file, args, { timeout: 300_000, env: process.env, maxBuffer: 4 * 1024 * 1024, shell: process.platform === "win32" }, (err, stdout, stderr) => {
+    resolve({ ok: !err, out: `${stdout}${stderr}`.trim().split("\n").slice(-4).join("\n") });
+  }));
+  return { ...said, version: await agentBrowserVersion() };
 }, { local: true });
 
 // ── app version + self-update ─────────────────────────────────────────────
@@ -1395,6 +1481,9 @@ async function startSession(opts: StartOpts, out: SessionOutput): Promise<{ pid:
   // the pty id; the policy is keyed by the bare id.
   const supSpec = control.supervise.get(toBareId(opts.tileId));
   if (supSpec) opts = { ...opts, env: { ...(opts.env ?? {}), HIVE_SUPERVISE: supSpec } };
+  // agent-browser here drives the Browser tiles; a terminal on another machine cannot reach the port.
+  const browsing = isRemote(opts.cwd) ? null : agentBrowserEnv(toBareId(opts.tileId));
+  if (browsing) opts = { ...opts, env: { ...browsing, ...(opts.env ?? {}) } };
   // An initial ▶ Work prompt rides the spawn env (crosses the wire + persists),
   // to be appended as claude's positional argv at exec (applyInitialPrompt) —
   // this is the auto-submitting path that replaced typing into the booting TUI.

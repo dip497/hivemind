@@ -4,9 +4,10 @@ import { toast } from "sonner";
 import { BUNDLED_TOOL_PLUGINS, BROWSER_PLUGIN_ID, bundledToolRegistry, CODE_PLUGIN_ID, ISSUES_PLUGIN_ID } from "@hivemind/core/tool-plugins";
 import { toolPreferences } from "@hivemind/core/settings-schema";
 import { isPluginOn, pluginOptions, resolveSettings } from "@hivemind/core/plugin-settings";
-import { patchPluginState, setPluginOption, switchPlugin, useSettings } from "./settings-store";
+import { patchPluginState, patchSettings, setPluginOption, switchPlugin, useSettings } from "./settings-store";
 import { Button } from "./components/ui/button";
 import { Switch } from "./components/ui/switch";
+import { versionAfter } from "../../shared/release-notes";
 import { useSettingsNavigate } from "./settings-navigate";
 import { toolLabel } from "./settings-nav";
 import { useToolPackages, useToolProblem } from "./tiles/tool-plugins";
@@ -144,10 +145,57 @@ function BrowserControl({ toolOn }: { toolOn: boolean }) {
       <Switch aria-label="Enable agent browser control" checked={state.enabled} disabled={busy || (!toolOn && !state.enabled)} onCheckedChange={() => void toggle()} />
     </div>
     {!toolOn && !state.enabled && <p className="settings-note">Switch Browser on to use this.</p>}
-    <p className="settings-note warn">Opens 127.0.0.1:{state.port}. Local processes can also control the app window. Only enable this for agents you trust.</p>
+    <p className="settings-note warn">Opens 127.0.0.1:{state.port}, which shows agents only the Browser tiles. Any program on this computer can use it, and one that looks for it can reach the app window too. Only enable this for agents you trust.</p>
     <div className="settings-row">
       <span className="settings-note">Right now: {state.active ? "active" : "off"}</span>
       {state.enabled !== state.active && <Button variant="outline" onClick={() => void window.hive.relaunchApp?.()}>Relaunch to apply</Button>}
     </div>
+    {(state.enabled || state.active) && <AgentBrowser />}
   </section>;
+}
+
+/** agent-browser, the CLI agents drive Browser tiles with: which one is here, an install or update
+ *  of it, and how terminals use it. */
+function AgentBrowser() {
+  const { agentBrowser } = useSettings();
+  const [status, setStatus] = useState<{ installed: string | null; latest: string | null } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [said, setSaid] = useState<string | null>(null);
+  useEffect(() => { void window.hive.agentBrowserStatus?.().then(setStatus).catch(() => {}); }, []);
+  const install = async () => {
+    setBusy(true);
+    setSaid(null);
+    try {
+      const r = await window.hive.agentBrowserInstall!();
+      setStatus((s) => ({ installed: r.version, latest: s?.latest ?? null }));
+      setSaid(r.ok ? `agent-browser ${r.version ?? ""} is installed.` : `It did not install: ${r.out}`);
+    } finally { setBusy(false); }
+  };
+  const newer = status?.installed && status.latest && status.latest !== status.installed && versionAfter(status.latest, status.installed);
+  return <div className="flex flex-col gap-2" data-agent-browser>
+    <div className="settings-row">
+      <div className="flex-1">
+        <label>agent-browser</label>
+        <p data-agent-browser-version>
+          {!status ? "Looking…"
+            : status.installed ? `${status.installed} is installed${newer ? `; ${status.latest} is out` : status.latest ? ", the newest" : ""}.`
+            : "Not installed. Agents can still run it with npx, which fetches it each time."}
+        </p>
+      </div>
+      {status && (!status.installed || newer) && (
+        <Button variant="outline" disabled={busy} onClick={() => void install()} data-agent-browser-install>
+          {busy ? (status.installed ? "Updating…" : "Installing…") : status.installed ? `Update to ${status.latest}` : "Install"}
+        </Button>
+      )}
+    </div>
+    {said && <p className="settings-note" role="status">{said}</p>}
+    <div className="settings-row">
+      <div className="flex-1"><label>Use these Browser tiles</label><p>agent-browser in each terminal drives these tiles in a session of its own, and a new tab opens a Browser tile beside the agent. Off: it starts its own Chrome. For terminals started from now on.</p></div>
+      <Switch aria-label="agent-browser uses these Browser tiles" checked={agentBrowser.useTiles} onCheckedChange={(v) => patchSettings("agentBrowser.useTiles", v)} />
+    </div>
+    <div className="settings-row">
+      <div className="flex-1"><label>Mark what pages say</label><p>What a page says is marked as the page's, so an agent tells it apart from what you asked.</p></div>
+      <Switch aria-label="Mark what pages say" checked={agentBrowser.markPageText} onCheckedChange={(v) => patchSettings("agentBrowser.markPageText", v)} />
+    </div>
+  </div>;
 }
