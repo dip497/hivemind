@@ -16,6 +16,7 @@ import os from "node:os";
 import path from "node:path";
 import { newSeed, idOf } from "@hivemind/workspace-host/identity";
 import type { WorkspaceChange } from "@hivemind/workspace-host/layout";
+import { StatusStore, type SessionStatus } from "@hivemind/agent-host/status-store";
 import { AGENT_MAX, toldOf, postNotice, PushNotices, PushSubscriptions, type Notice } from "../src/push.ts";
 import type { HeldBoard, WaitingStatus } from "../src/needs.ts";
 
@@ -274,4 +275,16 @@ test("someone asking to join is told to each phone subscribed, urgently, by the 
   const join = read(posted[0]!.body, a.key, a.auth) as { since: number };
   assert.deepEqual({ ...join, since: 0 }, { v: 1, t: "join", workspace: W, name: "api", req: 3, who: "Noor", role: "edit", since: 0 });
   assert.equal(posted[0]!.urgency, "high");
+});
+
+test("an agent waiting on work it started has not finished: the phone is told when that is over, once", () => {
+  const s = new StatusStore();
+  const told: Array<string | null> = [];
+  let before: SessionStatus | undefined;
+  s.subscribe(({ status }) => { told.push(toldOf(before, status)); before = status; });
+  s.event("a", { event: "turn.started" });
+  s.event("a", { event: "turn.ended", outcome: "done", background: 2, awaiting: 1 });
+  s.event("a", { event: "turn.started" });
+  s.event("a", { event: "turn.ended", outcome: "done", background: 1 });
+  assert.deepEqual(told, [null, null, null, "finished"]);
 });

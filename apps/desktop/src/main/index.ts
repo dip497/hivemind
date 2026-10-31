@@ -29,7 +29,7 @@ import { promises as fsp, statSync, readFileSync, writeFileSync, existsSync, cpS
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { keepOnAppPage } from "./app-navigation.js";
 import { APP_PAGE_ARG } from "../shared/app-page.js";
-import { createHash } from "node:crypto";
+import { createHash, createHmac, randomBytes } from "node:crypto";
 import { execFile, spawn } from "node:child_process";
 import {
   findRoot,
@@ -80,11 +80,14 @@ import type { ReadScreen } from "@hivemind/agent-host/session-relay";
 import { ipcPath, upgradeCommand, windowsStartMenuShortcut } from "./platform.js";
 import { notesFor, whatsNewSinceLastRun } from "./whats-new.js";
 import { runningRelease, windowsAppFolder } from "../shared/running-release.js";
-import { keyboardCommand } from "./page-keys.js";
-import { around, elementAt, elementsIn, highlightAt, holdStill, pictureOf, showPins } from "./page-notes.js";
-import { addComment, reviewRoot, writePicture } from "@hivemind/core/review";
+import { elementAt, elementFor, elementsIn, elementsInArea, highlightAt, holdStill, keepNote, showPins } from "./page-notes.js";
+import { PERSON_AUTHOR, REVIEW_FILE, pageFilePath, reviewRoot } from "@hivemind/core/review";
+import type { PageNoteAsked, Result } from "@hivemind/workspace-api/methods";
+import { PAGE_FILE_HOST, pageFileNamed } from "../shared/page-file-url.js";
 import type { PageNoteDraft, PagePin } from "../shared/ipc.js";
-import { serveBrowserPort } from "./browser-port.js";
+import { serveBrowserPort, type BrowserPort } from "./browser-port.js";
+import { alwaysAllow, keychainInUse, listSignIns, passwordForms, removeSignIn, saveSignIn, signInNamed, signInOnPage } from "./browser-sign-in.js";
+import { answerAsk, askPerson, askState, endAsksOf, goAhead, waitingAsks, type AskState, type PersonAnswer } from "./browser-person-asks.js";
 import { driveSockPath, readOrCreateToken } from "@hivemind/agent-host/hooks/token";
 import { ApiError, isErrorCode } from "@hivemind/workspace-api/protocol";
 import { appViewsDir, handleViewProtocol, listViewPackages, startViewWatchdog, VIEW_SCHEME_PRIVILEGES, viewSdk } from "./view-packages.js";
@@ -118,7 +121,7 @@ import { askDrive, serveDrive } from "@hivemind/host/drive";
 import { frameWorktrees, framesDomain } from "@hivemind/host/frames";
 import { worktreeCreate, worktreeList, worktreeRemove } from "@hivemind/host/git-adapter";
 import { answers } from "@hivemind/host/answers";
-import { answerKeys, heldBoards, manifestOf, runsIn, sessionFolder } from "@hivemind/host/needs";
+import { answerKeys, heldBoards, manifestOf, runsIn, sessionFolder, tileOn } from "@hivemind/host/needs";
 import { workspaceSummaries } from "@hivemind/host/home";
 import { agentControl } from "@hivemind/host/agent-control";
 import { StartPlaces } from "@hivemind/host/start-places";
@@ -131,6 +134,9 @@ import type { TerminalOpts } from "@hivemind/workspace-api/terminals";
 import { serveWorkspaceApi } from "./workspace-ipc.js";
 import { installBrowserApp } from "./browser-app.js";
 import { installPermissions } from "./permissions.js";
+import { PAGE_COMMANDS, closeDialogBox, pageCommand } from "./page-commands.js";
+import { PageDownloads } from "./page-downloads.js";
+import { popupGate } from "./page-popups.js";
 import { serveScheme } from "./schemes.js";
 import { fileIn } from "@hivemind/host/repo-paths";
 
@@ -271,10 +277,6 @@ async function createWindow(target: string | null = cliLaunchTarget): Promise<vo
   // only hides it until Alt; this kills it outright). No app actions live there
   // — everything is in the in-app toolbar and the keymap (shared/keymap.ts).
   Menu.setApplicationMenu(null);
-  // Export the browser-targets discovery path so spawned PTY agents inherit it
-  // (set here — post-ready — because userData is only reliable now). Harmless
-  // when the CDP enabler is off; the file just lists tiles with no endpoint.
-  process.env.HIVEMIND_BROWSER_TARGETS = path.join(app.getPath("userData"), "browser-targets.json");
   const state = await loadWinState();
   const devUrl = process.env["ELECTRON_RENDERER_URL"];
   const appPage = appPageUrl();
@@ -394,7 +396,7 @@ async function createWindow(target: string | null = cliLaunchTarget): Promise<vo
   // Harden every BrowserTile <webview> guest as it attaches. The guest is a
   // full Chromium renderer loading arbitrary web pages, so: (1) strip any
   // preload/nodeIntegration a page tries to negotiate, and (2) route window.open
-  // / target=_blank to the OS browser instead of spawning rogue child windows on
+  // / target=_blank to a new tab of the tile instead of spawning rogue child windows on
   // the canvas. The page still renders + is fully agent-drivable over CDP.
   wc.on("will-attach-webview", (_e, webPreferences) => {
     // Defense in depth: never let an embedded page run with node access or a
@@ -409,14 +411,16 @@ async function createWindow(target: string | null = cliLaunchTarget): Promise<vo
     browserPages.set(wc, pages);
     const pageId = guest.id;
     pages.add(pageId);
-    guest.once("destroyed", () => { pages.delete(pageId); forgetBrowserPage(pageId); });
+    allBrowserPages.add(pageId);
+    guest.once("destroyed", () => { pages.delete(pageId); allBrowserPages.delete(pageId); forgetBrowserPage(pageId); });
     // The tile zooms its page to the canvas zoom: that must not carry to other pages of the same site.
     guest.setZoomMode("isolated");
+    const opensAsTab = popupGate();
     guest.setWindowOpenHandler(({ url }) => {
       // A link/popup (target=_blank, window.open) inside a BrowserTile guest →
       // hand it back to the host renderer so the owning tile opens it as a NEW
       // TAB (canvas-native tabs), instead of spawning a rogue OS window.
-      if (!wc.isDestroyed()) wc.send("browser:popup", { fromId: guest.id, url });
+      if (!wc.isDestroyed() && opensAsTab(url)) wc.send("browser:popup", { fromId: guest.id, url });
       return { action: "deny" };
     });
   });
@@ -510,52 +514,31 @@ handle("resolveProject", wrap(async (e, rootHint?: string) => {
 // use <webview> over <iframe>: the guest owns a real webContents, so
 // webContents.debugger hands us full CDP for free, on the same pixels the user
 // sees. The guest auto-attaches on the first command and stays attached.
-interface BrowserGuest { webContentsId: number; frameId: string | null; url: string }
+interface BrowserGuest { webContentsId: number; frameId: string | null; url: string; repoPath: string | null }
 const browserGuests = new Map<string, BrowserGuest>();
+/** The tile each page has been the shown tab of: a tab stays its tile's when another is in front. */
+const tileOfPage = new Map<number, string>();
 /** Each app window's browser pages (its <webview> guests), by id, as they attach. */
 const browserPages = new WeakMap<WebContents, Set<number>>();
-
-// Discovery file the `hive-browser` skill reads so a spawned agent can find the
-// right tab to drive: which BrowserTile lives in which frame, its current URL
-// (used to match the CDP target via `agent-browser tab`), and the loopback CDP
-// port. Written on every register/unregister/navigate so it never goes stale.
-// Path is exported as $HIVEMIND_BROWSER_TARGETS into every PTY's environment.
-function browserTargetsPath(): string {
-  return path.join(app.getPath("userData"), "browser-targets.json");
-}
-async function writeBrowserTargets(): Promise<void> {
-  const tiles = [...browserGuests.entries()].map(([tileId, g]) => {
-    const page = browserGuestFor(tileId);
-    const targetId = page ? pageTargets.get(page) : undefined;
-    return { tileId, frameId: g.frameId, url: g.url, ...(targetId ? { targetId } : {}) };
-  });
-  const doc = {
-    cdpEnabled: process.env.HIVEMIND_BROWSER_CDP === "1",
-    cdpPort: process.env.HIVEMIND_BROWSER_CDP_PORT ?? null,
-    cdpEndpoint: process.env.HIVEMIND_BROWSER_CDP === "1"
-      ? `http://127.0.0.1:${process.env.HIVEMIND_BROWSER_CDP_PORT ?? "9333"}`
-      : null,
-    tiles,
-  };
-  await fsp.writeFile(browserTargetsPath(), JSON.stringify(doc, null, 2)).catch(() => {});
-}
+/** Every window's browser pages, each tab of a tile: what agents may see. */
+const allBrowserPages = new Set<number>();
 
 // A browser tile names the page it shows: one of its own window's browser pages, never another
 // window's nor a window itself, which the debugger below would then drive.
-on("browser:register", (e, tileId: unknown, webContentsId: unknown, frameId: unknown, url: unknown) => {
+on("browser:register", (e, tileId: unknown, webContentsId: unknown, frameId: unknown, url: unknown, repoPath: unknown) => {
   if (typeof tileId !== "string" || typeof webContentsId !== "number" || !browserPages.get(e.sender)?.has(webContentsId)) return;
-  browserGuests.set(tileId, { webContentsId, frameId: typeof frameId === "string" ? frameId : null, url: typeof url === "string" ? url : "" });
-  // Its DevTools target, which the hive-browser skill binds an agent-browser session to.
-  const page = browserGuestFor(tileId);
-  void (page ? targetOf(page) : Promise.resolve(null)).then(() => writeBrowserTargets());
+  browserGuests.set(tileId, { webContentsId, frameId: typeof frameId === "string" ? frameId : null, url: typeof url === "string" ? url : "", repoPath: typeof repoPath === "string" ? repoPath : null });
+  tileOfPage.set(webContentsId, tileId);
   void pageStreams.moved(tileId);
 }, { local: true });
 /** A page that has gone takes its tile's registration with it (the tile closed, or its tab did). */
 function forgetBrowserPage(pageId: number): void {
+  tileOfPage.delete(pageId);
   let gone = false;
   for (const [tileId, g] of browserGuests) if (g.webContentsId === pageId) { browserGuests.delete(tileId); gone = true; }
   if (!gone) return;
-  void writeBrowserTargets();
+  for (const tileId of driving.keys()) if (!browserGuests.has(tileId)) driving.delete(tileId);
+  for (const ask of waitingAsks()) if (!browserGuests.has(ask.tile)) endAsksOf(ask.tile);
   for (const tileId of pageStreams.watched()) void pageStreams.moved(tileId);
 }
 
@@ -576,14 +559,21 @@ async function targetOf(page: WebContents): Promise<string | null> {
     if (!attached && page.debugger.isAttached()) page.debugger.detach();
   }
 }
-/** The browser tile page that is DevTools target `targetId`, if one is. */
-async function browserPageOf(targetId: string): Promise<WebContents | null> {
-  for (const tileId of browserGuests.keys()) {
-    const page = browserGuestFor(tileId);
-    if (page && (await targetOf(page)) === targetId) return page;
+/** The Browser tile showing DevTools target `targetId`, a tab in front or not, and its page. */
+async function browserTileOf(targetId: string): Promise<{ tileId: string; guest: BrowserGuest; page: WebContents } | null> {
+  for (const pageId of allBrowserPages) {
+    const page = webContents.fromId(pageId);
+    if (!page || page.isDestroyed() || (await targetOf(page)) !== targetId) continue;
+    const tileId = tileOfPage.get(pageId);
+    const guest = tileId ? browserGuests.get(tileId) : undefined;
+    return tileId && guest ? { tileId, guest, page } : null;
   }
   return null;
 }
+const pageDownloads = new PageDownloads(() => app.getPath("downloads"), (page) => pageTargets.get(page), (page, download) => {
+  const window = page.hostWebContents;
+  if (window && !window.isDestroyed()) window.send("browser:download", download);
+});
 /** The agents' DevTools port (browser-port.ts), in front of Chromium's own, which listens wherever
  *  it finds room and says where in DevToolsActivePort. */
 async function serveAgentBrowserPort(): Promise<void> {
@@ -594,16 +584,160 @@ async function serveAgentBrowserPort(): Promise<void> {
     if (!chromium) await new Promise((r) => setTimeout(r, 100));
   }
   if (!chromium) throw new Error("Chromium's DevTools port did not open");
-  await serveBrowserPort(Number(process.env.HIVEMIND_BROWSER_CDP_PORT), chromium, { pageOf: browserPageOf, near: inFrameOf, open: openPageFor });
-  agentBrowserPort = true;
+  const port = agentPort = await serveBrowserPort(Number(process.env.HIVEMIND_BROWSER_CDP_PORT), chromium, {
+    pageOf: async (targetId) => (await browserTileOf(targetId))?.page ?? null,
+    agentOf: (tile, key) => (tile && key && key === agentKey(tile) ? tile : null),
+    reaches: async (agent, targetId) => {
+      const tile = await browserTileOf(targetId);
+      return !!tile && agentReaches(agent, tile.tileId, tile.guest);
+    },
+    hostsOf: async (agent) => {
+      const hosts = new Set<string>();
+      for (const [pageId, tileId] of tileOfPage) {
+        const guest = browserGuests.get(tileId);
+        const url = guest && agentReaches(agent, tileId, guest) ? webContents.fromId(pageId)?.getURL() : undefined;
+        try { if (url) hosts.add(new URL(url).hostname.toLowerCase()); } catch { /* not an address */ }
+      }
+      return hosts;
+    },
+    near: inFrameOf,
+    open: openPageFor,
+    acted: agentActed,
+    targetOf: (page) => pageTargets.get(page),
+    downloads: pageDownloads,
+  });
+  let tiles = JSON.stringify(getAppSettings().agentBrowser.tiles);
+  onSettingsChange((s) => {
+    const now = JSON.stringify(s.agentBrowser.tiles);
+    if (now !== tiles) void port.recheck();
+    tiles = now;
+  });
 }
-/** Whether the agents' port is serving: what `agent-browser` in a terminal is pointed at. */
-let agentBrowserPort = false;
+/** The agents' port, once it serves: a terminal started before then is pointed at it all the same. */
+let agentPort: BrowserPort | null = null;
 
 /** The frame `bare` is in on a board held here; null for none. */
 function frameOfTile(bare: string): string | null {
   for (const b of heldBoards(workspaceStore())) { const f = b.core?.frameOf?.[bare]; if (f) return f; }
   return null;
+}
+/** The board `bare` is on, by its folder; null for none. */
+function boardOfTile(bare: string): string | null {
+  return heldBoards(workspaceStore()).find((b) => b.core?.tiles.some((t) => t.id === bare))?.repo ?? null;
+}
+/** Whether an agent may drive this Browser tile. The person says so for the tile, or else it is the
+ *  agents beside it: in its frame, or loose on the same board. */
+function agentReaches(agent: string | null, tileId: string, guest: BrowserGuest): boolean {
+  const access = getAppSettings().agentBrowser.tiles[tileId] ?? "frame";
+  if (access !== "frame") return access === "all";
+  if (!agent) return false;
+  const frame = frameOfTile(agent);
+  if (frame || guest.frameId) return frame === guest.frameId;
+  return boardOfTile(agent) !== null && boardOfTile(agent) === boardOfTile(tileId);
+}
+/** What proves a terminal is the agent tile it says it is, for as long as this computer's key lasts,
+ *  so a terminal that outlives the app keeps working. */
+function agentKey(bare: string): string {
+  return createHmac("sha256", agentPortSecret()).update(bare).digest("base64url");
+}
+let portSecret: string | null = null;
+function agentPortSecret(): string {
+  if (portSecret) return portSecret;
+  const file = path.join(app.getPath("userData"), "browser-port-key");
+  portSecret = readFileSyncSafe(file).trim();
+  if (!portSecret) {
+    portSecret = randomBytes(32).toString("base64url");
+    writeFileSync(file, portSecret, { mode: 0o600 });
+  }
+  return portSecret;
+}
+
+const agentLabel = (agent: string | null): string | null =>
+  (agent ? (heldBoards(workspaceStore()).flatMap((b) => b.core?.tiles ?? []).find((t) => t.id === agent)?.label ?? null) : null);
+
+/** The Browser tile an agent means: the one it names, if it may reach it, else the one beside it. */
+function browserTileFor(agent: string | null, given: string | null): string {
+  const tile = given ?? [...browserGuests].find(([tileId, guest]) => agentReaches(agent, tileId, guest))?.[0];
+  if (!tile) throw new ApiError("NOT_FOUND", "No Browser tile is open beside you: open one with `agent-browser tab new <address>`");
+  const guest = browserGuests.get(tile);
+  if (!guest || (agent && !agentReaches(agent, tile, guest))) throw new ApiError("NOT_FOUND", `No Browser tile ${tile} that you can use`);
+  return tile;
+}
+const ON_ANOTHER_ASK = "A question is already waiting on this Browser tile: wait for the person's answer to it";
+/** What `hive ctl browser` does here: ask the person on a tile, and sign in with a saved sign-in. */
+const browserWork = {
+  signIns: () => listSignIns().map(({ name, site }) => ({ name, site })),
+  ask: async (agent: string | null, given: string | null, words: string) => {
+    const tile = browserTileFor(agent, given);
+    const page = browserGuestFor(tile);
+    const target = page ? await targetOf(page) : null;
+    // While the person signs in, an agent holding this page sees nothing of it.
+    const guard = target && agentPort ? agentPort.guard(target, []) : null;
+    const ask = askPerson(tile, agentLabel(agent), { kind: "hand-over", words }, undefined, () => guard?.release());
+    if (ask === null) { guard?.release(); throw new ApiError("BAD_REQUEST", ON_ANOTHER_ASK); }
+    return { ask, tile };
+  },
+  signIn: (agent: string | null, given: string | null, name: string) => {
+    const saved = signInNamed(name);
+    if (!saved) throw new ApiError("NOT_FOUND", `No saved sign-in is called ${name}: the person adds them in Settings ▸ Plugins ▸ Browser ▸ Sign-ins, and \`hive ctl browser sign-ins\` lists them`);
+    const tile = browserTileFor(agent, given);
+    const about = { kind: "sign-in" as const, name, site: saved.site, username: saved.username };
+    const work = async (always: boolean): Promise<AskState> => {
+      if (always) alwaysAllow(name);
+      const page = browserGuestFor(tile);
+      const target = page ? await targetOf(page) : null;
+      if (!page || !target || !agentPort) return { state: "done", outcome: "person", why: "The tile shows no page" };
+      const guard = agentPort.guard(target, passwordForms(name));
+      try {
+        const r = await signInOnPage(page, name);
+        return r.outcome === "sent" ? { state: "done", outcome: "sent", url: r.url } : { state: "done", outcome: "person", why: r.why };
+      } finally { guard.release(); }
+    };
+    const by = agentLabel(agent);
+    const ask = saved.always ? goAhead(tile, by, about, work) : askPerson(tile, by, about, work);
+    if (ask === null) throw new ApiError("BAD_REQUEST", ON_ANOTHER_ASK);
+    return { ask, tile };
+  },
+  state: async (ask: number, ms: number) => {
+    const state = await askState(ask, ms);
+    if (!state) throw new ApiError("NOT_FOUND", `No question ${ask} is known here: it ended a while ago`);
+    return state;
+  },
+  asks: waitingAsks,
+  answer: (ask: number, answer: PersonAnswer) => ({ answered: answerAsk(ask, answer) }),
+};
+const answerOf = (v: unknown): PersonAnswer => {
+  if (v === "yes" || v === "always" || v === "no" || v === "done") return v;
+  throw new ApiError("BAD_REQUEST", "the answer is yes, always, no or done");
+};
+handle("browserAsks", () => waitingAsks());
+handle("browserAnswerAsk", (_e, ask: unknown, answer: unknown) => {
+  if (typeof ask !== "number") throw new Error("a question is a number");
+  return browserWork.answer(ask, answerOf(answer));
+});
+handle("browserSignIns", () => ({ signIns: listSignIns(), keychain: keychainInUse() }), { local: true });
+handle("browserSignInSave", (_e, row: unknown) => {
+  const r = (row ?? {}) as Record<string, unknown>;
+  saveSignIn({ name: String(r.name ?? ""), url: String(r.url ?? ""), username: String(r.username ?? ""), password: String(r.password ?? "") });
+}, { local: true });
+handle("browserSignInRemove", (_e, name: unknown) => removeSignIn(String(name ?? "")), { local: true });
+
+/** How long a page says who is driving it after their last action. */
+const DRIVING_FOR_MS = 4000;
+const driving = new Map<string, { by: string | null; ends: ReturnType<typeof setTimeout> }>();
+/** An agent has just changed what a Browser tile shows: the tile says so, and offers to stop it. */
+function agentActed(agent: string | null, targetId: string): void {
+  for (const [pageId, tileId] of tileOfPage) {
+    const page = webContents.fromId(pageId);
+    if (!page || pageTargets.get(page) !== targetId) continue;
+    const now = driving.get(tileId);
+    if (now) clearTimeout(now.ends);
+    const by = agentLabel(agent);
+    const ends = setTimeout(() => { driving.delete(tileId); broadcast("browser:driving", { tileId, driving: false, by: null }); }, DRIVING_FOR_MS);
+    driving.set(tileId, { by, ends });
+    if (!now) broadcast("browser:driving", { tileId, driving: true, by });
+    return;
+  }
 }
 /** Whether the Browser tile showing target `targetId` is in the frame of the agent of `agentTile`. */
 function inFrameOf(agentTile: string, targetId: string): boolean {
@@ -641,9 +775,9 @@ async function openPageFor(agentTile: string, url: string): Promise<string> {
  *  agent browser control is off, or the person turned this off. */
 function agentBrowserEnv(bare: string): Record<string, string> | null {
   const s = getAppSettings().agentBrowser;
-  if (!agentBrowserPort || !s.useTiles) return null;
+  if (process.env.HIVEMIND_BROWSER_CDP !== "1" || !s.useTiles) return null;
   return {
-    AGENT_BROWSER_CDP: `http://127.0.0.1:${process.env.HIVEMIND_BROWSER_CDP_PORT}/?tile=${encodeURIComponent(bare)}`,
+    AGENT_BROWSER_CDP: `http://127.0.0.1:${process.env.HIVEMIND_BROWSER_CDP_PORT}/?tile=${encodeURIComponent(bare)}&key=${agentKey(bare)}`,
     AGENT_BROWSER_SESSION: `hivemind-${bare}`,
     ...(s.markPageText ? { AGENT_BROWSER_CONTENT_BOUNDARIES: "1" } : {}),
   };
@@ -694,22 +828,54 @@ handle("browserNote", async (_e, tileId: unknown, repoPath: unknown, note: unkno
   const n = (note ?? {}) as Partial<PageNoteDraft>;
   if (typeof repoPath !== "string" || !repoPath) throw new Error("a note needs the workspace it belongs to");
   if (typeof n.body !== "string" || !n.body.trim()) throw new Error("a note needs words");
-  const elements = Array.isArray(n.elements) ? n.elements : [];
-  const boxes = n.area ? [n.area] : elements.map((el) => el.box);
-  if (!boxes.length) throw new Error("a note points at an element or an area");
-  const root = await reviewRoot(repoPath);
-  const id = `c-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
-  const picture = await writePicture(root, id, await pictureOf(page, around(boxes))).catch(() => null);
-  const metrics = (await page.debugger.sendCommand("Page.getLayoutMetrics")) as { cssVisualViewport: { clientWidth: number; clientHeight: number } };
-  return addComment(root, {
-    id, body: n.body.trim(), author: "you", ...(n.intent ? { intent: n.intent } : {}),
-    page: {
-      url: page.getURL(), title: page.getTitle(),
-      viewport: { width: metrics.cssVisualViewport.clientWidth, height: metrics.cssVisualViewport.clientHeight },
-      elements, ...(n.area ? { area: n.area } : {}), ...(picture ? { picture } : {}),
-    },
-  });
+  return keepNote(page, repoPath, { body: n.body.trim(), intent: n.intent, elements: Array.isArray(n.elements) ? n.elements : [], area: n.area }, PERSON_AUTHOR);
 });
+handle("browserShowDownload", (_e, id: unknown) => {
+  const saved = typeof id === "string" ? pageDownloads.pathOf(id) : undefined;
+  if (saved) shell.showItemInFolder(saved);
+}, { local: true });
+/** The Browser tile `named` means: itself, or the one in the frame of the agent it names. */
+function browserTileMeant(named: string): string {
+  const bare = toBareId(named);
+  if (browserGuestFor(bare)) return bare;
+  const frame = frameOfTile(bare);
+  const beside = [...browserGuests.keys()].filter((id) => frame && browserGuests.get(id)?.frameId === frame && browserGuestFor(id));
+  if (beside.length > 1) throw new ApiError("SEVERAL_BROWSER_TILES", `${beside.length} Browser tiles are in the frame of ${bare}: ${beside.join(", ")}`);
+  if (!beside.length) throw new ApiError("NO_BROWSER_TILE", `${bare} is no Browser tile showing a page, and none is in its frame`);
+  return beside[0]!;
+}
+/** A file of a note, for a window to show or play: only from a repo a Browser tile here keeps its
+ *  notes in, and only a file a note could hold there. */
+async function pageFileAnswer(request: Request): Promise<Response> {
+  const { repo, name } = pageFileNamed(request.url);
+  if (![...browserGuests.values()].some((g) => g.repoPath === repo)) return new Response("forbidden", { status: 403 });
+  const file = await pageFilePath(await reviewRoot(repo), name);
+  if (!file) return new Response("not found", { status: 404 });
+  return net.fetch(pathToFileURL(file).toString(), { headers: request.headers });
+}
+/** What a note calls the agent of `bare`: the name its tile was given, else its tile's label. A
+ *  tile someone named "you" is still not the person. */
+function agentNamed(bare: string): string {
+  const on = tileOn(heldBoards(workspaceStore()), bare);
+  const name = (on?.board.core?.tileNames?.[on.record.id] || on?.record.label || "agent").slice(0, 80);
+  return name === PERSON_AUTHOR ? "agent" : name;
+}
+/** A note on a tile's page asked for over the API: by the agent of `caller`, or the person. */
+async function pageNoteAsked(named: string, asked: PageNoteAsked, caller: string | undefined): Promise<Result<"page.note">> {
+  const tile = browserTileMeant(named);
+  // Its picture would show the page: an agent gets no further than the tiles it may use.
+  const guest = browserGuests.get(tile);
+  if (caller && (!guest || !agentReaches(caller, tile, guest))) throw new ApiError("NOT_FOUND", `No Browser tile ${tile} that you can use`);
+  const page = pageOfTile(tile);
+  const repo = browserGuests.get(tile)!.repoPath;
+  if (!repo) throw new ApiError("NO_BROWSER_TILE", `${tile} has no workspace to keep notes in`);
+  const elements = asked.selector != null ? [await elementFor(page, asked.selector)] : await elementsInArea(page, asked.area!);
+  const author = caller === undefined ? PERSON_AUTHOR : agentNamed(caller);
+  const note = await pageStreams.whileDrawn(tile, page, () => keepNote(page, repo, { body: asked.body, intent: asked.intent, elements, area: asked.area }, author));
+  // A review with no workspace is kept outside the repo, where its window's watch does not see it.
+  workspaceServer.publish("file.changed", repo, { paths: [path.join(repo, ".hivemind", REVIEW_FILE)] });
+  return { note, kept: await reviewRoot(repo) };
+}
 handle("browserPins", (_e, tileId: unknown, pins: unknown) => {
   if (!Array.isArray(pins) || pins.length > 500) throw new Error("pins must be a list");
   return showPins(pageOfTile(tileId), pins as PagePin[]);
@@ -736,7 +902,8 @@ handleEffect(
         throw err;
       }
     }
-    if (await keyboardCommand(guest, method, params ?? {})) return {};
+    if (PAGE_COMMANDS.has(method)) return await pageCommand(guest, method, params ?? {});
+    if (method === "Page.handleJavaScriptDialog") closeDialogBox(guest);
     return await guest.debugger.sendCommand(method, params ?? {});
   }), { local: true },
 );
@@ -802,9 +969,11 @@ async function agentBrowserLatest(): Promise<string | null> {
     return typeof v === "string" && /^\d+\.\d+\.\d+$/.test(v) ? v : null;
   } catch { return null; }
 }
+/** Whether an agent's `record` can run: it pipes frames into ffmpeg. */
+const ffmpegHere = () => new Promise<boolean>((resolve) => execFile("ffmpeg", ["-version"], { timeout: 5000 }, (err) => resolve(!err)));
 handle("agentBrowserStatus", async () => {
-  const [installed, latest] = await Promise.all([agentBrowserVersion(), agentBrowserLatest()]);
-  return { installed, latest };
+  const [installed, latest, ffmpeg] = await Promise.all([agentBrowserVersion(), agentBrowserLatest(), ffmpegHere()]);
+  return { installed, latest, ffmpeg };
 }, { local: true });
 // Its own `upgrade` knows how it was installed (npm, Homebrew, Cargo); a first install is npm's.
 handleEffect("agentBrowserInstall", () => ({}), async () => {
@@ -1610,12 +1779,14 @@ const workspaceServer: WorkspaceServer = new WorkspaceServer([
   // Naming, keys, replies, sessions, tools and pipes, and the person's machine methods (0.23).
   controlApi({
     control: () => control.api(),
+    browser: browserWork,
     // A message's photos, on the machine its agent runs on, in a folder of its tile's.
     keep: (bare, images) => {
       const folder = runsIn(heldBoards(workspaceStore()), bare);
       if (folder === null) throw new ApiError("NOT_FOUND", `no tile ${bare} is open`);
       return placesHere.keep(folder, images, bare);
     },
+    pageNote: pageNoteAsked,
   }),
   // What an agent here and the person say to each other, from its session file, as it is written
   // (M5, spec/agents.md "Conversation").
@@ -1727,10 +1898,8 @@ app.commandLine.appendSwitch("max-active-webgl-contexts", "32");
 // ── Agent browser-use (CDP) enabler ───────────────────────────
 // Opt-in (HIVEMIND_BROWSER_CDP=1): expose a LOOPBACK Chrome DevTools Protocol
 // port so a spawned agent in a PTY tile can drive a BrowserTile with
-// `agent-browser --cdp <port>` (see the `hive-browser` skill). The port + the
-// discovery-file path are exported into the environment, which every PTY
-// inherits (the daemon starts from this env) — so the agent sees
-// $HIVEMIND_BROWSER_CDP_PORT and $HIVEMIND_BROWSER_TARGETS with no extra wiring.
+// `agent-browser --cdp <port>` (see the `hive-browser` skill). The port is exported
+// into the environment, which every PTY inherits (the daemon starts from this env).
 // SECURITY: a remote-debugging port also exposes the app's OWN window, so this
 // is off by default and bound to 127.0.0.1 — only enable it for agents you trust.
 // Persisted app settings live in <userData>/settings.json. Read SYNC here
@@ -1759,8 +1928,6 @@ if (process.env.HIVEMIND_BROWSER_CDP === "1" || readSettings().browserCdp === tr
   app.commandLine.appendSwitch("remote-debugging-address", "127.0.0.1");
   process.env.HIVEMIND_BROWSER_CDP = "1";
   process.env.HIVEMIND_BROWSER_CDP_PORT = port;
-  // $HIVEMIND_BROWSER_TARGETS is set post-ready in createWindow (userData path
-  // is only reliable then) — before any PTY spawns, so agents still inherit it.
 }
 // NOTE: we intentionally do NOT set disable-gpu-vsync / ignore-gpu-blocklist /
 // disable-frame-rate-limit / enable-zero-copy / force_high_performance_gpu /
@@ -1826,6 +1993,7 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
   app.whenReady().then(async () => {
     // Before any window or Browser tile page loads, so none is ever granted without them.
     installPermissions(appPageUrl());
+    pageDownloads.watch(session.fromPartition("persist:browser"));
     await migrateOnStart();
     // A daemon of another protocol is replaced before anything connects to it: each connection
     // waits for this, the window does not.
@@ -2009,6 +2177,7 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
     const mediaOrigins = new Set(["file://", ...(process.env.ELECTRON_RENDERER_URL ? [new URL(process.env.ELECTRON_RENDERER_URL).origin] : [])]);
     serveScheme("hivemedia", async (request) => {
       try {
+        if (new URL(request.url).host === PAGE_FILE_HOST) return await pageFileAnswer(request);
         // hivemedia://media/<filename> — the filename rides in the PATH (host is
         // the fixed marker "media"). Resolve against mediaDir, then verify it
         // never escaped the dir (path-traversal guard).

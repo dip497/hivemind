@@ -160,6 +160,16 @@ test("a sleep that fails is asked once more, and then leaves its tile awake, say
   assert.equal(asleepIn("a4"), undefined);
 });
 
+test("an agent waiting on work it started is not put to sleep unless forced, as sleep would end that work", async () => {
+  const { p } = plane();
+  p.event("agent.event", { tileId: "hm:a1", event: "turn.ended", awaiting: 1 });
+  const api = await p.api();
+  assert.deepEqual(await api.sleep(REPO, "a1", false), { slept: [], skipped: [{ tile: "a1", why: "working: --force puts it to sleep anyway" }] });
+  assert.deepEqual((await api.sleep(REPO, "a1", true)).slept, ["a1"]);
+  assert.equal(p.status.get("a1")?.state, "interrupted");
+  assert.equal(p.status.get("a1")?.awaiting, undefined);
+});
+
 test("asleep, an agent keeps its name and is not counted as ended; nothing is typed into it, and what was sent it is told once it is up again", async () => {
   const { p, typed, settle } = plane();
   p.event("agent.event", { tileId: "hm:a1", event: "turn.started" });

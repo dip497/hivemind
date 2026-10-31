@@ -4,6 +4,7 @@ import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
 import type { PageFrame, PageInput } from "../../shared/page-input";
 import { usePageAnnotate } from "./browser-notes";
+import { AgentAccessMenu, DrivingBar, PersonAskBar } from "./browser-agents";
 
 /** The modifier bits a page's input names: Alt 1, Ctrl 2, Meta 4, Shift 8. */
 const modifiersOf = (e: { altKey: boolean; ctrlKey: boolean; metaKey: boolean; shiftKey: boolean }) =>
@@ -122,9 +123,11 @@ export function WatchedPage({ tileId, url, repoPath, onClose }: { tileId: string
           <Button variant="ghost" size="icon-2xs" tabIndex={-1}><ExternalLink /></Button>
         </a>
         {notes.button}
+        <AgentAccessMenu tileId={tileId} />
         {onClose && <Button variant="ghost" size="icon-2xs" className="nodrag" onClick={onClose} aria-label="close tile" title="Close tile"><XIcon /></Button>}
       </div>
       {notes.bar}
+      <DrivingBar tileId={tileId} />
       <div
         className="nodrag nowheel nopan relative flex-1 min-h-0 bg-[var(--color-bg)] overflow-hidden"
         onMouseDown={(e) => { keys.current?.focus({ preventScroll: true }); e.preventDefault(); mouse("mousePressed", e); }}
@@ -143,6 +146,7 @@ export function WatchedPage({ tileId, url, repoPath, onClose }: { tileId: string
         data-watched-page-picture
         ref={area}
       >
+        <PersonAskBar tileId={tileId} />
         {notes.layer && drawn && <div className="absolute left-0 top-0" style={drawn}>{notes.layer}</div>}
         {src && (
           <img

@@ -72,6 +72,48 @@ test("a tile that is not open is not found by every verb that names it, at eithe
   assert.equal(await failure(() => api.focus("a1")), "done");
 });
 
+test("read gives a turn's reply when the turn ends, though work it started goes on, says so, and the next read waits for what comes of it", async () => {
+  const { api, plane } = await controlOver(["a1"]);
+  const alive = setInterval(() => {}, 1000);
+  after(() => clearInterval(alive));
+  const hook = (event: string, more: object = {}) => plane.event("agent.event", { tileId: "hm:a1", event, ...more });
+  const replies = (text: string) => plane.event("agent.reply", { tileId: "hm:a1", text });
+  const settle = () => new Promise((r) => setTimeout(r, 600));
+  assert.equal(api.send("a1", "run the workflow").sent, true);
+  await settle();
+  hook("turn.started");
+  const reading = api.read("a1", 3000);
+  replies("started a workflow");
+  hook("turn.ended", { background: 1, awaiting: 1 });
+  const first = await reading;
+  assert.deepEqual([first.finalStatus, first.text, first.awaiting], ["turn", "started a workflow", 1]);
+  assert.match(first.note ?? "", /still waiting on 1 background task/);
+
+  const without = await api.read("a1", 0);
+  assert.deepEqual([without.finalStatus, without.text, without.awaiting], ["working", null, undefined], "not idle: more is coming");
+
+  const next = api.read("a1", 3000);
+  hook("turn.started");
+  replies("the workflow found 3 bugs");
+  hook("turn.ended");
+  const second = await next;
+  assert.deepEqual([second.finalStatus, second.text, second.awaiting, second.note], ["turn", "the workflow found 3 bugs", undefined, undefined]);
+});
+
+test("read says what the turn's end said of the work left, though its host's status comes on another connection, later", async () => {
+  const { api, plane } = await controlOver(["a1"]);
+  const alive = setInterval(() => {}, 1000);
+  after(() => clearInterval(alive));
+  const status = (state: string, more: object = {}) => plane.fromMachine("agent.status", { tileId: "hm:a1", status: { state, subagents: [], background: 0, compacting: false, source: "hooks", since: 1, ...more } });
+  status("working");
+  const reading = api.read("a1", 3000);
+  plane.event("agent.reply", { tileId: "hm:a1", text: "started a workflow" });
+  plane.event("agent.event", { tileId: "hm:a1", event: "turn.ended", awaiting: 2 });
+  const read = await reading;
+  status("working", { awaiting: 2 });
+  assert.deepEqual([read.text, read.awaiting], ["started a workflow", 2]);
+});
+
 test("read says an agent sent nothing since its last reply is idle at once, a busy one read without waiting is working, and a tile that runs no agent has none", async () => {
   const { api, plane } = await controlOver(["a1"], [{ id: "web", kind: "browser" }]);
   // The host's own waits hold no event loop open; a socket does, out of tests.

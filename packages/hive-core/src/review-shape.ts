@@ -73,12 +73,18 @@ export interface DiffComment extends CommentFields {
 /** A note on a page in a Browser tile. */
 export interface PageComment extends CommentFields {
   page: PageAnchor;
+  /** Proof kept on the note, videos or images: files in `pages/` beside review.json. */
+  attachments?: string[];
 }
 
 export type ReviewComment = DiffComment | PageComment;
 
 export const onPage = (c: ReviewComment): c is PageComment => "page" in c;
 export const onDiff = (c: ReviewComment): c is DiffComment => !("page" in c);
+
+/** The author on what the person writes. Any other author is an agent, by its name. */
+export const PERSON_AUTHOR = "you";
+export const byAgent = (c: ReviewComment): boolean => c.author !== PERSON_AUTHOR;
 
 /** Where a comment is in its life: open, seen (an agent is on it), resolved or dismissed. */
 export type ReviewStatus = "open" | "seen" | "resolved" | "dismissed";

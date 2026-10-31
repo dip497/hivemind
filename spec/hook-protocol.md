@@ -78,5 +78,14 @@ script runs.
 `{"tileId":…,"plan":…,"cwd":…}` → `{"decision":"deny","feedback":…}` or any other decision to
 proceed. No answer: proceed.
 
+## What a hook counts
+
+`background` on an event counts the payload's `background_tasks` with `status` `running`. `awaiting`
+counts those that come back to the agent when they finish: `status` `running` or `pending`, `type`
+`subagent`, `workflow`, `cloud session` or `MCP task`. A `shell` or a `monitor` may run for as long as
+it likes and a `teammate` is `running` while it sits idle, and a type not listed counts for nothing.
+A `turn.ended` leaves out either count at 0; a `subagent.stopped` whose payload has the list says
+`awaiting` at 0 too, and says none of it without the list. `status.md` says what `awaiting` does.
+
 The SDK (`packages/agent-sdk`) wraps all of this; a plugin in another language can speak it
 directly.

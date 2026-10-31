@@ -1,7 +1,8 @@
 //! The gate (design §7, R11): which devices may connect to this one. Main gives the devices its
 //! access lists admit; any other device is refused on every protocol but pairing and ping, which
 //! are how someone new first reaches a host and how anyone checks a device answers. A device
-//! taken off the list loses its connections at once.
+//! taken off the list loses its connections at once. Until main first says whom it admits, a device
+//! waits at the gate: turned away then, it would take itself to be unpaired.
 
 use std::{
     collections::HashSet,
@@ -12,15 +13,27 @@ use iroh::{
     endpoint::{AfterHandshakeOutcome, Connection, EndpointHooks, Side, WeakConnectionHandle},
     EndpointId,
 };
+use tokio::sync::watch;
 
 use crate::{pair, ping};
 
 /// Why a connection was refused or closed, as the other side reads it.
 pub const NOT_ADMITTED: u32 = 403;
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Clone)]
 pub struct Gate {
     inner: Arc<Mutex<Inner>>,
+    /// Whether main has said whom it admits.
+    told: watch::Sender<bool>,
+}
+
+impl Default for Gate {
+    fn default() -> Self {
+        Self {
+            inner: Arc::default(),
+            told: watch::Sender::new(false),
+        }
+    }
 }
 
 #[derive(Debug, Default)]
@@ -43,6 +56,7 @@ impl Gate {
             Some(_) => true,
             None => false,
         });
+        self.told.send_replace(true);
     }
 }
 
@@ -56,6 +70,7 @@ impl EndpointHooks for Gate {
         if alpn == pair::ALPN || alpn == ping::ALPN {
             return AfterHandshakeOutcome::accept();
         }
+        let _ = self.told.subscribe().wait_for(|told| *told).await;
         let id = conn.remote_id();
         let mut inner = self.inner.lock().unwrap();
         if !inner.admitted.contains(&id) {

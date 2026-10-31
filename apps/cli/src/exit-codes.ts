@@ -13,9 +13,9 @@ const EXIT_CODES = [
   { name: "usage", exit: 2, codes: ["USAGE", "BAD_REQUEST", "UNKNOWN_METHOD"], meaning: "the command was written wrong: see its --help" },
   { name: "unavailable", exit: 3, codes: ["UNAVAILABLE"], meaning: "no hivemind app or `hive host` answers" },
   { name: "timeout", exit: 4, codes: ["TIMEOUT"], meaning: "the wait ran out" },
-  { name: "notFound", exit: 5, codes: ["NOT_FOUND", "NO_AGENT", "NO_ROOT"], meaning: "what it names is not there, or was closed: a tile, agent, frame, issue or workspace; or the tile runs no agent" },
+  { name: "notFound", exit: 5, codes: ["NOT_FOUND", "NO_AGENT", "NO_ROOT", "NO_BROWSER_TILE", "NO_ELEMENT", "ATTACHMENT_MISSING"], meaning: "what it names is not there, or was closed: a tile, agent, frame, issue or workspace; or the tile runs no agent" },
   { name: "unauthorized", exit: 6, codes: ["FORBIDDEN", "PERSON_ONLY"], meaning: "not yours to do: a bad token, or only the person may: ask them" },
-  { name: "refused", exit: 7, codes: ["RATE_LIMITED", "DEPTH_EXCEEDED", "UNSUPPORTED", "OCCLUDED", "PART_OF_A_PACKAGE"], meaning: "refused for now, or the agent cannot do it: idle with nothing to read; something covers the tile `tile look` would picture; or the plugin changes only with its package" },
+  { name: "refused", exit: 7, codes: ["RATE_LIMITED", "DEPTH_EXCEEDED", "UNSUPPORTED", "OCCLUDED", "PART_OF_A_PACKAGE", "SEVERAL_BROWSER_TILES", "SEVERAL_ELEMENTS", "ATTACHMENT_TYPE", "ATTACHMENT_TOO_BIG", "ATTACHMENT_NOT_A_NOTE", "REVIEW_PICTURES"], meaning: "refused for now, or the agent cannot do it: idle with nothing to read; something covers the tile `tile look` would picture; or the plugin changes only with its package" },
   { name: "waiting", exit: 8, codes: ["WAITING"], meaning: "the agent stopped to wait on an answer" },
   { name: "asleep", exit: 9, codes: ["ASLEEP"], meaning: "the agent is asleep: wake it with `hive ctl wake <tile>`" },
 ] as const;

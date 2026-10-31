@@ -57,7 +57,14 @@ export async function runWorkflow(d: Pick<Drive, "call">, repo: string, plan: Wo
   const worker = async (item: string, prompt: string): Promise<WorkerResult> => {
     let tile: string;
     try { tile = await start(item, prompt); } catch (e) { return { item, tile: null, status: "error", text: (e as Error).message }; }
-    const r = await readTurn(d, tile, plan.turnMs);
+    const deadline = Date.now() + plan.turnMs;
+    let r = await readTurn(d, tile, plan.turnMs);
+    // A worker whose turn ended waiting on work it started has not answered, and closing it would
+    // end that work.
+    while (r.finalStatus === "turn" && r.awaiting) {
+      const next = await readTurn(d, tile, Math.max(0, deadline - Date.now()));
+      r = { ...next, text: next.text ?? r.text };
+    }
     if (plan.close && r.finalStatus === "turn") await d.call("agent.close", [tile]).catch(() => {});
     return { item, tile, status: r.finalStatus, text: r.text || null };
   };

@@ -817,10 +817,83 @@ async fn an_app_that_speaks_another_protocol_is_told_so_and_the_daemon_stops() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn a_device_that_arrives_before_main_says_whom_it_admits_waits_and_is_not_turned_away() {
+    let root = temp();
+    // Ready, as a daemon just started is, and main has said nothing of whom it admits.
+    let mut host = Main::start(&root, "host").await;
+    let key = iroh::SecretKey::from_bytes(&rand::random::<[u8; 32]>());
+    let device = key.public().to_string();
+    let reach = Reach {
+        relays: vec![],
+        lookup: None,
+        mdns: false,
+    };
+    let endpoint = net::endpoint(key, &reach, vec![]).await.unwrap();
+    let at = net::addr_of(&host.id, &host.addrs, &None).unwrap();
+    let connection = endpoint.connect(at, ws::ALPN).await.unwrap();
+    tokio::time::sleep(Duration::from_secs(1)).await;
+    assert!(
+        connection.close_reason().is_none(),
+        "turned away before main said: {:?}",
+        connection.close_reason()
+    );
+
+    host.send(json!({ "t": "admit", "devices": [device] }))
+        .await;
+    assert_eq!(host.next("incoming").await["peer"], json!(device));
+    assert!(connection.close_reason().is_none());
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_daemon_says_its_network_relay_when_ready_even_while_the_relay_does_not_answer() {
+    let root = temp();
+    let listening = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let unanswered = format!("http://{}/", listening.local_addr().unwrap());
+    drop(listening);
+    let dir = root.join("host");
+    fs::create_dir_all(dir.join("identity")).unwrap();
+    let seed: String = (0..32)
+        .map(|_| format!("{:02x}", rand::random::<u8>()))
+        .collect();
+    fs::write(dir.join("identity/device.key"), format!("{seed}\n")).unwrap();
+    let socket = dir.join("net.sock");
+    let listener = UnixListener::bind(&socket).unwrap();
+    let daemon = Command::new(BIN)
+        .args([
+            "daemon",
+            "--socket",
+            socket.to_str().unwrap(),
+            "--identity",
+            dir.join("identity").to_str().unwrap(),
+            "--relay",
+            &unanswered,
+        ])
+        .stdout(Stdio::null())
+        .spawn()
+        .unwrap();
+    let (stream, _) = tokio::time::timeout(Duration::from_secs(30), listener.accept())
+        .await
+        .expect("the daemon connects")
+        .unwrap();
+    let mut main = Main {
+        stream,
+        daemon,
+        held: VecDeque::new(),
+        id: String::new(),
+        addrs: vec![],
+        lookup: None,
+    };
+    assert_eq!(main.next("ready").await["relay"], json!(unanswered));
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn a_device_not_admitted_is_refused_and_one_no_longer_admitted_is_cut_off_within_a_second() {
     let root = temp();
     let mut host = Main::start(&root, "host").await;
     let mut guest = Main::start(&root, "guest").await;
+    host.send(json!({ "t": "admit", "devices": [] })).await;
 
     // Refused at the handshake: the guest's side finishes it, and the connection is closed at once.
     guest

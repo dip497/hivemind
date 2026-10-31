@@ -49,10 +49,12 @@ export interface Paired {
 export interface Entry {
   id: string;
   at: number;
-  who: "person" | "agent" | "tool";
+  who: "person" | "agent" | "tool" | "program";
   text?: string;
   tool?: { id: string; name: string; about?: string };
   result?: { of: string; text: string; error?: boolean };
+  /** A line the agent's own program wrote, in the person's words. */
+  notice?: { text: string; quiet?: boolean; detail?: string };
 }
 
 /** A tool use unfolded, as the computer answers `agent.tool`: what it is about and its input whole,
@@ -112,6 +114,12 @@ export interface Screen {
   theme: Record<string, unknown>;
 }
 
+/** What an agent asks the person on a Browser tile on the computer. */
+export type BrowserAsk = { ask: number; tile: string; by: string | null } & (
+  | { kind: "hand-over"; words: string }
+  | { kind: "sign-in"; name: string; site: string; username: string }
+);
+
 /** A note the person left on a page in a Browser tile (hive-phone's `notes::Note`). */
 export interface PageNote {
   id: string;
@@ -122,6 +130,10 @@ export interface PageNote {
   url: string;
   /** What was done, or why it was dismissed. */
   summary?: string;
+  /** The agent that left it; none when the person did. */
+  agent?: string;
+  /** The names of the files kept on it as proof, which stay on the computer. */
+  attachments?: string[];
 }
 
 /** A workspace the computer holds. */

@@ -1,7 +1,8 @@
 // What an agent and the person say to each other, as a chat (the Android app's ChatView): the
 // person's words in bubbles, the agent's as light markdown, each tool it used as one row that
 // unfolds to its input and what it gave back, whole, asked of the computer when first opened; tools
-// used one after another fold into one row counting them. Append-only, by entry id; it follows the newest until the person
+// used one after another fold into one row counting them, and what the agent's own program wrote
+// into one quiet line. Append-only, by entry id; it follows the newest until the person
 // scrolls up. A long conversation is drawn newest first, a slice a task, so the screen shows at once
 // and a tap waits on no more than a slice.
 
@@ -17,17 +18,22 @@ type Result = NonNullable<Entry["result"]>;
 const SKEW_MS = 5 * 60_000;
 
 /** A message of the person's, shown at the foot of the chat from when it is sent until the session
- *  file has it: going, then sent, or held until the agent's turn ends, with a way to send it now. */
+ *  file has it: going, then sent, or held until the agent's turn ends, with a way to send it now
+ *  when `now` is given; failed, with `again` to try again and `back` to put it back in the box, which
+ *  says whether it could. */
 export interface Sending {
+  /** How much has gone, of 1; 0 when it cannot be told. */
+  going(part: number): void;
   sent(): void;
-  held(now: () => void): void;
-  /** It did not go: it is taken away. */
-  failed(): void;
+  held(now?: () => Promise<boolean>): void;
+  failed(why: string, again: () => void, back: () => boolean): void;
 }
 
 /** Where an agent attached a photo, its mark in the message: "[Image #2]". */
 const PHOTO_MARK = /\[Image #\d+\]\s*/g;
 const wordsOf = (text: string): string => text.replace(PHOTO_MARK, "").trim();
+/** What an agent given a photo as a path adds after the person's words: those paths and no more. */
+const onlyPaths = (text: string): boolean => text.split(/\s+/).every((word) => !word || /[/\\]/.test(word));
 
 /** How long one task draws for. */
 const SLICE_MS = 12;
@@ -54,7 +60,7 @@ export class Chat {
   private drawing = new Set<string>();
   private session = "";
   /** The person's messages not yet in the session file, oldest first, with when each was sent. */
-  private pending: Array<{ el: HTMLElement; text: string; photos: HTMLElement | null; at: number }> = [];
+  private pending: Array<{ el: HTMLElement; text: string; photos: HTMLElement | null; at: number; arrived?: () => void }> = [];
   /** The thumbnails of photos sent from here, by the entry that has their message. */
   private photosOf = new Map<string, HTMLElement>();
 
@@ -102,6 +108,7 @@ export class Chat {
       const t = performance.now();
       const rows: HTMLElement[] = [];
       while (next > 0 && (!rows.length || performance.now() - t < SLICE_MS)) rows.unshift(this.row(fresh[--next]!));
+      const news = rows.filter((row) => !row.classList.contains("said-program")).length;
       if (!older) {
         // Above what is still being sent, which stays at the foot.
         const foot = this.pending[0]?.el;
@@ -109,7 +116,7 @@ export class Chat {
         else this.el.append(...rows);
         this.fold();
         if (following) this.el.scrollTop = this.el.scrollHeight;
-        else this.unseen += rows.length;
+        else this.unseen += news;
         this.placed();
       } else {
         // What the person sees stays where it is as what was said before goes in above it.
@@ -125,36 +132,49 @@ export class Chat {
     slice();
   }
 
-  /** `text`, sent now with the photos whose thumbnails `photos` draws: shown at the foot as going,
-   *  until the session file has it. */
-  sending(text: string, photos: string[] = []): Sending {
+  /** `text`, sent at `at` with the photos whose thumbnails `photos` draws: shown at the foot as
+   *  going, until the session file has it, when `arrived` is told. */
+  sending(text: string, photos: string[] = [], at = Date.now(), arrived?: () => void): Sending {
     const state = h("span", {}, "Sending…");
     const line = h("p", { class: "pending-state", "data-pending-state": "" }, state);
+    const bar = h("span", { class: "pending-bar", hidden: true, "data-pending-bar": "" });
     const thumbs = photos.length ? h("div", { class: "photos", "data-pending-photos": "" }, ...photos.map((src) => h("span", { class: "photo" }, h("img", { src, alt: "" })))) : null;
-    const el = h("div", { class: "pending", "data-pending": "going" }, thumbs, text ? h("div", { class: "said-person", "data-who": "person" }, text) : null, line);
-    const mine = { el, text: text.trim(), photos: thumbs, at: Date.now() };
+    const el = h("div", { class: "pending", "data-pending": "going" }, thumbs, text ? h("div", { class: "said-person", "data-who": "person" }, text) : null, bar, line);
+    const mine = { el, text: text.trim(), photos: thumbs, at, ...(arrived ? { arrived } : {}) };
     this.pending.push(mine);
     this.el.append(el);
     this.nothing.hidden = true;
     this.el.scrollTop = this.el.scrollHeight;
     this.placed();
+    /** Its line says `words`, with these buttons after them; the bar is for what goes. */
+    const tell = (stage: string, words: string, ...buttons: HTMLElement[]): void => {
+      const following = this.el.scrollHeight - this.el.scrollTop - this.el.clientHeight < 48;
+      el.dataset.pending = stage;
+      say(state, words);
+      line.replaceChildren(state, ...buttons);
+      bar.hidden = true;
+      if (following) this.el.scrollTop = this.el.scrollHeight;
+    };
+    const held = (now?: () => Promise<boolean>): void => tell("held", "Queued · sends when it finishes", ...(now ? [pill("Send now", () => {
+      tell("held", "Stopping its turn…");
+      now().catch(() => false).then((stopped) => {
+        if (!stopped) held(now);
+      });
+    }, "", { "data-send-now": "" })] : []));
     return {
-      sent: () => {
-        if (!el.isConnected) return;
-        el.dataset.pending = "sent";
-        say(state, "Sent");
+      going: (part) => {
+        tell("going", part > 0 ? `Sending… ${Math.round(part * 100)}%` : "Sending…");
+        bar.hidden = part <= 0;
+        bar.style.setProperty("--part", String(part));
       },
-      held: (now) => {
-        if (!el.isConnected) return;
-        el.dataset.pending = "held";
-        say(state, "Queued · sends when it finishes");
-        line.append(pill("Send now", () => {
-          el.querySelector("[data-send-now]")?.remove();
-          say(state, "Stopping its turn…");
-          now();
-        }, "", { "data-send-now": "" }));
+      sent: () => tell("sent", "Sent"),
+      held,
+      failed: (why, again, back) => {
+        const putBack = pill("Put back", () => {
+          if (back()) this.drop(mine);
+        }, "compact", { "data-put-back": "" });
+        tell("failed", `Not sent. ${why.charAt(0).toUpperCase()}${why.slice(1)}`, pill("Try again", again, "primary compact", { "data-try-again": "" }), putBack);
       },
-      failed: () => this.drop(mine),
     };
   }
 
@@ -162,16 +182,17 @@ export class Chat {
   private arrived(e: Entry): void {
     const text = wordsOf(e.text ?? "");
     // With photos, the session file has their paths after the words, or the agent's own marks.
-    const mine = this.pending.find((p) => (p.text === text || (p.photos && text.startsWith(p.text))) && e.at >= p.at - SKEW_MS);
+    const mine = this.pending.find((p) => (p.text === text || (p.photos && text.startsWith(p.text) && onlyPaths(text.slice(p.text.length).trim()))) && e.at >= p.at - SKEW_MS);
     if (!mine) return;
     if (mine.photos) this.photosOf.set(e.id, mine.photos);
+    mine.arrived?.();
     this.drop(mine);
   }
 
   private drop(mine: { el: HTMLElement }): void {
     mine.el.remove();
     this.pending = this.pending.filter((p) => p !== mine);
-    this.nothing.hidden = this.ids.size > 0 || this.pending.length > 0;
+    this.nothing.hidden = this.loading.isConnected || this.ids.size > 0 || this.pending.length > 0;
   }
 
   /** The newest's button: shown while scrolled away, its count what came since. */
@@ -195,6 +216,7 @@ export class Chat {
   /** Each run of two or more tool rows next to each other, in one fold (hapi
    *  web/src/chat/toolGroups.ts:270-326); a fold is made again only when its run changed. */
   private fold(): void {
+    this.foldNotices();
     let rows: HTMLElement[] = [];
     let folds: HTMLElement[] = [];
     let first: Element | null = null;
@@ -216,6 +238,38 @@ export class Chat {
       else if (child.hasAttribute("data-tools")) {
         folds.push(child as HTMLElement);
         rows.push(...child.querySelectorAll<HTMLElement>(":scope > .tools-list > .tool"));
+      } else {
+        done();
+        continue;
+      }
+      first ??= child;
+    }
+    done();
+  }
+
+  /** Each run of two or more notices next to each other, in one line that opens to them. */
+  private foldNotices(): void {
+    let rows: HTMLElement[] = [];
+    let folds: HTMLElement[] = [];
+    let first: Element | null = null;
+    const done = (): void => {
+      const same = folds.length === 1 && rows.length === folds[0]!.querySelectorAll(":scope > .said-programs-list > .said-program").length;
+      if (rows.length >= 2 && !same) {
+        const fold = folds[0] ?? noticesFold();
+        if (!folds[0]) first!.before(fold);
+        fold.querySelector(".said-programs-list")!.append(...rows);
+        for (const other of folds.slice(1)) other.remove();
+        noticesSummed(fold);
+      }
+      rows = [];
+      folds = [];
+      first = null;
+    };
+    for (const child of [...this.el.children]) {
+      if (child.classList.contains("said-program")) rows.push(child as HTMLElement);
+      else if (child.hasAttribute("data-notices")) {
+        folds.push(child as HTMLElement);
+        rows.push(...child.querySelectorAll<HTMLElement>(":scope > .said-programs-list > .said-program"));
       } else {
         done();
         continue;
@@ -253,6 +307,7 @@ export class Chat {
 
 function rowOf(e: Entry, unfold?: () => Promise<Unfolded>): HTMLElement {
   const props = { "data-entry": e.id, "data-who": e.who };
+  if (e.notice) return noticeRow(e.notice, props);
   if (e.tool) return toolRow(e.tool.name, e.tool.about, props, unfold);
   if (e.result) {
     // What a tool gave back, its use told before what is shown began.
@@ -262,6 +317,47 @@ function rowOf(e: Entry, unfold?: () => Promise<Unfolded>): HTMLElement {
   }
   if (e.who === "person") return h("div", { class: "said-person", ...props }, wordsOf(e.text ?? ""));
   return h("div", { class: "said-agent md", ...props }, ...markdown(e.text ?? ""));
+}
+
+/** A line the agent's own program wrote; tapped, what it says more, when it says more. */
+function noticeRow(notice: NonNullable<Entry["notice"]>, props: Record<string, string>): HTMLElement {
+  const quiet = notice.quiet ? { "data-quiet": "" } : {};
+  const line = h("span", { class: "label", "data-notice-line": "" }, notice.text);
+  if (!notice.detail) return h("div", { class: "said-program", ...props, ...quiet }, h("p", {}, line));
+  const button = h("button", { type: "button", "aria-expanded": "false" }, line, icon("chevron", "chev"));
+  const detail = h("div", { class: "said-program-detail md", hidden: true, "data-notice-detail": "" }, ...markdown(notice.detail));
+  const row = h("div", { class: "said-program", ...props, ...quiet }, button, detail);
+  button.addEventListener("click", () => {
+    const open = !row.hasAttribute("data-open");
+    row.toggleAttribute("data-open", open);
+    button.setAttribute("aria-expanded", String(open));
+    detail.hidden = !open;
+  });
+  return row;
+}
+
+/** A run of notices as one line that opens to them. */
+function noticesFold(): HTMLElement {
+  const button = h("button", { type: "button", "aria-expanded": "false" }, h("span", { class: "label", "data-notices-summary": "" }), icon("chevron", "chev"));
+  const fold = h("div", { class: "said-programs", "data-notices": "" }, button, h("div", { class: "said-programs-list", hidden: true }));
+  button.addEventListener("click", () => {
+    const open = !fold.hasAttribute("data-open");
+    fold.toggleAttribute("data-open", open);
+    button.setAttribute("aria-expanded", String(open));
+    (fold.lastElementChild as HTMLElement).hidden = !open;
+  });
+  return fold;
+}
+
+/** A fold of notices' line, said again from them: how many say something, those that only say
+ *  something is still waiting not counted while others do. One that does says itself. */
+function noticesSummed(fold: HTMLElement): void {
+  const rows = [...fold.querySelectorAll<HTMLElement>(".said-programs-list > .said-program")];
+  const loud = rows.filter((row) => !row.hasAttribute("data-quiet"));
+  const lone = loud.length === 1 ? loud[0]!.querySelector("[data-notice-line]")?.textContent : null;
+  const count = loud.length || rows.length;
+  say(fold.querySelector("[data-notices-summary]")!, lone ?? `${count} background ${count === 1 ? "update" : "updates"}`);
+  fold.toggleAttribute("data-quiet", !loud.length);
 }
 
 /** What a tool's row and its fold call it: a command is run. */

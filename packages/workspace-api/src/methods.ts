@@ -4,7 +4,7 @@
  */
 import type { Issue, IssuePatch, IssueState, IssueSummary, LinkType, NewIssue } from "@hivemind/core/types";
 import type { LinkResult, TransferResult } from "@hivemind/core/cross-repo";
-import type { ReviewComment } from "@hivemind/core/review";
+import type { PageBox, PageComment, ReviewComment, ReviewIntent } from "@hivemind/core/review";
 import type { DiffPayload, DiffScope, GitBranchList, GitRevision, GitStatusSnapshot, HandedOff, WorktreeCreateOpts, WorktreeEntry } from "./git.js";
 import type { SleepAnswer, WakeAnswer } from "./agents.js";
 import type { AgentAnswer, AgentChange, Approval, Answerer, AgentChanges, AgentEvent, AgentItem, AgentRead, AgentSessions, ConversationEntry, SlashCommand, Folders, Links, PipeChange, Places, SpawnChange, StartAgent, StartImage, Startable, StatusChange, TileOpened, ToolUse } from "./agents.js";
@@ -25,6 +25,9 @@ import type { SharedAppearance } from "@hivemind/core/settings-schema";
 import type { WidgetPackage } from "@hivemind/core/widget-format";
 import type { RecentSound, SoundMoment, SoundResult } from "./notifications.js";
 
+/** A note asked for on a page: on the one element a selector finds, or on an area of the page. */
+export type PageNoteAsked = { body: string; intent?: ReviewIntent } & ({ selector: string; area?: undefined } | { area: PageBox; selector?: undefined });
+
 /** A press on a widget: one of its buttons (its `action`), or its card. */
 export type WidgetPress = { action: unknown } | { click: true };
 
@@ -34,6 +37,16 @@ export interface StoreSnapshot {
   views: Record<string, ViewLayout>;
   objects: BoardObject[];
 }
+
+/** A question an agent has put to the person on a Browser tile. */
+export type BrowserPersonAsk = { ask: number; tile: string; by: string | null } & (
+  | { kind: "hand-over"; words: string }
+  | { kind: "sign-in"; name: string; site: string; username: string }
+);
+/** Where such a question stands. `person`: it needs the person, and `why` says what shows. */
+export type BrowserAskState =
+  | { state: "waiting" | "working" }
+  | { state: "done"; outcome: "done" | "no" | "expired" | "sent" | "person"; url?: string; why?: string };
 
 export interface WorkspaceMethods {
   "git.status": (repo: string) => GitStatusSnapshot;
@@ -199,6 +212,13 @@ export interface WorkspaceMethods {
   /** (0.23) Open a tool's tile in the workspace at `repo`: the tool by its id
    *  (`@owner/name/tool`, or `@owner/name` when the package has one tool), in `frame` if given, at
    *  `url` for one that shows a page, with `state` (0.32) as the tile's first saved state. */
+  /** What an agent asks of the person on a Browser tile, and their answer (0.38). */
+  "browser.signIns": () => { signIns: { name: string; site: string }[] };
+  "browser.ask": (words: string, tile?: string) => { ask: number; tile: string };
+  "browser.signIn": (name: string, tile?: string) => { ask: number; tile: string };
+  "browser.askState": (ask: number, ms?: number) => BrowserAskState;
+  "browser.asks": () => { asks: BrowserPersonAsk[] };
+  "browser.answer": (ask: number, answer: "yes" | "always" | "no" | "done") => { answered: boolean };
   "tool.open": (repo: string, tool: { tool: string; frame?: string; url?: string; state?: Record<string, unknown> }) => { tile: string };
   /** (0.23) Pipe the replies of the agent in `src` to the one in `dst`, as its next prompts. */
   "link.connect": (src: string, dst: string) => void;
@@ -228,6 +248,10 @@ export interface WorkspaceMethods {
   /** (0.32) Bring a tile into view, wait for its plugin to draw, and answer a picture of it with its
    *  plugin's state and the last lines its code wrote (`plugins.ts`). */
   "tile.look": (tile: string) => TileLook;
+  /** (0.38) A note on the page in a Browser tile, as a person's holds, by whoever asks. `tile` is the
+   *  Browser tile, or an agent's beside the one Browser tile in its frame. `kept`: the folder the
+   *  review is in. */
+  "page.note": (tile: string, note: PageNoteAsked) => { note: PageComment; kept: string };
   /** The installed views, agents, widgets or tools changed on disk: read them again. */
   "views.rescan": () => null;
   "agents.rescan": () => null;

@@ -29,8 +29,11 @@ export interface AgentEvent {
   kind?: InputKind;
   /** The subagent this start or stop is about. */
   agentId?: string;
-  /** `turn.ended`: background tasks (shells) the agent left running — a count, never their commands. */
+  /** `turn.ended`: background tasks the agent left running — a count, never their commands. */
   background?: number;
+  /** `turn.ended`, `subagent.stopped`: those of them that come back to the agent when they finish,
+   *  so it waits for them. A `subagent.stopped` without it says nothing of them. */
+  awaiting?: number;
   sessionId?: string;
 }
 
@@ -83,6 +86,7 @@ export function parseAgentEvent(raw: unknown): AgentEvent | null {
     ...(d.event === "input.requested" ? { kind: kind ?? "other" } : {}),
     ...(str(d.agentId, 256) ? { agentId: d.agentId as string } : {}),
     ...(d.event === "turn.ended" && Number.isInteger(d.background) && (d.background as number) > 0 && (d.background as number) < 10_000 ? { background: d.background as number } : {}),
+    ...((d.event === "turn.ended" || d.event === "subagent.stopped") && Number.isInteger(d.awaiting) && (d.awaiting as number) >= 0 && (d.awaiting as number) < 10_000 ? { awaiting: d.awaiting as number } : {}),
     ...(isSessionId(d.sessionId) ? { sessionId: d.sessionId } : {}),
   };
 }

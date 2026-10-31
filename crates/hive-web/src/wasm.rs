@@ -6,17 +6,17 @@ use hive_net::{
 };
 use hive_phone::{
     agents, connect, control, conversation, devices,
-    failure::Failure,
+    failure::{Failure, Lost},
     home, homes,
     identity::DeviceCertificate,
-    markdown, network, notes, pairing, person,
+    browser_asks, markdown, network, notes, pairing, person,
     screen::{Screen, FIRST_HISTORY},
     views,
     workspace::{self, Answer, Input, Reply, Sent, Watched},
 };
 use iroh::{
     endpoint::{Connection, ConnectionError, RecvStream, SendStream},
-    Endpoint, EndpointAddr, RelayUrl, SecretKey, TransportAddr,
+    Endpoint, EndpointAddr, RelayUrl, SecretKey, TransportAddr, Watcher,
 };
 use serde_json::{json, Value};
 use std::{
@@ -54,6 +54,18 @@ fn unpaired(why: String) -> JsValue {
     let e = js_sys::Error::new(&why);
     e.set_name("Unpaired");
     e.into()
+}
+
+/// How following something on a device ended, for the page: the device's refusal is an error; `gone`,
+/// anything else, as the connection going, is not an end, and the page follows on.
+fn refused_or<T>(ended: anyhow::Result<T>, gone: T) -> Result<T, JsError> {
+    match ended {
+        Ok(ended) => Ok(ended),
+        Err(e) => match Lost::refusal(&e) {
+            Some(refused) => Err(err(refused)),
+            None => Ok(gone),
+        },
+    }
 }
 
 fn to_js(v: &Value) -> Result<JsValue, JsError> {
@@ -401,6 +413,23 @@ impl Device {
         Ok(Host { connection })
     }
 
+    /// Whether this browser is on its relay now: a device it cannot reach, while it is, is itself
+    /// away, not the way to it.
+    #[wasm_bindgen(js_name = onRelay)]
+    pub fn on_relay(&self) -> bool {
+        self.endpoint
+            .home_relay_status()
+            .get()
+            .iter()
+            .any(|status| status.is_connected())
+    }
+
+    /// The network may be another now: its relay connection is made again rather than found dead.
+    #[wasm_bindgen(js_name = networkChanged)]
+    pub async fn network_changed(&self) {
+        self.endpoint.network_change().await;
+    }
+
     pub async fn close(&self) {
         self.endpoint.close().await;
     }
@@ -520,6 +549,13 @@ impl Host {
             .map_err(err)
     }
 
+    /// How many bytes this connection has put on the network so far, what it repeats among them:
+    /// a message's progress, read while it goes.
+    #[wasm_bindgen(js_name = sentBytes)]
+    pub fn sent_bytes(&self) -> f64 {
+        self.connection.stats().udp_tx.bytes as f64
+    }
+
     /// Send the agent of `tile` the message `text` with `images` (`[{type, data}]`, the bytes in
     /// base64), typed in once it is at its prompt, or into its turn when it reads one there:
     /// `{held}`, whether it waits for the turn to end; null when no agent runs there.
@@ -544,7 +580,19 @@ impl Host {
         }
     }
 
-    /// The notes on pages kept in `repo` of `workspace`: `[{id, body, status, what, url, summary?}]`.
+    /// The questions waiting on the person on Browser tiles on this computer.
+    #[wasm_bindgen(js_name = browserAsks)]
+    pub async fn browser_asks(&self, workspace: String) -> Result<JsValue, JsError> {
+        to_js(&browser_asks::asks(&self.connection, &workspace).await.map_err(err)?)
+    }
+
+    /// The person's answer to one of them: `yes`, `always`, `no` or `done`.
+    #[wasm_bindgen(js_name = answerBrowserAsk)]
+    pub async fn answer_browser_ask(&self, workspace: String, ask: f64, answer: String) -> Result<bool, JsError> {
+        browser_asks::answer(&self.connection, &workspace, ask as u64, &answer).await.map_err(err)
+    }
+
+    /// The notes on pages kept in `repo` of `workspace`: `[{id, body, status, what, url, summary?, agent?, attachments?}]`.
     pub async fn notes(&self, workspace: String, repo: String) -> Result<JsValue, JsError> {
         let notes = notes::notes(&self.connection, &workspace, &repo)
             .await
@@ -678,7 +726,7 @@ impl Host {
             let _ = wasm_bindgen_futures::JsFuture::from(until).await;
             Ok(())
         };
-        n0_future::future::or(followed, stopped).await.map_err(err)
+        refused_or(n0_future::future::or(followed, stopped).await, ())
     }
 
     /// The views the device offers this browser in `workspace` (`view.list`): `[{id, name,
@@ -778,7 +826,7 @@ impl Host {
             };
             let ended =
                 n0_future::future::or(n0_future::future::or(watched, passed), stopped).await;
-            match ended.map_err(err)? {
+            match refused_or(ended, None)? {
                 Some(ended) => to_js(&json!({ "code": ended.code })).map_err(JsValue::from),
                 None => Ok(JsValue::NULL),
             }
@@ -787,6 +835,11 @@ impl Host {
 
     pub fn close(&self) {
         self.connection.close(0u32.into(), b"closed");
+    }
+
+    /// Whether this connection is gone.
+    pub fn closed(&self) -> bool {
+        self.connection.close_reason().is_some()
     }
 }
 

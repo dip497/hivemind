@@ -5,7 +5,8 @@
  * on the page show where each stands. What is on the page is read in main (page-notes.ts).
  */
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
-import { onPage, statusOf, type PageBox, type PageComment, type PageElement, type ReviewIntent } from "@hivemind/core/review-shape";
+import { byAgent, onPage, statusOf, type PageBox, type PageComment, type PageElement, type ReviewIntent } from "@hivemind/core/review-shape";
+import { pageFileUrl } from "../../shared/page-file-url";
 import { Bot, Check, MessageSquare, Pause, Play, Trash, X as XIcon } from "./components/icons";
 import { Button } from "./components/ui/button";
 import { Textarea } from "./components/ui/textarea";
@@ -184,6 +185,21 @@ function AnnotateLayer({ tileId, repoPath, onNoted }: { tileId: string; repoPath
 
 const STATUS_WORD = { open: "Open", seen: "Seen", resolved: "Done", dismissed: "Dismissed" } as const;
 
+/** The proof kept on a note: a video plays here, an image shows. */
+function NoteAttachments({ repoPath, names }: { repoPath: string; names: string[] }) {
+  return (
+    <div className="flex flex-col gap-1" data-note-attachments>
+      {names.map((name) => {
+        const src = window.hive.resourceUrl(pageFileUrl(repoPath, name));
+        const look = "nodrag nopan max-h-40 max-w-full self-start rounded-md border border-[var(--color-line)]";
+        return /\.(webm|mp4)$/.test(name)
+          ? <video key={name} src={src} controls preload="metadata" className={look} data-note-attachment={name} />
+          : <img key={name} src={src} alt={name} className={look} data-note-attachment={name} />;
+      })}
+    </div>
+  );
+}
+
 /** The notes on this page: where each stands, and what can be done with it. */
 function NotesList({ repoPath, notes, onChanged }: { repoPath: string; notes: PageComment[]; onChanged: () => void }) {
   const act = (p: Promise<unknown>) => void p.then(onChanged, onChanged);
@@ -197,9 +213,11 @@ function NotesList({ repoPath, notes, onChanged }: { repoPath: string; notes: Pa
             <div className="flex items-center gap-2 text-label">
               <span className="font-semibold">{i + 1}</span>
               <span className="text-[var(--color-fg3)] truncate flex-1">{c.page.area ? "Area" : c.page.elements[0]?.name}</span>
+              {byAgent(c) && <span className="flex items-center gap-1 text-[var(--color-fg2)]" data-note-author title={`Left by the agent ${c.author}`}><Bot className="size-3" />{c.author}</span>}
               <span className="text-[var(--color-fg2)]">{STATUS_WORD[status]}</span>
             </div>
             <div className="text-body whitespace-pre-wrap">{c.body}</div>
+            {c.attachments?.length ? <NoteAttachments repoPath={repoPath} names={c.attachments} /> : null}
             {c.summary && <div className="text-label text-[var(--color-fg2)]">↳ {c.summary}</div>}
             {(c.replies ?? []).map((r) => <div key={r.at} className="text-label text-[var(--color-fg2)]">↳ {r.author}: {r.body}</div>)}
             <div className="flex gap-1">
@@ -230,7 +248,7 @@ export function usePageAnnotate({ tileId, repoPath, url, loads }: {
   const [sent, setSent] = useState<string | null>(null);
 
   useEffect(() => {
-    const pins = notes.map((c, i) => ({ n: i + 1, status: statusOf(c), selector: c.page.elements[0]?.selector, box: c.page.area ?? c.page.elements[0]!.box }));
+    const pins = notes.map((c, i) => ({ n: i + 1, status: statusOf(c), selector: c.page.elements[0]?.selector, box: c.page.area ?? c.page.elements[0]!.box, byAgent: byAgent(c) }));
     void window.hive.browserPins(tileId, pins).catch(() => {});
   }, [tileId, notes, loads]);
   useEffect(() => { if (!annotating && still) { setStill(false); void window.hive.browserHoldStill(tileId, false).catch(() => {}); } }, [annotating, still, tileId]);

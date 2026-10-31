@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { WebviewTag } from "electron";
-import { ArrowLeft, ArrowRight, RotateCw, X as XIcon, Plus, Search, Wrench, Bot, GripVertical } from "./components/icons";
+import { ArrowLeft, ArrowRight, RotateCw, X as XIcon, Plus, Search, Wrench, GripVertical } from "./components/icons";
 import { HeaderPinButton, type PinRect } from "./canvas-nodes";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
@@ -11,6 +11,8 @@ import { siteOf } from "../../shared/site";
 import { keyLabel } from "./shortcut";
 import { WatchedPage } from "./WatchedPage";
 import { usePageAnnotate } from "./browser-notes";
+import { AgentAccessMenu, DrivingBar, PersonAskBar } from "./browser-agents";
+import { PageDownloads, usePageDownloads } from "./browser-downloads";
 
 interface Props {
   tileId: string;
@@ -117,10 +119,9 @@ function TabView({
       ref={ref as React.RefObject<HTMLElement>}
       src={initialUrl}
       partition="persist:browser"
-      // allowpopups must be present at attach time for window.open / target=_blank
-      // to fire the guest's window-open handler (main routes it back as a new tab).
-      // Without it the guest silently swallows popups → "links don't open".
-      allowpopups={true}
+      // A string, whatever its type says: React drops `true` on an attribute it does not know, and
+      // without it, at attach time, a page's pop-ups never reach main, which opens them as tabs.
+      allowpopups={"true" as unknown as boolean}
       className="w-full h-full"
       style={{ display: active ? "inline-flex" : "none", width: "100%", height: "100%" }}
     />
@@ -144,7 +145,6 @@ function WebView({ tileId, frameId, url, repoPath, selected, openReq, onClose, p
   const [findOpen, setFindOpen] = useState(false);
   const [findText, setFindText] = useState("");
   const [zoom, setZoom] = useState(1);
-  const [cdpMsg, setCdpMsg] = useState<string | null>(null);
   const [watched, setWatched] = useState(false);
   useEffect(() => window.hive.onBrowserWatched((id, on) => { if (id === tileId) setWatched(on); }), [tileId]);
   const placeRef = useRef<HTMLDivElement>(null);
@@ -161,9 +161,11 @@ function WebView({ tileId, frameId, url, repoPath, selected, openReq, onClose, p
 
   const wvMap = useRef(new Map<string, WebviewTag>());
   // A page asks for the camera, the location… on this tile: one of its tabs, attached or loading.
-  const { ask, answer } = useBrowserAsks(useCallback((pageId: number) => [...(guestsRef.current?.querySelectorAll("webview") ?? [])].some((wv) => {
+  const ownsPage = useCallback((pageId: number) => [...(guestsRef.current?.querySelectorAll("webview") ?? [])].some((wv) => {
     try { return (wv as WebviewTag).getWebContentsId() === pageId; } catch { return false; }
-  }), []));
+  }), []);
+  const { ask, answer } = useBrowserAsks(ownsPage);
+  const { downloads, dismiss } = usePageDownloads(ownsPage);
   const activeIdRef = useRef(activeId);
   const addrFocused = useRef(false);
   activeIdRef.current = activeId;
@@ -186,8 +188,8 @@ function WebView({ tileId, frameId, url, repoPath, selected, openReq, onClose, p
     if (!wv) return;
     let curUrl = "";
     try { curUrl = wv.getURL(); } catch { /* not ready */ }
-    try { window.hive.browserRegister?.(tileId, wv.getWebContentsId(), frameId ?? null, curUrl); } catch { /* not ready */ }
-  }, [tileId, frameId]);
+    try { window.hive.browserRegister?.(tileId, wv.getWebContentsId(), frameId ?? null, curUrl, repoPath); } catch { /* not ready */ }
+  }, [tileId, frameId, repoPath]);
 
   const onReady = useCallback((id: string, wv: WebviewTag) => {
     wvMap.current.set(id, wv);
@@ -290,23 +292,6 @@ function WebView({ tileId, frameId, url, repoPath, selected, openReq, onClose, p
     try { wv.isDevToolsOpened() ? wv.closeDevTools() : wv.openDevTools(); } catch { /* ignore */ }
   };
 
-  // Visible proof CDP drives the VISIBLE tab: attach the debugger and run a tiny
-  // script (read title → navigate via CDP). Same path an agent uses.
-  const cdpSelfTest = async () => {
-    setCdpMsg("running…");
-    try {
-      const t = await window.hive.browserCdp!(tileId, "Runtime.evaluate", {
-        expression: "document.title", returnByValue: true,
-      }) as { result?: { value?: string } };
-      const title = t?.result?.value ?? "(no title)";
-      await window.hive.browserCdp!(tileId, "Page.navigate", { url: "https://example.com" });
-      setCdpMsg(`CDP ok · read "${title}" · navigated to example.com`);
-    } catch (e) {
-      setCdpMsg(`CDP failed: ${(e as Error).message}`);
-    }
-    setTimeout(() => setCdpMsg(null), 6000);
-  };
-
   // Keyboard shortcuts — only fire when focus is in our chrome (the guest
   // renderer swallows keys when the page itself has focus; the toolbar buttons
   // cover that case).
@@ -405,8 +390,7 @@ function WebView({ tileId, frameId, url, repoPath, selected, openReq, onClose, p
         {notes.button}
         <Button variant="ghost" size="icon-2xs" className="nodrag" onClick={() => setFindOpen((v) => !v)} aria-label="find" title={`Find in page (${keyLabel("mod+f")})`}><Search /></Button>
         <Button variant="ghost" size="icon-2xs" className="nodrag" onClick={toggleDevtools} aria-label="devtools" title="Toggle DevTools"><Wrench /></Button>
-        {/* Visible CDP proof — runs the same bridge an agent uses against the visible tab. */}
-        <Button variant="ghost" size="icon-2xs" className="nodrag" onClick={cdpSelfTest} aria-label="cdp test" title="CDP self-test (drive this tab like an agent)"><Bot /></Button>
+        <AgentAccessMenu tileId={tileId} />
         <span aria-hidden className="w-px h-4 bg-[var(--color-line2)] mx-0.5" />
         {/* Pin toggle — docked in the toolbar (not a floating chip). Filled = pinned. */}
         <HeaderPinButton tileId={tileId} pinned={pinned} onToggle={onTogglePin} />
@@ -427,6 +411,7 @@ function WebView({ tileId, frameId, url, repoPath, selected, openReq, onClose, p
       </div>
 
       {notes.bar}
+      <DrivingBar tileId={tileId} />
       {findOpen && (
         <div className="h-8 flex items-center gap-2 px-2 bg-[var(--color-bg4)] border-b border-[var(--color-line)]">
           <Input
@@ -441,17 +426,13 @@ function WebView({ tileId, frameId, url, repoPath, selected, openReq, onClose, p
         </div>
       )}
 
-      {cdpMsg && (
-        <div className="px-2 py-1 text-chip font-mono bg-[var(--color-bg4)] border-b border-[var(--color-line)] text-[var(--color-fg2)] truncate" title={cdpMsg}>
-          🤖 {cdpMsg}
-        </div>
-      )}
-
       {/* Guests. All tabs mounted; only the active one is shown. Clipped, never scrolled: the page
           is drawn larger and shrunk back, and a focused button in the question over it would
           otherwise scroll the box by a few pixels between a press and its release. */}
       <div ref={guestsRef} className="flex-1 bg-white relative overflow-clip">
         {ask && <BrowserAsk ask={ask} answer={answer} />}
+        {!ask && <PersonAskBar tileId={tileId} />}
+        <PageDownloads downloads={downloads} dismiss={dismiss} />
         {notes.layer}
         <div
           className="absolute left-0 top-0"

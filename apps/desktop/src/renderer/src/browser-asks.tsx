@@ -40,7 +40,7 @@ export function BrowserAsk({ ask, answer }: { ask: Ask; answer: (askId: number, 
   const ready = armed === ask.askId;
   const does = wants(ask.permissions);
   return (
-    <div role="alertdialog" aria-label={`${ask.site} wants to ${does}`} data-permission-ask className="absolute inset-x-0 top-0 z-10 flex items-center gap-2 px-2 py-1 bg-[var(--color-bg4)] border-b border-[var(--color-line)] shadow-[var(--hm-shadow-float)] text-label text-[var(--color-fg)]">
+    <div role="alertdialog" aria-label={`${ask.site} wants to ${does}`} data-permission-ask className="pointer-events-auto absolute inset-x-0 top-0 z-10 flex items-center gap-2 px-2 py-1 bg-[var(--color-bg4)] border-b border-[var(--color-line)] shadow-[var(--hm-shadow-float)] text-label text-[var(--color-fg)]">
       {/* What it wants stays whole, on a line of its own when the tile is narrow. The buttons
           follow the words, so a wide tile half off screen still shows them. */}
       <p className="m-0 flex min-w-0 flex-wrap items-baseline gap-x-1">

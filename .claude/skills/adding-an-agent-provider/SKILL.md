@@ -80,7 +80,7 @@ Answer all eleven with a source. Each answer decides a field of the manifest.
 | 11 | Which keys **allow** and which **deny** its own permission prompt | the `answer.permission` block (the phone's Allow / Deny types them) — read them from the binary's chooser, or leave the block out |
 | 11b | Which keys **choose an option** of a question it asks (AskUserQuestion's chooser) | `choose` with `{n}` (the phone's option buttons type it) and `asks` under the transcript's `tool` — read them from the binary's chooser, or leave them out |
 | 12 | Which key **interrupts its turn** (the "esc to interrupt" hint) | `interrupt` (the phone's Stop types it) — read it from the binary's own hint, or leave it out |
-| 13 | Does its **session file** keep what was said, a JSON record a line? Which records and fields? | `session.transcript` (the phone's conversation) — map a real session file's records, check the mapping against `conformance/conversation.json`'s rules, or leave it out |
+| 13 | Does its **session file** keep what was said, a JSON record a line? Which records and fields? Does its own program write text there as if the person typed it? | `session.transcript` (the phone's conversation), its `notices` for what its program wrote — map a real session file's records, check the mapping against `conformance/conversation.json`'s rules, or leave it out |
 
 Row 10 needs a real run. If you cannot install the CLI, say so and set
 `blockedDetection: false` rather than inventing prompt text — a wrong detector is
@@ -166,6 +166,11 @@ field reference; `claude/agent.yaml` in the published fixtures is the richest ex
    assets:
    - { name: hive-turn-end.cjs, file: hive-turn-end.cjs, hook: turnEnd, produces: [turn.ended] }
    ```
+
+   If the agent can end a turn with work running that wakes it when it finishes, say how many
+   with `awaiting` on `turn.ended`: its tile stays working until a turn ends with none
+   (`spec/status.md`). Count nothing that has no end, or the tile never comes back. A task the
+   agent's own screen can stop with no hook firing still ends, after a quiet spell.
 
    An app older than `emit` refuses such a manifest, so publishing one needs the registry to
    carry a `minAppVersion` for agents.

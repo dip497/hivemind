@@ -1,5 +1,5 @@
 {
-  "spec": "agent-event 0.1",
+  "spec": "agent-event 0.2",
   "about": "A hook runs with the session and the canonical event in its environment and the agent's payload on stdin. It reports the event, keeps only ids and counts from the payload, and never forwards text in `forbidden`. `expect: null` means it reports nothing. A hook always exits 0.",
   "cases": [
     {
@@ -58,6 +58,71 @@
         "secret",
         "npm"
       ]
+    },
+    {
+      "name": "a turn end counts apart the tasks that come back to the agent: running or pending, never a shell, a watch, a teammate or a kind it does not know",
+      "env": {
+        "HIVEMIND_TILE": "hm:t1",
+        "HIVE_EVENT": "turn.ended"
+      },
+      "payload": {
+        "background_tasks": [
+          { "id": "b1", "type": "shell", "status": "running", "command": "npm run dev" },
+          { "id": "b2", "type": "workflow", "status": "running", "name": "secret plan" },
+          { "id": "b3", "type": "subagent", "status": "pending", "description": "secret task" },
+          { "id": "b4", "type": "cloud session", "status": "running" },
+          { "id": "b5", "type": "MCP task", "status": "running" },
+          { "id": "b6", "type": "monitor", "status": "running" },
+          { "id": "b7", "type": "teammate", "status": "running" },
+          { "id": "b8", "type": "memory save", "status": "running" },
+          { "id": "b9", "type": "subagent", "status": "completed" }
+        ]
+      },
+      "expect": {
+        "tileId": "hm:t1",
+        "event": "turn.ended",
+        "background": 7,
+        "awaiting": 4
+      },
+      "forbidden": [
+        "secret",
+        "npm"
+      ]
+    },
+    {
+      "name": "a subagent's stop says how many are left, none included",
+      "env": {
+        "HIVEMIND_TILE": "hm:t1",
+        "HIVE_EVENT": "subagent.stopped"
+      },
+      "payload": {
+        "agent_id": "a1",
+        "background_tasks": [
+          { "id": "b1", "type": "shell", "status": "running" }
+        ]
+      },
+      "expect": {
+        "tileId": "hm:t1",
+        "event": "subagent.stopped",
+        "agentId": "a1",
+        "background": 1,
+        "awaiting": 0
+      }
+    },
+    {
+      "name": "a subagent's stop with no list says nothing of them",
+      "env": {
+        "HIVEMIND_TILE": "hm:t1",
+        "HIVE_EVENT": "subagent.stopped"
+      },
+      "payload": {
+        "agent_id": "a1"
+      },
+      "expect": {
+        "tileId": "hm:t1",
+        "event": "subagent.stopped",
+        "agentId": "a1"
+      }
     },
     {
       "name": "an input request carries its kind, not the tool call",

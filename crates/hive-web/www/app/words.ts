@@ -37,6 +37,7 @@ export function noneWaiting(working: number): string {
 export const NOTICES = {
   answered: "It no longer waits on you.",
   notRunning: "No agent runs there now.",
+  notTaken: "It was not taken: no agent runs there now, or it holds too many messages already.",
   starting: "Starting…",
   notStopped: "It was not in a turn.",
   closed: "It was already closed.",

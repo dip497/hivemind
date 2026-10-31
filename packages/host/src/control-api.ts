@@ -13,13 +13,27 @@ import { ApiError } from "@hivemind/workspace-api/protocol";
 import { toBareId } from "@hivemind/workspace-api/tile-id";
 import { promptProblem } from "@hivemind/view-sdk/protocol";
 import type { StartImage } from "@hivemind/workspace-api/agents";
+import type { BrowserAskState, BrowserPersonAsk } from "@hivemind/workspace-api/methods";
+import type { PageNoteAsked, Result } from "@hivemind/workspace-api/methods";
+import { REVIEW_INTENTS, type ReviewIntent } from "@hivemind/core/review-shape";
 import { imagesOf } from "./start-places.js";
 import type { ControlWork } from "./control/methods.js";
 
 type Method =
+  | "browser.signIns" | "browser.ask" | "browser.signIn" | "browser.askState" | "browser.asks" | "browser.answer"
   | "agent.send" | "agent.rename" | "agent.keys" | "agent.read" | "agent.output" | "agent.sessions" | "agent.sleep" | "agent.wake" | "tool.open" | "link.connect" | "link.disconnect"
-  | "view.emit" | "plugin.list" | "plugin.commands" | "plugin.open" | "plugin.call" | "plugin.close" | "tile.focus" | "tile.look"
+  | "view.emit" | "plugin.list" | "plugin.commands" | "plugin.open" | "plugin.call" | "plugin.close" | "tile.focus" | "tile.look" | "page.note"
   | "views.rescan" | "agents.rescan" | "widgets.rescan" | "tools.rescan" | "settings.reload" | "host.status" | "host.join" | "host.add";
+
+/** What an agent asks of the person on a Browser tile; there are none where no window holds one. */
+export interface ControlBrowser {
+  signIns(): { name: string; site: string }[];
+  ask(agent: string | null, tile: string | null, words: string): Promise<{ ask: number; tile: string }>;
+  signIn(agent: string | null, tile: string | null, name: string): { ask: number; tile: string };
+  state(ask: number, ms: number): Promise<BrowserAskState>;
+  asks(): BrowserPersonAsk[];
+  answer(ask: number, answer: "yes" | "always" | "no" | "done"): { answered: boolean };
+}
 
 export interface ControlApiOptions {
   /** The control plane's work, once it is ready. */
@@ -27,6 +41,27 @@ export interface ControlApiOptions {
   /** Keep the photos given with a message to the agent of `tile` (bare) on the machine it runs on:
    *  their paths. None: a message takes no photos here. */
   keep?(tile: string, images: StartImage[]): Promise<string[]>;
+  browser?: ControlBrowser;
+  /** Keep a note on the page in `tile`, by the agent of `caller` (bare) or the person. None: no
+   *  window shows a page here. */
+  pageNote?(tile: string, note: PageNoteAsked, caller: string | undefined): Promise<Result<"page.note">>;
+}
+
+/** A note as asked for over the API, or refused for saying what it does not take. */
+function pageNoteAsked(given: unknown): PageNoteAsked {
+  const g = (given ?? {}) as { body?: unknown; intent?: unknown; selector?: unknown; area?: unknown };
+  const body = text(g.body, "body").trim();
+  if (!body || body.length > 10_000) throw new ApiError("BAD_REQUEST", "body must say something, in at most 10000 characters");
+  if (g.intent != null && !REVIEW_INTENTS.includes(g.intent as ReviewIntent)) throw new ApiError("BAD_REQUEST", `intent must be ${REVIEW_INTENTS.join(", ")}`);
+  const intent = g.intent == null ? {} : { intent: g.intent as ReviewIntent };
+  if ((g.selector == null) === (g.area == null)) throw new ApiError("BAD_REQUEST", "a note points at a selector or an area, one of them");
+  if (g.selector != null) return { body, ...intent, selector: text(g.selector, "selector") };
+  const a = g.area as Record<string, unknown>;
+  const [x, y, width, height] = [a.x, a.y, a.width, a.height] as number[];
+  if (![x, y, width, height].every((n) => typeof n === "number" && Number.isFinite(n)) || width! <= 0 || height! <= 0) {
+    throw new ApiError("BAD_REQUEST", "area must be x, y, width and height in page pixels, with some width and height");
+  }
+  return { body, ...intent, area: { x: x!, y: y!, width: width!, height: height! } };
 }
 
 const text = (v: unknown, what: string): string => {
@@ -41,12 +76,32 @@ const targetOf = (v: unknown): string | undefined => (v == null || v === "" ? un
 /** A pipe, or every pipe out of a tile: `src->dst`, `src->*`. */
 const pipeOf = (src: unknown, dst: unknown): string | undefined => { const from = tileOf(src); return from && `${from}->${tileOf(dst) ?? "*"}`; };
 
+/** The longest one `browser.askState` waits: an agent's wait is made of short requests. */
+const LONGEST_ASK_WAIT_MS = 10_000;
+
 export function controlApi(o: ControlApiOptions): Domain<Method> {
+  const browser = (): ControlBrowser => {
+    if (!o.browser) throw new ApiError("UNSUPPORTED", "Browser tiles are in the app: this machine runs no window that shows one");
+    return o.browser;
+  };
+  const optional = (v: unknown, what: string): string | null => (v == null || v === "" ? null : text(v, what));
   /** Asked for what it does: the API answers `null`. */
   const done = (run: (w: ControlWork, ...p: unknown[]) => unknown) =>
     async (_from: Connection, ...p: unknown[]) => { await run(await o.control(), ...p); return null; };
   return {
     answers: {
+      "browser.signIns": async () => ({ signIns: browser().signIns() }),
+      "browser.ask": (from, words, tile) => browser().ask(callerOf(from) ?? null, optional(tile, "tile"), text(words, "words")),
+      "browser.signIn": async (from, name, tile) => browser().signIn(callerOf(from) ?? null, optional(tile, "tile"), text(name, "name")),
+      "browser.askState": (_from, ask, ms) => {
+        if (typeof ask !== "number") throw new ApiError("BAD_REQUEST", "ask must be a number");
+        return browser().state(ask, Math.min(typeof ms === "number" && ms > 0 ? ms : 0, LONGEST_ASK_WAIT_MS));
+      },
+      "browser.asks": async () => ({ asks: browser().asks() }),
+      "browser.answer": async (_from, ask, answer) => {
+        if (typeof ask !== "number" || (answer !== "yes" && answer !== "always" && answer !== "no" && answer !== "done")) throw new ApiError("BAD_REQUEST", "the answer is a question's number, and yes, always, no or done");
+        return browser().answer(ask, answer);
+      },
       "agent.send": async (_from, tile, message, given) => {
         const images = imagesOf((given as { images?: unknown } | null | undefined)?.images);
         // With photos, the words may be none.
@@ -95,6 +150,11 @@ export function controlApi(o: ControlApiOptions): Domain<Method> {
       "plugin.close": async (_from, instance, plugin) => (await o.control()).pluginClose(text(instance, "instance"), plugin != null ? text(plugin, "plugin") : undefined),
       "tile.focus": done((w, tile) => w.focus(text(tile, "tile"))),
       "tile.look": async (_from, tile) => (await o.control()).look(text(tile, "tile")),
+      "page.note": async (from, tile, note) => {
+        const asked = pageNoteAsked(note);
+        if (!o.pageNote) throw new ApiError("UNSUPPORTED", "no window shows pages here: a note on a page needs the app");
+        return o.pageNote(text(tile, "tile"), asked, callerOf(from));
+      },
       "views.rescan": done((w) => w.rescan("views")),
       "agents.rescan": done((w) => w.rescan("agents")),
       "widgets.rescan": done((w) => w.rescan("widgets")),
@@ -116,6 +176,7 @@ export function controlApi(o: ControlApiOptions): Domain<Method> {
       "plugin.open": (plugin) => ({ target: named(plugin) }),
       "plugin.call": (plugin, command) => ({ target: named(plugin) && `${plugin as string}:${named(command) ?? ""}` }),
       "plugin.close": (instance) => ({ target: named(instance) }),
+      "page.note": (tile) => ({ target: tileOf(tile) }),
       "views.rescan": () => ({}),
       "agents.rescan": () => ({}),
       "widgets.rescan": () => ({}),

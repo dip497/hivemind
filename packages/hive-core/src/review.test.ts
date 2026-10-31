@@ -4,8 +4,8 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import {
-  addComment, dismissComment, listComments, markSeen, normalizeComments, readComments, reopenComment,
-  replyTo, resolveComment, reviewPath, reviewRoot, statusOf, writeComments, writePicture,
+  MAX_ATTACHMENT_BYTES, addComment, attachToComment, checkAttachment, deleteComment, dismissComment, listComments, markSeen, normalizeComments, pageFilePath, readComments, reopenComment,
+  replyTo, resolveComment, reviewPath, reviewRoot, statusOf, writeComments, writePicture, type PageComment,
 } from "./review.js";
 
 const root = async () => fs.mkdtemp(path.join(os.tmpdir(), "hm-review-"));
@@ -48,6 +48,15 @@ describe("review comments", () => {
     await fs.symlink(elsewhere, path.join(reviews, "pages"));
     await expect(writePicture(reviews, "c1", new Uint8Array([1]))).rejects.toThrow("not a folder");
     expect(await fs.readdir(elsewhere)).toEqual([]);
+  });
+
+  test("a project whose .hivemind is a link keeps its notes in the config folder, not where the link points", async () => {
+    const repo = await root();
+    const elsewhere = await root();
+    const home = await root();
+    await fs.symlink(elsewhere, path.join(repo, ".hivemind"));
+    const r = await reviewRoot(repo, home);
+    expect(r.startsWith(path.join(process.env.XDG_CONFIG_HOME?.trim() || path.join(home, ".config"), "hivemind", "review"))).toBe(true);
   });
 
   test("a comment round-trips through the file the CLI reads", async () => {
@@ -167,6 +176,148 @@ describe("review comments", () => {
     expect(dismissed.summary).toBe("works as intended");
     // Dismissed is closed: it lists with the resolved ones.
     expect((await listComments(r, { status: "resolved" })).map((c) => c.id)).toEqual([a.id]);
+  });
+
+  describe("what a note keeps", () => {
+    const made = async (name: string, bytes = "video bytes"): Promise<string> => {
+      const file = path.join(await root(), name);
+      await fs.writeFile(file, bytes);
+      return file;
+    };
+    const pages = (r: string) => path.join(r, "pages");
+    const inPages = async (r: string) => (await fs.readdir(pages(r)).catch(() => [] as string[])).filter((f) => f !== ".gitignore").sort();
+
+    test("proof is copied in under a made-up name, recorded by name alone, and stays out of git", async () => {
+      const dir = await root();
+      execFileSync("git", ["init", "-q"], { cwd: dir });
+      const r = path.join(dir, ".hivemind");
+      const c = await addComment(r, { ...pageNote, id: "c1" });
+      const video = await made("my clip; rm -rf.webm");
+      const done = (await resolveComment(r, c.id, "fixed", [video, await made("SHOT.PNG", "picture bytes")])) as PageComment;
+      expect(statusOf(done)).toBe("resolved");
+      expect(done.attachments).toEqual(["c1-1.webm", "c1-2.png"]);
+      expect(await fs.readFile(path.join(pages(r), "c1-1.webm"), "utf8")).toBe("video bytes");
+      expect(await fs.readFile(video, "utf8")).toBe("video bytes");
+      expect(((await readComments(r))[0] as PageComment).attachments).toEqual(["c1-1.webm", "c1-2.png"]);
+      expect(execFileSync("git", ["status", "--porcelain", "--untracked-files=all"], { cwd: dir, encoding: "utf8" })).not.toContain("c1-1.webm");
+      // A later one does not take an earlier one's name.
+      const more = (await attachToComment(r, c.id, [await made("more.gif")])) as PageComment;
+      expect(more.attachments).toEqual(["c1-1.webm", "c1-2.png", "c1-3.gif"]);
+      expect(statusOf(more)).toBe("resolved");
+    });
+
+    test("a file that cannot be kept is refused by a code of its own, and nothing is copied or changed", async () => {
+      const r = await root();
+      const c = await addComment(r, { ...pageNote, id: "c1" });
+      const tooBig = await made("huge.mp4");
+      await fs.truncate(tooBig, MAX_ATTACHMENT_BYTES + 1);
+      const cases: [string, string][] = [
+        [await made("notes.exe"), "ATTACHMENT_TYPE"],
+        [await made("noextension"), "ATTACHMENT_TYPE"],
+        [path.join(await root(), "gone.png"), "ATTACHMENT_MISSING"],
+        [await fs.mkdir(path.join(await root(), "folder.png"), { recursive: true }).then((p) => p!), "ATTACHMENT_MISSING"],
+        [tooBig, "ATTACHMENT_TOO_BIG"],
+      ];
+      for (const [file, code] of cases) {
+        await expect(resolveComment(r, c.id, "done", [await made("fine.png"), file]), file).rejects.toMatchObject({ code });
+      }
+      expect(statusOf((await readComments(r))[0]!)).toBe("open");
+      expect(await inPages(r)).toEqual([]);
+      const atTheCap = await made("just-fits.mp4");
+      await fs.truncate(atTheCap, MAX_ATTACHMENT_BYTES);
+      await checkAttachment(atTheCap);
+    });
+
+    test("proof on what cannot take it is not copied: a closed note, none by that id, a comment on a diff", async () => {
+      const r = await root();
+      const closed = await addComment(r, { ...pageNote, id: "c1", resolved: true });
+      const diff = await addComment(r, { ...seed, id: "c2" });
+      const video = await made("a.webm");
+      await expect(resolveComment(r, closed.id, "again", [video])).rejects.toThrow("reopen it first");
+      expect(await resolveComment(r, "c-nope", "done", [video])).toBeNull();
+      await expect(attachToComment(r, diff.id, [video])).rejects.toMatchObject({ code: "ATTACHMENT_NOT_A_NOTE" });
+      expect(await inPages(r)).toEqual([]);
+    });
+
+    test("a copy that fails partway leaves no file behind and the note as it was", async () => {
+      const r = await root();
+      const c = await addComment(r, { ...pageNote, id: "c1" });
+      const unreadable = await made("locked.webm");
+      await fs.chmod(unreadable, 0);
+      await expect(attachToComment(r, c.id, [await made("fine.png"), unreadable])).rejects.toThrow();
+      expect(await fs.readdir(pages(r)).then((files) => files.filter((f) => f !== ".gitignore"))).toEqual([]);
+      expect(((await readComments(r))[0] as PageComment).attachments).toBeUndefined();
+    });
+
+    test("a link a cloned project committed at a proof's name is replaced, and what it points at is left alone", async () => {
+      const outside = await made("precious.webm", "keep");
+      const r = await root();
+      const c = await addComment(r, { ...pageNote, id: "c1" });
+      await fs.mkdir(pages(r));
+      await fs.symlink(outside, path.join(pages(r), "c1-1.webm"));
+      await attachToComment(r, c.id, [await made("a.webm")]);
+      expect(await fs.readFile(outside, "utf8")).toBe("keep");
+      expect((await fs.lstat(path.join(pages(r), "c1-1.webm"))).isFile()).toBe(true);
+    });
+
+    test("a pictures folder that is a link takes no proof, and nothing lands where it points", async () => {
+      const elsewhere = await root();
+      const r = await root();
+      const c = await addComment(r, { ...pageNote, id: "c1" });
+      await fs.symlink(elsewhere, pages(r));
+      await expect(attachToComment(r, c.id, [await made("a.webm")])).rejects.toThrow("not a folder");
+      expect(await fs.readdir(elsewhere)).toEqual([]);
+    });
+
+    test("deleting a note deletes its picture and its proof, and no other note's", async () => {
+      const r = await root();
+      await addComment(r, { ...pageNote, id: "c1", page: { ...pageNote.page, picture: await writePicture(r, "c1", new Uint8Array([1])) } });
+      await addComment(r, { ...pageNote, id: "c2", page: { ...pageNote.page, picture: await writePicture(r, "c2", new Uint8Array([2])) } });
+      await attachToComment(r, "c1", [await made("a.webm")]);
+      await attachToComment(r, "c2", [await made("b.webm")]);
+      expect(await deleteComment(r, "c1")).toBe(true);
+      expect(await inPages(r)).toEqual(["c2-1.webm", "c2.png"]);
+      expect((await readComments(r)).map((c) => c.id)).toEqual(["c2"]);
+      expect(await deleteComment(r, "c-nope")).toBe(false);
+    });
+
+    test("deleting a note removes nothing through a pictures folder that is a link", async () => {
+      const elsewhere = await root();
+      await fs.writeFile(path.join(elsewhere, "c1.png"), "keep");
+      const r = await root();
+      await fs.symlink(elsewhere, pages(r));
+      await addComment(r, { ...pageNote, id: "c1", page: { ...pageNote.page, picture: "c1.png" } });
+      await deleteComment(r, "c1");
+      expect(await fs.readFile(path.join(elsewhere, "c1.png"), "utf8")).toBe("keep");
+    });
+
+    test("a note's file is found to show it by its name alone; a path, a link or what no note could hold is not", async () => {
+      const r = await root();
+      await fs.mkdir(pages(r));
+      const secret = await made("secret.png");
+      await fs.writeFile(path.join(pages(r), "c1-1.webm"), "x");
+      await fs.writeFile(path.join(pages(r), "c1.png"), "x");
+      await fs.writeFile(path.join(pages(r), "page.html"), "x");
+      await fs.symlink(secret, path.join(pages(r), "c2.png"));
+      expect(await pageFilePath(r, "c1-1.webm")).toBe(path.join(pages(r), "c1-1.webm"));
+      expect(await pageFilePath(r, "c1.png")).toBe(path.join(pages(r), "c1.png"));
+      for (const name of ["c2.png", "page.html", ".gitignore", "missing.png", "../review.json", `../${path.basename(secret)}`, secret]) {
+        expect(await pageFilePath(r, name), name).toBeNull();
+      }
+      const linked = await root();
+      await fs.symlink(pages(r), pages(linked));
+      expect(await pageFilePath(linked, "c1.png")).toBeNull();
+    });
+
+    test("attachments on disk are file names, never paths, and on a note alone", () => {
+      const names = ["c-1-1.webm", "c-1-2.mp4", "x.png", "x.jpg", "x.gif", "../x.png", "/etc/x.png", "a/b.webm", "a\\b.webm", ".x.png", "x.exe", "x.html", "", 7, null];
+      const [kept] = normalizeComments([{ id: "c-1", ...pageNote, attachments: names }]);
+      expect((kept as PageComment).attachments).toEqual(["c-1-1.webm", "c-1-2.mp4", "x.png", "x.jpg", "x.gif"]);
+      const [none] = normalizeComments([{ id: "c-2", ...pageNote, attachments: ["../x.png"] }]);
+      expect(none).not.toHaveProperty("attachments");
+      const [onDiff] = normalizeComments([{ id: "c-3", ...seed, attachments: ["x.png"] }]);
+      expect(onDiff).not.toHaveProperty("attachments");
+    });
   });
 
   test("a page note's picture is a file name, never a path", () => {

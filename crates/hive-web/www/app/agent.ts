@@ -6,10 +6,14 @@ import type { App } from "./app.js";
 import { type Answers, answers } from "./answers.js";
 import { Chat } from "./chat.js";
 import { Ask, type Composer, type Picked, composer, h, icon, iconButton, say } from "./dom.js";
+import { Outbox, type Outgoing } from "./outbox.js";
 import { PHOTOS_MAX, photoOf } from "./photos.js";
 import { TerminalView } from "./terminal.js";
 import type { Agent, Overview, PageNote, SlashCommand } from "./types.js";
 import { NOTICES, ago, elapsed, kindLabel, stateLabel, where } from "./words.js";
+
+/** How often an open agent screen asks what waits on the person on Browser tiles. */
+const ASKS_EVERY_MS = 5000;
 
 export class AgentScreen {
   readonly el = h("section", { class: "screen agent-screen", "data-screen": "agent" });
@@ -42,6 +46,10 @@ export class AgentScreen {
   private readonly menu = h("div", { class: "card menu", role: "menu", hidden: true });
   /** The notes left on pages in its workspace: what each says and where it stands, to send to it. */
   private readonly notes = h("div", { class: "card notes-card", hidden: true, "data-page-notes": "" });
+  /** What agents ask on Browser tiles on its computer, asked again while this screen is open. */
+  private readonly browserAsks = h("div", { class: "card", hidden: true, "data-browser-asks": "" });
+  private asksTimer: ReturnType<typeof setInterval> | null = null;
+  private asksSeen = "";
   /** Whether its terminal shows, rather than its chat. */
   private terminal = false;
   private tile: string | null = null;
@@ -53,8 +61,10 @@ export class AgentScreen {
   private unfollow: (() => void) | null = null;
   /** Agents started from here that the computer has not listed yet. */
   private readonly fresh = new Set<string>();
+  private readonly outbox: Outbox;
 
   constructor(private readonly app: App) {
+    this.outbox = new Outbox((a, text, photos, going) => app.send(a, text, photos.map((p) => p.photo), going), NOTICES.notTaken);
     const back = h("button", { type: "button", class: "back", "aria-label": "Back", "data-back": "" }, icon("back"));
     back.addEventListener("click", () => app.back());
     const close = h("button", { type: "button", role: "menuitem", "data-close": "" }, "Close");
@@ -81,7 +91,32 @@ export class AgentScreen {
     this.message = message.querySelector("textarea")!;
     this.message.addEventListener("input", () => void this.suggest());
     this.composing = message;
-    this.dock.append(this.newestSlot, this.closing.el, this.waits, this.working, this.problem, this.suggested, message);
+    this.dock.append(this.newestSlot, this.closing.el, this.browserAsks, this.waits, this.working, this.problem, this.suggested, message);
+  }
+
+  /** What agents ask the person on Browser tiles there, each with its answers. */
+  private async showBrowserAsks(): Promise<void> {
+    const a = this.agent;
+    if (!a) return;
+    const asks = await this.app.browserAsks(a);
+    const seen = JSON.stringify(asks.map((q) => q.ask));
+    if (seen === this.asksSeen) return;
+    this.asksSeen = seen;
+    const say = (ask: number, to: "yes" | "always" | "no" | "done") => void this.app.answerBrowserAsk(a, ask, to).then(() => this.showBrowserAsks());
+    const answer = (ask: number, label: string, to: "yes" | "always" | "no" | "done", primary = false) => {
+      const b = h("button", { type: "button", "data-browser-ask-answer": to, ...(primary ? { class: "primary" } : {}) }, label);
+      b.addEventListener("click", () => say(ask, to));
+      return b;
+    };
+    this.browserAsks.hidden = asks.length === 0;
+    this.browserAsks.replaceChildren(...asks.map((q) => {
+      const who = q.by ?? "An agent";
+      return q.kind === "sign-in"
+        ? h("div", { "data-browser-ask": q.ask }, h("p", {}, `${who} wants to sign in to ${q.site} as ${q.username}. It won't see the password.`),
+            h("div", { class: "note-actions" }, answer(q.ask, "Sign in once", "yes", true), answer(q.ask, "Always on this site", "always"), answer(q.ask, "No", "no")))
+        : h("div", { "data-browser-ask": q.ask }, h("p", {}, `${who}: ${q.words} On ${this.app.computer()}, in a Browser tile. It can't see the page until you're done.`),
+            h("div", { class: "note-actions" }, answer(q.ask, "Done", "done", true), answer(q.ask, "Not now", "no")));
+    }));
   }
 
   /** The workspace's notes on pages, asked of the computer again: open ones can be sent to the agent,
@@ -112,9 +147,10 @@ export class AgentScreen {
       reopen.addEventListener("click", () => act("reopen"));
       const closed = n.status === "resolved" || n.status === "dismissed";
       return h("li", { "data-note": n.id, "data-status": n.status },
-        h("p", { class: "note-what" }, n.what, h("span", { class: "quiet" }, ` · ${n.status === "resolved" ? "done" : n.status}`)),
+        h("p", { class: "note-what" }, n.what, h("span", { class: "quiet" }, ` · ${n.status === "resolved" ? "done" : n.status}${n.agent ? ` · by ${n.agent}` : ""}`)),
         h("p", {}, n.body),
         ...(n.summary ? [h("p", { class: "quiet" }, `↳ ${n.summary}`)] : []),
+        ...(n.attachments?.length ? [h("p", { class: "quiet", "data-note-attachments": "" }, `${n.attachments.length} attached on the computer: ${n.attachments.join(", ")}`)] : []),
         h("div", { class: "note-actions" }, ...(closed ? [reopen] : [done, dismiss, why])));
     });
     this.notes.replaceChildren(
@@ -146,6 +182,7 @@ export class AgentScreen {
     this.suggested.hidden = true;
     this.waits.replaceChildren();
     this.chat = new Chat((use) => (this.agent ? this.app.tool(this.agent, use) : Promise.reject(new Error("it is no longer there"))));
+    for (const item of this.outbox.of(tile)) this.showOutgoing(item, this.chat);
     this.terminal = false;
     this.place(this.chat.el);
     this.newestSlot.replaceChildren(this.chat.newest);
@@ -200,6 +237,10 @@ export class AgentScreen {
     this.closing.el.hidden = true;
     this.unfollow?.();
     this.unfollow = null;
+    if (this.asksTimer) clearInterval(this.asksTimer);
+    this.asksTimer = null;
+    this.asksSeen = "";
+    this.browserAsks.hidden = true;
     this.term.unwatch();
     this.tile = null;
     this.showWorking();
@@ -228,6 +269,11 @@ export class AgentScreen {
     if (this.message.placeholder !== hint) {
       this.message.placeholder = hint;
       this.message.setAttribute("aria-label", hint);
+    }
+    // A question comes without notice: asked while this screen is open, and no longer.
+    if (!this.asksTimer) {
+      this.asksTimer = setInterval(() => void this.showBrowserAsks(), ASKS_EVERY_MS);
+      void this.showBrowserAsks();
     }
     if (!this.unfollow && this.chat) {
       const chat = this.chat;
@@ -308,9 +354,8 @@ export class AgentScreen {
     this.problemTimer = setTimeout(() => (this.problem.hidden = true), 5000);
   }
 
-  /** A message, shown in the chat at once as it goes: sent, or held until the turn ends with a way
-   *  to send it now, which stops the turn; taken away again when it did not go. A line that answers
-   *  what the agent waits on goes as that answer. */
+  /** A message, moved into the chat at once as it goes (`Outbox`). A line that answers what the
+   *  agent waits on goes as that answer. */
   private async sendIt(text: string, photos: Picked[]): Promise<boolean> {
     if (this.typed) {
       if (photos.length) {
@@ -321,12 +366,31 @@ export class AgentScreen {
     }
     const [a, chat] = [this.agent, this.chat];
     if (!a || !chat) return false;
-    const shown = chat.sending(text, photos.map((p) => p.url));
-    const sent = await this.app.send(a, text, photos.map((p) => p.photo));
-    if (!sent) shown.failed();
-    else if (sent.held) shown.held(() => void this.stopIt());
-    else shown.sent();
-    return !!sent;
+    this.showOutgoing(this.outbox.add(a, text, photos), chat);
+    return true;
+  }
+
+  /** `item` in `chat`, as it stands now and from here on: going, sent, held until the turn ends with
+   *  a way to send it now when its agent can be stopped, or failed with a way to try again or put
+   *  it back in the box. */
+  private showOutgoing(item: Outgoing, chat: Chat): void {
+    const shown = chat.sending(item.text, item.photos.map((p) => p.url), item.at, () => this.outbox.forget(item));
+    item.shown = (stage) => {
+      if (stage.at === "going") shown.going(item.photos.length ? stage.part : 0);
+      else if (stage.at === "sent") {
+        this.outbox.forget(item);
+        shown.sent();
+      } else if (stage.at === "held") shown.held(item.agent.interrupt ? () => this.app.stop(item.agent) : undefined);
+      else shown.failed(stage.why, () => this.outbox.again(item), () => {
+        if (!this.composing.putBack(item.text, item.photos)) {
+          this.photoProblem(`A message takes at most ${PHOTOS_MAX} photos: send or remove those in the box first.`);
+          return false;
+        }
+        this.outbox.forget(item);
+        return true;
+      });
+    };
+    item.shown(item.stage);
   }
 
   private async stopIt(): Promise<void> {

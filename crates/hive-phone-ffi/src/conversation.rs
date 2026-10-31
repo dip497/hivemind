@@ -172,6 +172,7 @@ mod tests {
             text: None,
             tool: None,
             result: None,
+            notice: None,
         };
         let shown = |id: &str, said| Entry {
             id: id.into(),

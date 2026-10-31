@@ -34,9 +34,9 @@ Every `hive` command exits with one of these. This is the one list; other pages 
 | 2 | `BAD_REQUEST`, `UNKNOWN_METHOD` | usage — the error lists valid values |
 | 3 | `UNAVAILABLE` | neither the app nor `hive host` is running |
 | 4 | `TIMEOUT` | a wait ran out (`read`, `open-review`, `workflow`) |
-| 5 | `NOT_FOUND` | no such tile, frame, issue or workspace |
+| 5 | `NOT_FOUND`, `NO_BROWSER_TILE`, `NO_ELEMENT`, `ATTACHMENT_MISSING` | no such tile, frame, issue, workspace, Browser tile, element on the page or file |
 | 6 | `FORBIDDEN` | a bad or missing token, or a call the caller may not make |
-| 7 | `UNSUPPORTED`, `RATE_LIMITED`, `DEPTH_EXCEEDED`, `OCCLUDED`, `PART_OF_A_PACKAGE` | refused — the runtime cannot do this, or not now; `read` of an idle agent with nothing new; `sleep` or `wake` that did nothing for a reason other than it being so already; `tile look` of a tile something is drawn over; a plugin that is part of a package changes only with it |
+| 7 | `UNSUPPORTED`, `RATE_LIMITED`, `DEPTH_EXCEEDED`, `OCCLUDED`, `PART_OF_A_PACKAGE`, `SEVERAL_BROWSER_TILES`, `SEVERAL_ELEMENTS`, `ATTACHMENT_TYPE`, `ATTACHMENT_TOO_BIG`, `ATTACHMENT_NOT_A_NOTE`, `REVIEW_PICTURES` | refused — the runtime cannot do this, or not now; `read` of an idle agent with nothing new; `sleep` or `wake` that did nothing for a reason other than it being so already; `tile look` of a tile something is drawn over; a plugin that is part of a package changes only with it |
 | 8 | | `read` only: the agent stopped to wait on an answer (a question, a permission) |
 | 9 | `ASLEEP` | the agent is asleep: `send`, `keys`, `read` and `connect` to it are refused (a `report` to it waits in its inbox); the fix is `hive ctl wake <tile>` |
 | 1 | `FAILED` | other |
@@ -47,7 +47,7 @@ Every `hive` command exits with one of these. This is the one list; other pages 
 
 | Exit | Means | Do |
 |---:|---|---|
-| 0 | The agent replied. | Use the reply it printed. |
+| 0 | The agent replied. With `awaiting`, it still waits on that many background tasks it started. | Use the reply it printed. With `awaiting`, `read` again for what comes of them. |
 | 4 | It is still working. | Run `read` again. |
 | 5 | Its tile was closed. | Start it again if you still need it. |
 | 7 | It was sent nothing new, and is idle. | Send it a task. |
@@ -78,6 +78,8 @@ hive task MYP-3 add "Subtask" [--assignee id] [--state todo]   # sub-issues: MYP
 hive task MYP-3 done 2                          # tail number or full id
 hive task MYP-3 list
 ```
+
+`.hivemind` has to be a real folder. A link there is not treated as a workspace, and `hive init` refuses it.
 
 ```text
 hive link MYP-4 --parent MYP-1          # re-parent, or --parent none
@@ -332,16 +334,24 @@ hive review list [--file src/x.ts] [--status open|resolved|all] [--on page|diff]
 hive review show <id>                   # one comment with its replies; a page note's elements and picture
 hive review reply <id> "fixed in 3f2c1a"
 hive review seen <id>                   # an open comment you are on; refused once it is closed
-hive review resolve <id> [--summary "how it was addressed"]
+hive review resolve <id> [--summary "how it was addressed"] [--attach file]...
 hive review dismiss <id> --reason "why it is not done"
 hive review reopen <id>                 # only a resolved or dismissed one
-hive ctl notes list [--status open|resolved|all] [--json]   # the notes left on pages
+hive ctl notes add --selector "<css>" --body "what you found" [--intent fix|change|question] [--tile <browser tile>] [--attach file]... [--json]
+hive ctl notes add --area x,y,width,height --body "what you found"   # page pixels, for what no selector names
+hive ctl notes list [--status open|resolved|all] [--json]   # the notes on pages
 hive ctl notes show|seen|reopen <id>
-hive ctl notes done <id> [--summary "what was done"]
+hive ctl notes done <id> [--summary "what was done"] [--attach file]...   # .webm .mp4 .png .jpg .gif, up to 200 MB each
 hive ctl notes dismiss <id> --reason "why not"
 hive ctl notes reply <id> "answer"
 hive ctl notes watch [--timeout 300]    # wait for the next note on a page; exit 4 on timeout
 hive review watch [--timeout 300] [--file f]   # wait for the next comment; exit 4 on timeout
+hive ctl browser ask "Please sign in" [--tile t] [--timeout 90s]   # the person does it in the tile; you wait and see nothing
+hive ctl browser sign-ins               # saved sign-ins, by name and site
+hive ctl browser sign-in <name> [--tile t] [--timeout 90s]   # the app types it once the person says yes; you never see the password
+hive ctl browser wait <ask>             # go on waiting: the question stays up for 5 minutes
+hive ctl browser asks                   # the questions waiting on the person
+hive ctl browser answer <ask> yes|always|no|done   # the person's; refused to an agent
 ```
 
 ## Terminals that outlive the app

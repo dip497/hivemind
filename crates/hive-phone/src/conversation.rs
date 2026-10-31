@@ -34,14 +34,29 @@ pub struct ToolResult {
     pub error: bool,
 }
 
-/// One thing said: by the person, by the agent (its text, in markdown, or a tool it used), or by
-/// a tool (what it gave back).
+/// A line the agent's own program wrote into the conversation, in the person's words: `quiet` when
+/// it should barely register; `detail`, what it says more, once opened.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Notice {
+    pub text: String,
+    #[serde(
+        default,
+        deserialize_with = "only_true",
+        skip_serializing_if = "Not::not"
+    )]
+    pub quiet: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub detail: Option<String>,
+}
+
+/// One thing said: by the person, by the agent (its text, in markdown, or a tool it used), by a
+/// tool (what it gave back), or by the agent's own program (a notice).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Entry {
     pub id: String,
     /// When, ms since the epoch.
     pub at: u64,
-    /// `person`, `agent` or `tool`.
+    /// `person`, `agent`, `tool` or `program`.
     pub who: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub text: Option<String>,
@@ -49,16 +64,25 @@ pub struct Entry {
     pub tool: Option<Tool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub result: Option<ToolResult>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub notice: Option<Notice>,
 }
 
 impl Entry {
     /// Whether it says what its `who` says: the person's text, the agent's text or tool, a tool's
-    /// result.
+    /// result, its program's notice.
     fn whole(&self) -> bool {
+        let (text, tool, result, notice) = (
+            self.text.is_some(),
+            self.tool.is_some(),
+            self.result.is_some(),
+            self.notice.is_some(),
+        );
         match self.who.as_str() {
-            "person" => self.text.is_some() && self.tool.is_none() && self.result.is_none(),
-            "agent" => self.text.is_some() != self.tool.is_some() && self.result.is_none(),
-            "tool" => self.result.is_some() && self.text.is_none() && self.tool.is_none(),
+            "person" => text && !tool && !result && !notice,
+            "agent" => text != tool && !result && !notice,
+            "tool" => result && !text && !tool && !notice,
+            "program" => notice && !text && !tool && !result,
             _ => false,
         }
     }
@@ -260,6 +284,7 @@ mod tests {
                 text: Some(format!("prompt {n}")),
                 tool: None,
                 result: None,
+                notice: None,
             }],
             cursor,
             session: session.into(),

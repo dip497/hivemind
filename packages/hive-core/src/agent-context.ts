@@ -5,7 +5,7 @@
  */
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import { listIssues, readConfig } from "./storage.js";
+import { listIssues, readConfig, replaceFile } from "./storage.js";
 import { filterIssues } from "./query.js";
 import { availableCommands } from "./tool-plugins.js";
 import type { ToolsSettings } from "./settings-schema.js";
@@ -105,6 +105,6 @@ export async function writeAgentContext(
 ): Promise<string> {
   const content = await buildAgentContext(root, opts);
   const p = path.join(root, ".agent.md");
-  await fs.writeFile(p, content, "utf8");
+  await replaceFile(p, content);
   return p;
 }

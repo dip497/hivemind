@@ -16,6 +16,10 @@ export function hookLines(spec: HookSpec, tileId: string, token: string, e: Reco
   if (Array.isArray(e.background_tasks)) {
     const running = e.background_tasks.filter((t: any) => t && t.status === "running").length;
     if (running > 0) out.background = running;
+    // Those that come back to the agent. A shell or a watch may run as long as it likes, and a
+    // teammate is running while it sits idle, so the agent waits on none of them.
+    const awaiting = e.background_tasks.filter((t: any) => t && (t.status === "running" || t.status === "pending") && ["subagent", "workflow", "cloud session", "MCP task"].includes(t.type)).length;
+    if (awaiting > 0 || spec.event === "subagent.stopped") out.awaiting = awaiting;
   }
   // Signed in as the agent's own tile first, the host hearing nothing from a connection that is
   // not; as a notification, so nothing is written back to a hook that reads nothing.

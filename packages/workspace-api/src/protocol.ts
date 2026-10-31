@@ -30,6 +30,12 @@ export type ErrorCode =
   | "UNAVAILABLE"
   /** Something else is drawn over what it would show: the message names it. */
   | "OCCLUDED"
+  /** A note on a page needs a Browser tile: none is where it was asked for, or several are. */
+  | "NO_BROWSER_TILE"
+  | "SEVERAL_BROWSER_TILES"
+  /** A note on a page points at one element: the selector found none the page draws, or several. */
+  | "NO_ELEMENT"
+  | "SEVERAL_ELEMENTS"
   /** It ran and failed: git refused, a file could not be written. */
   | "FAILED";
 
@@ -37,6 +43,7 @@ export type ErrorCode =
 const ERROR_CODES: Record<ErrorCode, true> = {
   BAD_REQUEST: true, UNKNOWN_METHOD: true, FORBIDDEN: true, NOT_FOUND: true, NO_AGENT: true, ASLEEP: true, UNSUPPORTED: true,
   RATE_LIMITED: true, DEPTH_EXCEEDED: true, TIMEOUT: true, UNAVAILABLE: true, OCCLUDED: true, FAILED: true,
+  NO_BROWSER_TILE: true, SEVERAL_BROWSER_TILES: true, NO_ELEMENT: true, SEVERAL_ELEMENTS: true,
 };
 /** Whether `code` is one of the codes a call fails with: what crossed a boundary untyped. */
 export const isErrorCode = (code: unknown): code is ErrorCode => typeof code === "string" && Object.hasOwn(ERROR_CODES, code);

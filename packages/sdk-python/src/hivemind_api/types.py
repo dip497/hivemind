@@ -73,6 +73,7 @@ class AgentRead(TypedDict, total=False):
     truncated: bool
     note: str
     waiting: Waiting
+    awaiting: int
 
 
 class Answered(TypedDict, total=False):

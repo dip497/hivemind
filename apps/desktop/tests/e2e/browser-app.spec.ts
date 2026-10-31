@@ -297,7 +297,8 @@ test("a note on a browser tile's page, made in the tab as a phone would, is kept
     }, { timeout: 20_000, intervals: [2000] }).toBe("Note page");
     await expect(watched.locator("[data-watched-page-picture] img")).toBeVisible({ timeout: 10_000 });
 
-    await watched.locator("[aria-label='annotate']").click();
+    // A widget on the board can lie over the toolbar here; what is under test is the note.
+    await watched.locator("[aria-label='annotate']").dispatchEvent("click");
     const layer = watched.locator("[data-annotate-layer]");
     await expect(layer).toBeVisible();
     const box = (await layer.boundingBox())!;

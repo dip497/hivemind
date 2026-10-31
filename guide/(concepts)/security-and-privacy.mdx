@@ -46,10 +46,16 @@ gets your USB, serial or input devices, a speaker or your screen: the app has no
 A view, or a page a tool shows in its tile, never gets any of these. A tool's own code runs in the
 app's page and gets what the app uses: notifications and copying.
 
+A link that opens a new tab, or `window.open`, opens a tab in the same tile. A page opens at most 5
+in 30 seconds, and only web pages.
+
 <Warning>
-With **Agent browser control** on, an agent drives Browser tiles over the Chrome DevTools Protocol,
-and through it can give a site any of these without asking you. Switch it on only for agents you
-trust with your browser.
+With **Agent browser control** on, an agent drives the Browser tiles it can reach, signed in as you.
+These limits stop mistakes, and an agent steered by a page: it reaches only [the tiles beside
+it](/agent-workflows#let-agents-use-a-browser-and-plugins), can't read other sites' cookies, and
+can't answer a site's questions for you. They don't stop a program that sets out to get around them,
+because agents run as your user on your computer. Switch it on only for agents you trust with your
+browser.
 </Warning>
 
 ## Tools start switched off

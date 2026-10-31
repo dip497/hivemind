@@ -36,6 +36,48 @@ test("Claude Code's manifest maps its session file as the claude cases say", () 
   for (const c of conformance.claude) expect(transcriptEntries(mapping, c.lines), c.about).toEqual(c.entries);
 });
 
+test("a manifest that declares no notices reads what an agent's program wrote as before, as the person's", () => {
+  const { notices: _notices, unwrap: _unwrap, ...older } = defFromManifest(claude()).session!.transcript!;
+  const written = "<task-notification><summary>Agent \"Tidy\" finished</summary></task-notification>";
+  const line = JSON.stringify({ type: "user", uuid: "u1", timestamp: "2026-10-01T10:00:00.000Z", message: { content: written } });
+  expect(transcriptEntries(older, [line])).toEqual([{ id: "u1", at: Date.parse("2026-10-01T10:00:00.000Z"), who: "person", text: written }]);
+});
+
+test("what a notice's line and detail hold is bounded, and a long detail is cut, not dropped", () => {
+  const mapping = defFromManifest(withTranscript({
+    id: "uuid", at: "timestamp",
+    said: [{ require: { type: "user" }, text: "message.content", who: "person" }],
+    notices: [{ require: { type: "user" }, text: "message.content", elements: ["done"], reads: "done.title", detail: ["done.log"], says: [{ say: "{done.title}" }] }],
+  })).session!.transcript!;
+  const line = JSON.stringify({ type: "user", uuid: "u1", timestamp: "2026-10-01T10:00:00.000Z", message: { content: `<done><title>${"t\n".repeat(200)}</title><log>${"l".repeat(9000)}</log></done>` } });
+  const [entry] = transcriptEntries(mapping, [line]) as Array<{ notice: { text: string; detail: string } }>;
+  expect(entry!.notice.text.length).toBe(160);
+  expect(entry!.notice.text).not.toContain("\n");
+  expect(entry!.notice.detail.length).toBe(4000);
+});
+
+test("a manifest's notices are checked as it is loaded", () => {
+  const said = [{ require: { type: "user" }, each: "list", item: { type: "text" }, text: "text", who: "person" }];
+  const refused: Array<[unknown, RegExp]> = [
+    [[], /notices must be 1-16/],
+    [[{}], /says must be/],
+    [[{ says: [{}] }], /say must be text/],
+    [[{ says: [{ say: "x".repeat(201) }] }], /say must be text/],
+    [[{ says: [{ when: "x", say: "y" }] }], /when needs text/],
+    [[{ text: "a", says: [{ say: "y", quiet: "yes" }] }], /quiet must be true/],
+    [[{ elements: ["a"], says: [{ say: "y" }] }], /elements needs text/],
+    [[{ text: "a", elements: ["a b"], says: [{ say: "y" }] }], /elements must be/],
+    [[{ text: "a", elements: ["a"], reads: "b", says: [{ say: "y" }] }], /reads must be an element/],
+    [[{ text: "a", elements: ["a"], detail: ["a.b.c"], says: [{ say: "y" }] }], /must be an element/],
+    [[{ each: "other", text: "a", says: [{ say: "y" }] }], /each must be a list/],
+    [[{ text: "a", who: "agent", says: [{ say: "y" }] }], /who may only be person/],
+  ];
+  for (const [notices, why] of refused) {
+    expect(() => defFromManifest(withTranscript({ id: "uuid", at: "timestamp", said, notices })), JSON.stringify(notices)).toThrow(why);
+  }
+  expect(() => defFromManifest(withTranscript({ id: "uuid", at: "timestamp", said, unwrap: ["a b"] }))).toThrow(/unwrap must be/);
+});
+
 test("a tool use its hook gives, before its session file records it, is about what the file will say of it, whole", () => {
   const mapping = defFromManifest(claude()).session!.transcript!;
   const input = { command: "npm test \\\n  --watch", description: "Run the tests" };

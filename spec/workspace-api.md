@@ -1,4 +1,4 @@
-# Workspace API (0.37)
+# Workspace API (0.38)
 
 What a workspace's host is asked for, and what it answers. The host is the machine the
 workspace's repo is on; today its callers are the app's windows (in the app, or in a browser tab it serves), peers on
@@ -27,6 +27,8 @@ every call, and a method that returns nothing answers `{"result": null}`. `code`
 | `TIMEOUT` | What it waited on did not come in time (0.23). |
 | `UNAVAILABLE` | It needs one of the person's windows, and none is open here (0.23). |
 | `OCCLUDED` | Something is drawn over the tile `tile.look` would picture (a pinned tile, a dialog): the message names it, and nothing was pictured (0.32). |
+| `NO_BROWSER_TILE`, `SEVERAL_BROWSER_TILES` | `page.note` names no Browser tile showing a page and its frame holds none, or several: name the one meant (0.38). It never ran. |
+| `NO_ELEMENT`, `SEVERAL_ELEMENTS` | The selector `page.note` was given finds no element the page draws, or more than one (0.38). It never ran. |
 | `FAILED` | It ran and failed: git refused, a file could not be written. `message` says why, ending in the system's code when there is one (`… (ENOENT)`). |
 
 A **notice** is a call that asks for no answer, `{method, params}` sent one way: the hot path (a
@@ -64,7 +66,7 @@ and not read (a program that stopped reading) is closed.
 The first line says who connects: `{"hello": {"token", "workspace"?}}`.
 
 - **The install's token** (`hcp.token`) is the person at this machine. The host answers
-  `{"hello": {"api": "0.37", "as": "person"}}` and serves every method, as to a window of theirs.
+  `{"hello": {"api": "0.38", "as": "person"}}` and serves every method, as to a window of theirs.
 - **A grant's token** is a program the person let drive workspaces (`grant.create`), or a tool
   plugin's service, whose grant is made when it starts and taken back when it stops (`plugin` in
   `grant.list` names the plugin). It names one of the grant's workspaces by its folder, which may
@@ -228,7 +230,7 @@ sends, and one participant per device.
 | `issue.link` | `root`, `id`, `other`, `type` | `{from, to, type, reciprocal}` | target `id->other`, detail the type |
 | `issue.unlink` | `root`, `id`, `other` | `{removed}` | target `id->other` |
 | `issue.move` | `root`, `id`, `prefix`, `mode` (`move` \| `copy`) | `{newId, newIssue, mode, from}` | target `id`, detail `move to PREFIX` |
-| `review.list` | `repo` | `[{id, file, startLine, endLine, side, body, author, at, resolved?, summary?, replies?}]` | read |
+| `review.list` | `repo` | `[{id, file, startLine, endLine, side, body, author, at, resolved?, summary?, replies?}]`, and notes on pages with `page` in place of the file and lines and, (0.38), `attachments?`: file names beside their picture | read |
 | `review.save` | `repo`, `comments` | `null` (the list replaces the repo's comments) | target `repo` |
 
 `root` is a workspace's `.hivemind` directory. An issue's `state` is one of `backlog`, `todo`,
@@ -267,9 +269,15 @@ log.
 | `agent.diff` | `tile` | `{files, patch, truncated}`: what it changed in the folder it runs in, against its last commit (`agents.md`, "Changes", 0.11) | — |
 | `agent.rename` | `tile`, `name` | `{name}`: what it is called now, on its tile and to the agents it talks to; an empty `name` takes it away, so it is called what its agent says again (0.23) | target the agent's tile |
 | `agent.keys` | `tile`, `keys` | `{keys}`: each key name (`Enter`, `Escape`, `Up`, `C-c`, …) or text typed into its terminal a moment after the last, how many there were (0.23) | target the agent's tile |
-| `agent.read` | `tile`, `timeoutMs`? (0: without waiting) | `{text, finalStatus, truncated, note?, waiting?}`: its reply at the end of its next turn (`finalStatus` `turn`), or what it shows when it closes (`closed`) or `timeoutMs` passes (`timeout`), as `hive ctl read` (0.23; a `timeoutMs` past 2³¹−1 ms, about 24.8 days, waits that long); `waiting` at once when it stops to wait on an answer, with what on (0.26); `ASLEEP` at once when it is asleep or is put to sleep (0.33; was `finalStatus` `asleep`, 0.29); `idle` at once when it was sent nothing since its last reply was read, ended no turn since and is not working, and `working` for one still working read with `timeoutMs` 0 (0.33). `NO_AGENT` for a tile that runs no agent (0.33) | — |
+| `agent.read` | `tile`, `timeoutMs`? (0: without waiting) | `{text, finalStatus, truncated, note?, waiting?, awaiting?}`: its reply at the end of its next turn (`finalStatus` `turn`), with `awaiting` when it ended that turn still waiting on so many background tasks it started, which a later turn brings word of (0.38), or what it shows when it closes (`closed`) or `timeoutMs` passes (`timeout`), as `hive ctl read` (0.23; a `timeoutMs` past 2³¹−1 ms, about 24.8 days, waits that long); `waiting` at once when it stops to wait on an answer, with what on (0.26); `ASLEEP` at once when it is asleep or is put to sleep (0.33; was `finalStatus` `asleep`, 0.29); `idle` at once when it was sent nothing since its last reply was read, ended no turn since and is not working, and `working` for one still working read with `timeoutMs` 0 (0.33). `NO_AGENT` for a tile that runs no agent (0.33) | — |
 | `agent.output` | `tile`, `lines`? | `{text}`: the last `lines` lines (40) of what it printed, its terminal's escapes taken out, as much as the host keeps; following its output as it comes is `terminal.open` with `attachOnly` (0.23) | — |
 | `agent.sessions` | `place`, `program`, `limit`? | `{agent, resumable, sessions}`: the sessions `program` keeps for that folder, newest first, each one `agent.start`'s `resume` takes; `resumable` false when it says none (0.23) | read |
+| `browser.signIns` | | `{signIns: [{name, site}]}`: saved sign-ins; never their usernames or passwords (0.38) | read |
+| `browser.ask` | `words`, `tile?` | `{ask, tile}`: a question on a Browser tile the caller may use. While it is up, agents holding the page wait, and see no request's body (0.38) | read |
+| `browser.signIn` | `name`, `tile?` | `{ask, tile}`: a saved sign-in, once the person says yes on the tile. The app types it into the page's visible fields, only on its site (0.38) | read |
+| `browser.askState` | `ask`, `ms?` | `{state: waiting \| working}` or `{state: done, outcome: done \| no \| expired \| sent \| person, url?, why?}`, as soon as it is done or after `ms`, at most 10 s (0.38) | read |
+| `browser.asks` | | `{asks}`: the questions waiting on the person (0.38) | read |
+| `browser.answer` | `ask`, `yes \| always \| no \| done` | `{answered}`: the person's; refused to an agent's tile (0.38) | read |
 | `tool.open` | `repo`, `{tool, frame?, url?}` | `{tile}`: an installed tool's tile (`tool` its id) placed on the board, in `frame` or the one in view (0.23) | target the new tile |
 | `view.list` | | `[{id, name, version, entry, page}]`: the community views installed on this device whose manifest says `"phone": true` (below, 0.12), and the page a screen loads to show each (0.14) | read |
 | `view.file` | `id`, `path` | `{data, type, csp}`: one of the view's files as the app serves its windows (below), `path` inside its package (a link out of it, or `..`, is `BAD_REQUEST`), its bytes base64, its type, and the policy to serve it under (0.14); 4 MiB at most | read |
@@ -324,6 +332,7 @@ says it is asked at the machine itself.
 | `host.join` | `link` | what joining a workspace by its link answers, as `hive join` | target the link's workspace |
 | `tile.focus` | `tile` | `null`: the tile brought forward in the window showing it | — |
 | `tile.look` | `tile` | `{tile, state, reason?, drew, console, png, width, height}` (0.32): the tile brought into view in the window, waited for (8 s at most) until its plugin drew or failed, then pictured: `png` base64, cropped to its box. `state` is its plugin's (`null` for a tile no plugin draws, which counts as drawn); `console` the last 100 lines its plugin's code wrote and the errors it threw, oldest first, kept in the window and read only here. An agent looks only at its own workspace's tiles. The tile is raised above the others first; `OCCLUDED`, naming it, when anything else is still drawn over part of it, a notification too (nothing the person sees is hidden for a picture); `UNSUPPORTED` where no window shows tiles | read |
+| `page.note` | `tile`, `{body, intent?, selector}` or `{body, intent?, area}` | `{note, kept}` (0.38): a note on the page in the Browser tile `tile`, or an agent's tile beside the one Browser tile in its frame, holding what a person's holds, by the agent asking or `you`. `area` is `{x, y, width, height}` in page pixels. `kept`: the folder its review is in. `UNSUPPORTED` where no window shows pages | target `tile` |
 | `plugin.list` | | `{plugins: [{plugin, kind, instance, label, state, reason?, since, drew, commands}], views: [{id, label, active}]}`: every plugin running in a window (a tool's tile, a widget with code, a community view), `state` `starting` until its code connects, then `ready`; `drew` once a tool's tile painted its first content (0.32); `failed` with its `reason` when it did not start in 15 s or was disabled; and the views the window can show (0.27) | read |
 | `plugin.commands` | | the commands each ready plugin running in a window offers | read |
 | `plugin.open` | `plugin` (`tool:<owner>/<name>[/<tool>]`, `widget:@<owner>/<name>` or `view:<id>`), `frame`? (a tool's tile's) | what opening it answers: a tool's tile placed (`{tile}`), a widget added to the board (`{widget}`), a view switched to (`{view}`); for one with code, once it can be called or 10 s pass, with its `instance`, `state`, `reason`? and `commands` (0.27) | target the plugin |

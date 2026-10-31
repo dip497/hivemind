@@ -71,7 +71,7 @@ Add the page to your home screen. It then opens at once, offline too, and update
 | Screen | Does |
 |---|---|
 | **Home** | What needs you first, then working agents, pinned tiles, then every project. Hold or swipe a row to **Stop** or **Close**. **+** starts an agent, with up to four photos. |
-| An agent's chat | The conversation, with each tool use folded into one line. The round button sends, or stops the agent's reply. |
+| An agent's chat | The conversation, with each tool use folded into one line, and background updates as quiet lines that fold into a count. A message leaves the box as you send it and shows how far it got. If it fails, **Try again** or **Put back**; nothing is lost. The round button sends, or stops the agent's reply. |
 | A question | **Allow** / **Deny**, the options to tap, or **Approve** for a plan. Or type your own answer. |
 | Terminal | Fitted to the phone, with **Esc**, **Tab**, arrows, **^C** and **Fit**. |
 | **Views** | Installed views marked for phones, including ones that show your [widgets](/widgets). |
@@ -94,6 +94,8 @@ The first answer counts, from the phone or the computer.
 | The **Phone browser** tab offers **Set it up with an agent** | The server does not serve the page yet. Set it up: [network server](/self-hosting). |
 | The page does not open on the phone | `https://<address>/phone/manifest.webmanifest` must answer 200, with a trusted certificate. |
 | The three words differ | Press **Deny**. Someone else used the code. Make a new one. |
+| **this phone cannot reach your server** | Check the phone's network, and its VPN if your server is behind one. The page connects by itself once it can. |
+| **Your server answers this phone: is the computer awake and online?** | Wake the computer and check its network. The page connects by itself within about half a minute. There is nothing to open on the computer. |
 
 More in [Troubleshooting](/troubleshooting).
 

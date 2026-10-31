@@ -10,7 +10,7 @@
  * statuses from the moment it is made; its verbs are made with their first use.
  */
 import path from "node:path";
-import { AGENT_EVENT_METHOD, cleanName, parseAgentEvent } from "@hivemind/agents";
+import { AGENT_EVENT_METHOD, cleanName, parseAgentEvent, turnEndKeepsWorking } from "@hivemind/agents";
 import { TILE_SESSIONS_DIR, writeTrackedSession } from "@hivemind/agents/node";
 import { SUBMIT_DELAY_MS } from "@hivemind/agent-host/agent-io";
 import { KEY_GAP_MS } from "@hivemind/agent-host/keys";
@@ -125,6 +125,8 @@ export class ControlPlane {
   private spawnTimes = new Map<string, number[]>();
   /** Tiles whose status says a turn is going (working, or waiting within it). */
   private readonly inTurn = new Set<string>();
+  /** Workers whose turn ended unreported while they wait on work they started. */
+  private readonly reportOwed = new Set<string>();
   /** The session last written for each tile, by the id its hooks name it by. */
   private readonly recorded = new Map<string, string>();
 
@@ -169,10 +171,12 @@ export class ControlPlane {
       else this.inTurn.delete(tileId);
       // A wait is in a turn, but does not start one: a startup screen (a folder's trust) answered
       // reads working with no turn to end, and would hold every message after it.
-      if (status.state === "working" && !was && (o.signalsTurns?.(tileId) ?? false)) this.mailbox.setBusy(toPtyId(tileId));
+      if (status.state === "working" && !status.awaiting && !was && (o.signalsTurns?.(tileId) ?? false)) this.mailbox.setBusy(toPtyId(tileId));
       if (was && !now && status.state !== "exited") this.mailbox.setIdle(toPtyId(tileId));
       // An ended session's file goes with it (its daemon evicts it): the next one is written again.
       if (status.state === "exited") this.forgetRecorded(tileId);
+      // Its wait ended with no turn end to report it: what it last said is all there is.
+      if (!now && this.reportOwed.delete(tileId)) this.report(tileId);
     });
   }
 
@@ -235,8 +239,8 @@ export class ControlPlane {
       // An agent that attaches a photo whose path is pasted alone is given each so; any other, the
       // paths in its message, where it reads them.
       deliverToTile: (ptyId, text, onSent, photos) => (photos?.length && (o.pastesPhotos?.(toBareId(ptyId)) ?? false)
-        ? this.mailbox.deliver(ptyId, text, onSent, { pasted: photos })
-        : this.mailbox.deliver(ptyId, withPhotos(text, photos ?? []), onSent)),
+        ? this.mailbox.deliver(ptyId, text, onSent, { pasted: photos, refuseWhenFull: true })
+        : this.mailbox.deliver(ptyId, withPhotos(text, photos ?? []), onSent, { refuseWhenFull: true })),
       inbox: this.inbox,
       slept: (bare) => this.slept(bare),
       woke: (bare, ready) => this.woke(bare, ready),
@@ -361,6 +365,7 @@ export class ControlPlane {
    *  and its pipes, spawn wires and who started it go. */
   forget(tileId: string): void {
     const bare = toBareId(tileId);
+    this.reportOwed.delete(bare);
     this.status.forget(bare);
     this.agentOf.delete(bare);
     this.o.lines?.forget(bare);
@@ -425,6 +430,7 @@ export class ControlPlane {
       } catch { /* best-effort: tried again with its next event */ }
     }
     const pid = toPtyId(evt.tileId);
+    if (evt.event === "turn.ended") this.reportOwed.delete(bare);
     this.status.event(bare, evt);
     this.o.lines?.reported(bare, evt.sessionId);
     // Hold agent-to-agent messages while this tile is mid-turn (its TUI would swallow them),
@@ -433,10 +439,20 @@ export class ControlPlane {
     if (evt.event === "session.started") { this.mailbox.started(pid); return; }
     if (evt.event !== "turn.ended") return;
     // A reply a waiting `hive ctl read` took, or one the worker reported itself, goes to no inbox.
-    const given = this.turns.recordTurn(pid);
+    const keepsWorking = turnEndKeepsWorking(evt);
+    const given = this.turns.recordTurn(pid, undefined, keepsWorking ? evt.awaiting : undefined);
     this.mailbox.setIdle(pid);
+    if (given) return;
+    // Its report is what it says once the work it waits on is over, not that it started it.
+    if (keepsWorking) this.reportOwed.add(bare);
+    else this.report(bare);
+  }
+
+  /** What a worker last said, to the inbox of each that hears its reports. */
+  private report(bare: string): void {
     const dests = this.pipes.dests(bare);
-    if (dests.length === 0 || given) return;
+    if (dests.length === 0) return;
+    const pid = toPtyId(bare);
     const reply = (this.turns.lastReply(pid) ?? "").trim();
     if (!reply) return;
     const sent = { from: bare, name: this.dispatcher.labelOf(bare), kind: "reply" as const, turn: this.turns.currentSeq(pid), text: reply };

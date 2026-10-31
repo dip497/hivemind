@@ -3,7 +3,7 @@
 
 import type { ViewSession } from "../pkg/hive_web.js";
 import type { TermSource } from "./terminal.js";
-import type { Agent, Folders, Held, Offered, PageNote, Photo, Piece, Places, Reply, Screen, Sent, SlashCommand, Start, Unfolded, ViewFile } from "./types.js";
+import type { Agent, BrowserAsk, Folders, Held, Offered, PageNote, Photo, Piece, Places, Reply, Screen, Sent, SlashCommand, Start, Unfolded, ViewFile } from "./types.js";
 
 export interface App {
   /** Show the agent of `tile`; Back comes back here. `started`: it was just started from here. */
@@ -11,8 +11,9 @@ export interface App {
   back(): void;
   /** Whether it landed; null when the computer did not say. */
   answer(agent: Agent, reply: Reply): Promise<boolean | null>;
-  /** Whether it went, and whether it is held until the agent's turn ends. */
-  send(agent: Agent, text: string, photos?: Photo[]): Promise<Sent | false>;
+  /** Whether it went, and whether it is held until the agent's turn ends; `going` is told how much
+   *  has gone, of 1, as it goes. Throws why, when it could not go. */
+  send(agent: Agent, text: string, photos: Photo[], going: (part: number) => void): Promise<Sent | false>;
   stop(agent: Agent): Promise<boolean>;
   close(agent: Agent): Promise<boolean>;
   conversation(agent: Agent, said: (p: Piece) => void, ended: (why: string) => void): () => void;
@@ -26,6 +27,9 @@ export interface App {
   /** Show the terminal of the tile `tile` in `workspace`, called `name`, one that runs no agent. */
   openTerminal(workspace: string, tile: string, name: string): void;
   /** The notes left on pages in `agent`'s workspace. */
+  /** What agents ask the person on Browser tiles on `agent`'s computer, and their answer. */
+  browserAsks(agent: Agent): Promise<BrowserAsk[]>;
+  answerBrowserAsk(agent: Agent, ask: number, answer: "yes" | "always" | "no" | "done"): Promise<boolean>;
   notes(agent: Agent): Promise<PageNote[]>;
   /** Mark a note done, dismiss it saying why, or reopen it. Whether it landed. */
   changeNote(agent: Agent, id: string, to: "done" | "dismiss" | "reopen", reason?: string): Promise<boolean>;

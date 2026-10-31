@@ -29,7 +29,7 @@ export interface PageNoteDraft {
 }
 
 /** A note's numbered pin on its page. */
-export interface PagePin { n: number; status: ReviewStatus; selector?: string; box: PageBox }
+export interface PagePin { n: number; status: ReviewStatus; selector?: string; box: PageBox; byAgent?: boolean }
 
 export interface PairedDeviceSummary {
   device: string;
@@ -336,6 +336,18 @@ export interface BrowserAppStatus { on: boolean; url: string | null; others: str
 /** A Browser tile's page asks for something (`permissions`: "camera", "microphone", "geolocation",
  *  "notifications"…) and the tile showing page `pageId` asks the person; or that ask is over
  *  (`done`), answered or not. */
+import type { BrowserPersonAsk } from "@hivemind/workspace-api/methods";
+export type { BrowserPersonAsk };
+/** A download from a Browser tile's page, to the Downloads folder: `id` shows it there. */
+export interface PageDownload {
+  pageId: number;
+  id: string;
+  name: string;
+  state: "saving" | "saved" | "failed";
+  /** It went to the folder an agent asked for, not Downloads. */
+  forAgent?: boolean;
+}
+
 export type BrowserPermissionEvent =
   | { askId: number; pageId: number; site: string; permissions: string[] }
   | { askId: number; done: true };
@@ -904,7 +916,7 @@ export interface HiveIpc {
   /** A BrowserTile reports its guest <webview>'s webContents id (plus its frame
    *  and current URL) so the main process can attach the debugger AND write the
    *  discovery file the `hive-browser` skill reads. Called on dom-ready + on nav. */
-  browserRegister?(tileId: string, webContentsId: number, frameId: string | null, url: string): void;
+  browserRegister?(tileId: string, webContentsId: number, frameId: string | null, url: string, repoPath: string): void;
   /** Send a raw Chrome DevTools Protocol command to the tile's guest page
    *  (auto-attaches on first use). Navigate / click / read DOM / screenshot /
    *  evaluate — the surface an agent uses to "use" the browser. */
@@ -923,6 +935,8 @@ export interface HiveIpc {
   browserPickArea(tileId: string, fx: number, fy: number, fw: number, fh: number): Promise<{ area: PageBox; elements: PageElement[] }>;
   /** Outline what is at a point of the page; null: nothing. */
   browserHighlight(tileId: string, point: { fx: number; fy: number } | null): Promise<void>;
+  /** Show a download a tile's page saved (`onBrowserDownload`) in its folder. */
+  browserShowDownload?(id: string): Promise<void>;
   /** Keep a note on the tile's page, with a picture of what it points at, in `repoPath`'s review. */
   browserNote(tileId: string, repoPath: string, note: PageNoteDraft): Promise<ReviewComment>;
   /** Show the page's notes as numbered pins on it. */
@@ -936,6 +950,16 @@ export interface HiveIpc {
   onBrowserPageGone: (cb: (tileId: string) => void) => () => void;
   /** In the app window: a tile's page is watched from elsewhere, so it must keep drawing. */
   onBrowserWatched: (cb: (tileId: string, watched: boolean) => void) => () => void;
+  /** An agent is changing what a Browser tile shows, or has stopped. */
+  onBrowserDriving: (cb: (e: { tileId: string; driving: boolean; by: string | null }) => void) => () => void;
+  /** A question put to the person on a Browser tile, or that one has ended. */
+  onBrowserPersonAsk: (cb: (e: BrowserPersonAsk | { ask: number; tile: string; ended: true }) => void) => () => void;
+  browserAsks(): Promise<BrowserPersonAsk[]>;
+  browserAnswerAsk(ask: number, answer: "yes" | "always" | "no" | "done"): Promise<{ answered: boolean }>;
+  /** Saved sign-ins, without their passwords; whether this computer's keychain guards them. */
+  browserSignIns?(): Promise<{ signIns: { name: string; site: string; url: string; username: string; always: boolean }[]; keychain: boolean }>;
+  browserSignInSave?(row: { name: string; url: string; username: string; password: string }): Promise<void>;
+  browserSignInRemove?(name: string): Promise<void>;
   /** The person's answer to a Browser tile page's ask (`onBrowserPermission`). */
   answerBrowserPermission?(askId: number, allowed: boolean): void;
   /** The rights a site (an origin) in a Browser tile is asked about, each with the person's answer. */
@@ -946,7 +970,7 @@ export interface HiveIpc {
    *  session; `enabled` = persisted choice (applies on next launch). */
   getBrowserSettings?(): Promise<{ active: boolean; enabled: boolean; port: string }>;
   /** The agent-browser on this computer's PATH, and the newest on npm (null: not known). */
-  agentBrowserStatus?(): Promise<{ installed: string | null; latest: string | null }>;
+  agentBrowserStatus?(): Promise<{ installed: string | null; latest: string | null; ffmpeg: boolean }>;
   /** Install agent-browser, or update the one there; what it said last, and its version after. */
   agentBrowserInstall?(): Promise<{ ok: boolean; out: string; version: string | null }>;
   /** Persist the agent-browser bridge on/off choice (applies after relaunch). */
@@ -1140,6 +1164,8 @@ export type HiveApi = HiveIpc & {
   /** A BrowserTile guest requested a popup/new window (target=_blank,
    *  window.open) — the owning tile opens it as a new tab. */
   onBrowserPopup: (cb: (p: { fromId: number; url: string }) => void) => () => void;
+  /** A BrowserTile guest's download started or ended: the owning tile says so. */
+  onBrowserDownload: (cb: (d: PageDownload) => void) => () => void;
   /** A BrowserTile guest asks for the camera, the location… (or that ask is over): the owning tile
    *  asks the person. */
   onBrowserPermission: (cb: (e: BrowserPermissionEvent) => void) => () => void;

@@ -28,7 +28,7 @@ At the end, tell me how to stop the script and how to revoke the token: \`hive g
 |---|---|---|---|
 | <a id="agent-list" />`agent.list` | `repo` | `{seq, agents}`: every agent now, its state and what it waits on | `["/home/you/work/api"]` |
 | <a id="agent-since" />`agent.since` | `repo`, `seq` | the changes and events after `seq`, or null: list again | `["/home/you/work/api", 41]` |
-| <a id="agent-read" />`agent.read` | `tile`, `timeoutMs`? | its reply when it finishes: `{text, finalStatus, truncated}` | `["t-3f2a", 600000]` |
+| <a id="agent-read" />`agent.read` | `tile`, `timeoutMs`? | its reply when it finishes: `{text, finalStatus, truncated, awaiting?}`. `awaiting`: background tasks it started and still waits on; a later turn brings what comes of them | `["t-3f2a", 600000]` |
 | <a id="agent-output" />`agent.output` | `tile`, `lines`? | the last lines it printed (40 by default), as plain text | `["t-3f2a", 20]` |
 | <a id="agent-diff" />`agent.diff` | `tile` | `{files, patch, truncated}`: what it changed since its last commit | `["t-3f2a"]` |
 | <a id="agent-sessions" />`agent.sessions` | `place`, `program`, `limit`? | past sessions of that agent in a folder, to resume | `["/home/you/work/api", "claude", 10]` |
@@ -51,7 +51,7 @@ At the end, tell me how to stop the script and how to revoke the token: \`hive g
 | <a id="file-read" />`file.read` | `repo`, `file` | a file's text, inside the workspace | `["/home/you/work/api", "package.json"]` |
 | <a id="issue-list" />`issue.list` | `root` | issues; `root` is the workspace's `.hivemind` folder | `["/home/you/work/api/.hivemind"]` |
 | <a id="issue-read" />`issue.read` | `root`, `id` | one issue, with its sections | `["/home/you/work/api/.hivemind", "API-4"]` |
-| <a id="review-list" />`review.list` | `repo` | comments left on diffs | `["/home/you/work/api"]` |
+| <a id="review-list" />`review.list` | `repo` | comments left on diffs and notes left on pages, a note's `attachments` by file name (from 0.38) | `["/home/you/work/api"]` |
 
 ### Canvas, widgets, terminals and views
 

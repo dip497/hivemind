@@ -42,10 +42,14 @@ const domain = {
       pipes: [{ src: "in-1", dst: "in-2" }, { src: "in-1", dst: "out-1" }, { src: "out-1", dst: "in-2" }],
       spawns: [{ parent: "in-1", child: "in-2" }, { parent: "out-1", child: "in-1" }],
     }),
+    "browser.asks": () => ({ asks: [] }),
+    "browser.answer": () => ({ answered: true }),
+    "browser.signIn": () => ({ ask: 1, tile: "b" }),
+    "browser.ask": () => ({ ask: 1, tile: "b" }),
     "agent.answer": (from: Connection, tile: unknown) => { ran.push({ what: "agent.answer", by: from.actor, args: [tile] }); return { answered: true }; },
     "agent.send": (from: Connection, tile: unknown) => { ran.push({ what: "agent.send", by: from.actor, args: [tile] }); return { sent: true }; },
     ...Object.fromEntries(["agent.startable", "agent.start", "agent.interrupt", "agent.close", "agent.diff", "agent.commands", "agent.conversation", "agent.tool", "agent.places", "agent.folders",
-      "agent.rename", "agent.keys", "agent.read", "agent.output", "agent.sessions", "terminal.photo", "agent.sleep", "agent.wake", "terminal.saved", "tool.open", "link.connect", "link.disconnect", "plugin.call", "host.join", "tools.rescan", "tile.focus", "tile.look", "tile.watchLines", "tile.readLines", "notifications.play", "notifications.recentSounds"].map((what) => [
+      "agent.rename", "agent.keys", "agent.read", "agent.output", "agent.sessions", "terminal.photo", "agent.sleep", "agent.wake", "terminal.saved", "tool.open", "link.connect", "link.disconnect", "page.note", "plugin.call", "host.join", "tools.rescan", "tile.focus", "tile.look", "tile.watchLines", "tile.readLines", "notifications.play", "notifications.recentSounds"].map((what) => [
       what, (from: Connection, at: unknown) => { ran.push({ what, by: from.actor, args: [at] }); return {}; },
     ])),
     // A view opened for the caller: what it is let do there is what the caller may call.
@@ -402,16 +406,34 @@ test("a tile in no workspace here, closed or never opened, is not found by every
 
 
 test("the machine's own methods are no peer's, the person's own devices included; an agent on this machine keeps them, but joining, serving a folder and playing a sound, for its workspace's tiles", async () => {
-  const machine = [["plugin.call", "p", "c"], ["tools.rescan"], ["tile.focus", "in-1"], ["tile.look", "in-1"], ["notifications.recentSounds"], ["host.join", "hive://x"], ["host.add", "/"], ["notifications.play", "needs"]] as const;
+  const machine = [["plugin.call", "p", "c"], ["tools.rescan"], ["tile.focus", "in-1"], ["tile.look", "in-1"], ["page.note", "in-1", { body: "x", selector: "#x" }], ["notifications.recentSounds"], ["host.join", "hive://x"], ["host.add", "/"], ["notifications.play", "needs"]] as const;
   for (const access of ["agents", "owner"] as const) {
     const peer = connect(access);
     for (const [m, ...args] of machine) expect(await code(peer.client.call(m, ...args))).toBe("FORBIDDEN");
   }
   const agent = connect("agents", undefined, REPO, "in-9");
-  expect(await Promise.all(machine.map(([m, ...args]) => code(agent.client.call(m, ...args))))).toEqual(["ok", "ok", "ok", "ok", "ok", "FORBIDDEN", "FORBIDDEN", "FORBIDDEN"]);
+  expect(await Promise.all(machine.map(([m, ...args]) => code(agent.client.call(m, ...args))))).toEqual(["ok", "ok", "ok", "ok", "ok", "ok", "FORBIDDEN", "FORBIDDEN", "FORBIDDEN"]);
   expect(await code(agent.client.call("tile.focus", "out-1"))).toBe("NOT_FOUND");
   expect(await code(agent.client.call("tile.look", "out-1"))).toBe("NOT_FOUND");
-  expect(ran.map((r) => r.what)).toEqual(["plugin.call", "tools.rescan", "tile.focus", "tile.look", "notifications.recentSounds"]);
+  expect(await code(agent.client.call("page.note", "out-1", { body: "x", selector: "#x" }))).toBe("NOT_FOUND");
+  expect(ran.map((r) => r.what)).toEqual(["plugin.call", "tools.rescan", "tile.focus", "tile.look", "page.note", "notifications.recentSounds"]);
+});
+
+test("a question on a Browser tile is the person's: their own devices answer it, a guest and an agent's tile cannot, and neither a peer nor anyone but an agent here starts a sign-in", async () => {
+  for (const access of ["view", "edit", "agents"] as const) {
+    const guest = connect(access);
+    expect(await code(guest.client.call("browser.asks"))).toBe("FORBIDDEN");
+    expect(await code(guest.client.call("browser.answer", 1, "yes"))).toBe("FORBIDDEN");
+  }
+  const phone = connect("owner");
+  expect(await code(phone.client.call("browser.asks"))).toBe("ok");
+  expect(await code(phone.client.call("browser.answer", 1, "yes"))).toBe("ok");
+  expect(await code(phone.client.call("browser.signIn", "github"))).toBe("FORBIDDEN");
+  expect(await code(phone.client.call("browser.ask", "sign in"))).toBe("FORBIDDEN");
+
+  const agent = connect("owner", undefined, REPO, "in-9");
+  expect(await code(agent.client.call("browser.answer", 1, "yes"))).toBe("FORBIDDEN");
+  expect(await code(agent.client.call("browser.signIn", "github"))).toBe("ok");
 });
 
 test("a peer is answered the statuses and links of its workspace's own agents, never another's", async () => {
