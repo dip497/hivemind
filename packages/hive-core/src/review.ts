@@ -239,6 +239,8 @@ export async function listComments(root: string, filter: CommentFilter = {}): Pr
 export async function writePicture(root: string, id: string, png: Uint8Array): Promise<string> {
   const name = `${id.replace(/[^\w-]/g, "")}.png`;
   await fs.mkdir(path.join(root, PICTURES_DIR), { recursive: true });
+  // A picture can show a signed-in page: `git add -A` must not take it into the project's history.
+  await fs.writeFile(path.join(root, PICTURES_DIR, ".gitignore"), "*\n");
   await fs.writeFile(path.join(root, PICTURES_DIR, name), png);
   return name;
 }

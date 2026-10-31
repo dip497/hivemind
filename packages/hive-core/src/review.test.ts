@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { execFileSync } from "node:child_process";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -14,6 +15,16 @@ const seed = {
 };
 
 describe("review comments", () => {
+  test("a note's picture stays out of the project's git history", async () => {
+    const dir = await root();
+    execFileSync("git", ["init", "-q"], { cwd: dir });
+    const reviews = path.join(dir, ".hivemind");
+    await writePicture(reviews, "c1", new Uint8Array([1, 2, 3]));
+    const untracked = execFileSync("git", ["status", "--porcelain", "--untracked-files=all"], { cwd: dir, encoding: "utf8" });
+    expect(untracked).not.toContain("c1.png");
+    expect(await fs.readFile(path.join(reviews, "pages", "c1.png"))).toHaveLength(3);
+  });
+
   test("a comment round-trips through the file the CLI reads", async () => {
     const r = await root();
     const added = await addComment(r, seed);
