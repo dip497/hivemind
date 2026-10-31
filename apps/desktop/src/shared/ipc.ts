@@ -336,6 +336,14 @@ export interface BrowserAppStatus { on: boolean; url: string | null; others: str
 /** A Browser tile's page asks for something (`permissions`: "camera", "microphone", "geolocation",
  *  "notifications"…) and the tile showing page `pageId` asks the person; or that ask is over
  *  (`done`), answered or not. */
+/** A download from a Browser tile's page, to the Downloads folder: `id` shows it there. */
+export interface PageDownload {
+  pageId: number;
+  id: string;
+  name: string;
+  state: "saving" | "saved" | "failed";
+}
+
 export type BrowserPermissionEvent =
   | { askId: number; pageId: number; site: string; permissions: string[] }
   | { askId: number; done: true };
@@ -923,6 +931,8 @@ export interface HiveIpc {
   browserPickArea(tileId: string, fx: number, fy: number, fw: number, fh: number): Promise<{ area: PageBox; elements: PageElement[] }>;
   /** Outline what is at a point of the page; null: nothing. */
   browserHighlight(tileId: string, point: { fx: number; fy: number } | null): Promise<void>;
+  /** Show a download a tile's page saved (`onBrowserDownload`) in its folder. */
+  browserShowDownload?(id: string): Promise<void>;
   /** Keep a note on the tile's page, with a picture of what it points at, in `repoPath`'s review. */
   browserNote(tileId: string, repoPath: string, note: PageNoteDraft): Promise<ReviewComment>;
   /** Show the page's notes as numbered pins on it. */
@@ -1140,6 +1150,8 @@ export type HiveApi = HiveIpc & {
   /** A BrowserTile guest requested a popup/new window (target=_blank,
    *  window.open) — the owning tile opens it as a new tab. */
   onBrowserPopup: (cb: (p: { fromId: number; url: string }) => void) => () => void;
+  /** A BrowserTile guest's download started or ended: the owning tile says so. */
+  onBrowserDownload: (cb: (d: PageDownload) => void) => () => void;
   /** A BrowserTile guest asks for the camera, the location… (or that ask is over): the owning tile
    *  asks the person. */
   onBrowserPermission: (cb: (e: BrowserPermissionEvent) => void) => () => void;

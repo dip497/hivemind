@@ -2,16 +2,20 @@
  * The port agents drive browser tiles through (the hive-browser skill, `agent-browser --cdp`):
  * Chromium's DevTools port, passed through, with two differences. It shows only the Browser
  * tiles' pages (and the frames inside them), never the app's own windows, which an agent would
- * otherwise land on and drive. And keyboard input for a tile's page is given to that page
- * (page-keys.ts): on Chromium's own port it would go to whatever holds focus in the app window.
+ * otherwise land on and drive. And what a tile's page cannot do through Chromium is done through
+ * Electron: keyboard input, reloading and printing (page-commands.ts), and downloads
+ * (page-downloads.ts).
  */
 import http from "node:http";
 import type { Duplex } from "node:stream";
 import type { WebContents } from "electron";
 import { WebSocket, WebSocketServer } from "ws";
-import { keyboardCommand } from "./page-keys.js";
+import { PAGE_COMMANDS, closeDialogBox, pageCommand } from "./page-commands.js";
+import type { PageDownloads } from "./page-downloads.js";
 
-const KEYBOARD = new Set(["Input.insertText", "Input.dispatchKeyEvent"]);
+const SETS_DOWNLOADS = new Set(["Browser.setDownloadBehavior", "Page.setDownloadBehavior"]);
+/** Whether a message may be a command the relay has its own answer to or view of. */
+const MAY_CONCERN_RELAY = /"(?:Input\.|Target\.|Page\.reload"|Page\.printToPDF"|Page\.handleJavaScriptDialog"|Browser\.setDownloadBehavior"|Page\.setDownloadBehavior")/;
 /** Commands that name a target an agent may only name when it is a tile's page. */
 const NAMING = new Set(["Target.attachToTarget", "Target.activateTarget", "Target.closeTarget"]);
 /** Ids the relay asks Chromium with itself; their answers are its own. */
@@ -37,6 +41,9 @@ export interface BrowserPages {
   near(agentTile: string, targetId: string): boolean;
   /** Open a Browser tile beside the agent of `agentTile`, showing `url`: its page's target. */
   open(agentTile: string, url: string): Promise<string>;
+  /** The DevTools target of `page`, once known. */
+  targetOf(page: WebContents): string | undefined;
+  downloads: PageDownloads;
 }
 
 /** Serve on 127.0.0.1:`port` the DevTools port Chromium listens on at `chromium`. A connection
@@ -94,8 +101,8 @@ export function serveBrowserPort(port: number, chromium: number, pages: BrowserP
   });
 }
 
-/** One agent's connection, passed to Chromium's, but for keyboard input to a tile's page and for
- *  what is not a tile's page, which it neither sees nor reaches. `own`: the page a connection to
+/** One agent's connection, passed to Chromium's, but for commands Electron does for a tile's page
+ *  and for what is not a tile's page, which it neither sees nor reaches. `own`: the page a connection to
  *  one page is to. */
 function relay(client: WebSocket, to: string, own: string | undefined, isPage: IsPage, pages: BrowserPages, agent: string | null): void {
   const pageOf = (id: string) => pages.pageOf(id);
@@ -118,13 +125,17 @@ function relay(client: WebSocket, to: string, own: string | undefined, isPage: I
   const notFound = (m: Message) => answer(m, { error: { code: -32602, message: "No target with given id found" } });
   const end = () => { client.terminate(); upstream.terminate(); };
 
-  const keyboard = async (m: Message): Promise<boolean> => {
+  const downloads = pages.downloads.follow((page) => {
+    const target = pages.targetOf(page);
+    return !!target && (own === target || [...sessions.values()].includes(target));
+  }, toAgent);
+
+  const onPage = async (m: Message): Promise<boolean> => {
     const target = m.sessionId ? sessions.get(m.sessionId) : own;
     const page = target ? await pageOf(target) : null;
     if (!page || page.isDestroyed()) return false;
     try {
-      await keyboardCommand(page, m.method!, m.params ?? {});
-      answer(m, { result: {} });
+      answer(m, { result: await pageCommand(page, m.method!, m.params ?? {}) });
     } catch (e) {
       answer(m, { error: { code: -32000, message: e instanceof Error ? e.message : String(e) } });
     }
@@ -147,11 +158,28 @@ function relay(client: WebSocket, to: string, own: string | undefined, isPage: I
   let fromAgent = Promise.resolve();
   client.on("message", (data) => {
     const text = data.toString();
+    downloads.heardFrom();
     fromAgent = fromAgent.then(async () => {
-      if (text.includes('"Input.') || text.includes('"Target.')) {
+      if (MAY_CONCERN_RELAY.test(text)) {
         let m: Message | null = null;
         try { m = JSON.parse(text) as Message; } catch { /* not ours to read */ }
-        if (m?.method && KEYBOARD.has(m.method) && (await keyboard(m))) return;
+        if (m?.method && PAGE_COMMANDS.has(m.method) && (await onPage(m))) return;
+        // Chromium would reload the window around a page: never pass it on.
+        if (m?.method === "Page.reload") { notFound(m); return; }
+        if (m?.method === "Page.handleJavaScriptDialog") {
+          const target = m.sessionId ? sessions.get(m.sessionId) : own;
+          const page = target ? await pageOf(target) : null;
+          if (page && !page.isDestroyed()) closeDialogBox(page);
+        }
+        if (m?.method && SETS_DOWNLOADS.has(m.method)) {
+          try {
+            downloads.ask(m.params ?? {});
+            answer(m, { result: {} });
+          } catch (e) {
+            answer(m, { error: { code: -32602, message: e instanceof Error ? e.message : String(e) } });
+          }
+          return;
+        }
         if (m?.method === "Target.createTarget") {
           // A new tab is a Browser tile beside the agent asking, which the person sees.
           if (!agent) { answer(m, { error: { code: -32000, message: "Hivemind shows pages in Browser tiles: ask the person to open one" } }); return; }
@@ -177,6 +205,8 @@ function relay(client: WebSocket, to: string, own: string | undefined, isPage: I
   let fromChromium = Promise.resolve();
   upstream.on("message", (data) => {
     const text = data.toString();
+    // Chromium names a download by an id Electron does not give: page-downloads.ts tells the agent.
+    if (text.startsWith('{"method":"Page.download')) return;
     fromChromium = fromChromium.then(async () => {
       const mentionsHidden = hidden.size > 0 && [...hidden].some((s) => text.includes(s));
       if (!mentionsHidden && !text.includes('"Target.') && !listing.size && !attaching.size && !ownPending) return toAgent(text);
@@ -210,6 +240,7 @@ function relay(client: WebSocket, to: string, own: string | undefined, isPage: I
       toAgent(text);
     });
   });
+  client.on("close", downloads.stop);
   client.on("close", end);
   client.on("error", end);
   upstream.on("close", end);

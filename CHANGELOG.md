@@ -9,6 +9,12 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Added: a download in a Browser tile goes to your Downloads folder, under a name nothing there has, and the tile says what it saved, with **Show in folder**. It used to ask with a Save dialog.
+- Fixed: a link that opens in a new tab, and `window.open`, open as a new tab in the Browser tile. They did nothing before. A page opens at most 5 in 30 seconds, and only web pages.
+- Fixed: an agent reloading a Browser tile's page (`agent-browser reload`, `vitals`) reloads that page. It reloaded the whole Hivemind window and closed the tiles' pages.
+- Added: `agent-browser download` saves where the agent asked, and `agent-browser pdf` prints a Browser tile's page. An agent also sees every tab of a Browser tile, not only the one in front.
+- Fixed: when an agent answers a page's `confirm` or `alert` (`agent-browser dialog accept`), the box you saw for it goes away.
+
 - **Breaking:** a `.hivemind` that is a link is no longer used as a workspace, and `hive init` refuses it. A project you clone could otherwise redirect what Hivemind writes. Replace the link with a folder. Files inside `.hivemind` are written so that a committed link is replaced, never written through.
 - Added: agents drive the Browser tiles with agent-browser with no setup. Every terminal points it at the tiles, in a session of its own that starts on the tile in its frame. `agent-browser tab new <url>` opens a Browser tile beside the agent. **Settings ▸ Plugins ▸ Browser** shows which agent-browser is installed, installs or updates it, and has **Use these Browser tiles** and **Mark what pages say** (`hive config set agentBrowser.useTiles|markPageText`). The hive-browser skill uses all of it, and the official agent-browser guide for the installed version.
 - Changed: the agents' browser port shows only Browser tiles. An agent can no longer land on, or drive, the Hivemind window itself.

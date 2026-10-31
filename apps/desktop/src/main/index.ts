@@ -80,7 +80,6 @@ import type { ReadScreen } from "@hivemind/agent-host/session-relay";
 import { ipcPath, upgradeCommand, windowsStartMenuShortcut } from "./platform.js";
 import { notesFor, whatsNewSinceLastRun } from "./whats-new.js";
 import { runningRelease, windowsAppFolder } from "../shared/running-release.js";
-import { keyboardCommand } from "./page-keys.js";
 import { around, elementAt, elementsIn, highlightAt, holdStill, pictureOf, showPins } from "./page-notes.js";
 import { addComment, reviewRoot, writePicture } from "@hivemind/core/review";
 import type { PageNoteDraft, PagePin } from "../shared/ipc.js";
@@ -131,6 +130,9 @@ import type { TerminalOpts } from "@hivemind/workspace-api/terminals";
 import { serveWorkspaceApi } from "./workspace-ipc.js";
 import { installBrowserApp } from "./browser-app.js";
 import { installPermissions } from "./permissions.js";
+import { PAGE_COMMANDS, closeDialogBox, pageCommand } from "./page-commands.js";
+import { PageDownloads } from "./page-downloads.js";
+import { popupGate } from "./page-popups.js";
 import { serveScheme } from "./schemes.js";
 import { fileIn } from "@hivemind/host/repo-paths";
 
@@ -394,7 +396,7 @@ async function createWindow(target: string | null = cliLaunchTarget): Promise<vo
   // Harden every BrowserTile <webview> guest as it attaches. The guest is a
   // full Chromium renderer loading arbitrary web pages, so: (1) strip any
   // preload/nodeIntegration a page tries to negotiate, and (2) route window.open
-  // / target=_blank to the OS browser instead of spawning rogue child windows on
+  // / target=_blank to a new tab of the tile instead of spawning rogue child windows on
   // the canvas. The page still renders + is fully agent-drivable over CDP.
   wc.on("will-attach-webview", (_e, webPreferences) => {
     // Defense in depth: never let an embedded page run with node access or a
@@ -409,14 +411,16 @@ async function createWindow(target: string | null = cliLaunchTarget): Promise<vo
     browserPages.set(wc, pages);
     const pageId = guest.id;
     pages.add(pageId);
-    guest.once("destroyed", () => { pages.delete(pageId); forgetBrowserPage(pageId); });
+    allBrowserPages.add(pageId);
+    guest.once("destroyed", () => { pages.delete(pageId); allBrowserPages.delete(pageId); forgetBrowserPage(pageId); });
     // The tile zooms its page to the canvas zoom: that must not carry to other pages of the same site.
     guest.setZoomMode("isolated");
+    const opensAsTab = popupGate();
     guest.setWindowOpenHandler(({ url }) => {
       // A link/popup (target=_blank, window.open) inside a BrowserTile guest →
       // hand it back to the host renderer so the owning tile opens it as a NEW
       // TAB (canvas-native tabs), instead of spawning a rogue OS window.
-      if (!wc.isDestroyed()) wc.send("browser:popup", { fromId: guest.id, url });
+      if (!wc.isDestroyed() && opensAsTab(url)) wc.send("browser:popup", { fromId: guest.id, url });
       return { action: "deny" };
     });
   });
@@ -514,6 +518,8 @@ interface BrowserGuest { webContentsId: number; frameId: string | null; url: str
 const browserGuests = new Map<string, BrowserGuest>();
 /** Each app window's browser pages (its <webview> guests), by id, as they attach. */
 const browserPages = new WeakMap<WebContents, Set<number>>();
+/** Every window's browser pages, each tab of a tile: what agents may see. */
+const allBrowserPages = new Set<number>();
 
 // Discovery file the `hive-browser` skill reads so a spawned agent can find the
 // right tab to drive: which BrowserTile lives in which frame, its current URL
@@ -576,14 +582,18 @@ async function targetOf(page: WebContents): Promise<string | null> {
     if (!attached && page.debugger.isAttached()) page.debugger.detach();
   }
 }
-/** The browser tile page that is DevTools target `targetId`, if one is. */
+/** The browser tile page, a tab shown or not, that is DevTools target `targetId`, if one is. */
 async function browserPageOf(targetId: string): Promise<WebContents | null> {
-  for (const tileId of browserGuests.keys()) {
-    const page = browserGuestFor(tileId);
-    if (page && (await targetOf(page)) === targetId) return page;
+  for (const pageId of allBrowserPages) {
+    const page = webContents.fromId(pageId);
+    if (page && !page.isDestroyed() && (await targetOf(page)) === targetId) return page;
   }
   return null;
 }
+const pageDownloads = new PageDownloads(() => app.getPath("downloads"), (page) => pageTargets.get(page), (page, download) => {
+  const window = page.hostWebContents;
+  if (window && !window.isDestroyed()) window.send("browser:download", download);
+});
 /** The agents' DevTools port (browser-port.ts), in front of Chromium's own, which listens wherever
  *  it finds room and says where in DevToolsActivePort. */
 async function serveAgentBrowserPort(): Promise<void> {
@@ -594,7 +604,7 @@ async function serveAgentBrowserPort(): Promise<void> {
     if (!chromium) await new Promise((r) => setTimeout(r, 100));
   }
   if (!chromium) throw new Error("Chromium's DevTools port did not open");
-  await serveBrowserPort(Number(process.env.HIVEMIND_BROWSER_CDP_PORT), chromium, { pageOf: browserPageOf, near: inFrameOf, open: openPageFor });
+  await serveBrowserPort(Number(process.env.HIVEMIND_BROWSER_CDP_PORT), chromium, { pageOf: browserPageOf, near: inFrameOf, open: openPageFor, targetOf: (page) => pageTargets.get(page), downloads: pageDownloads });
   agentBrowserPort = true;
 }
 /** Whether the agents' port is serving: what `agent-browser` in a terminal is pointed at. */
@@ -710,6 +720,10 @@ handle("browserNote", async (_e, tileId: unknown, repoPath: unknown, note: unkno
     },
   });
 });
+handle("browserShowDownload", (_e, id: unknown) => {
+  const saved = typeof id === "string" ? pageDownloads.pathOf(id) : undefined;
+  if (saved) shell.showItemInFolder(saved);
+}, { local: true });
 handle("browserPins", (_e, tileId: unknown, pins: unknown) => {
   if (!Array.isArray(pins) || pins.length > 500) throw new Error("pins must be a list");
   return showPins(pageOfTile(tileId), pins as PagePin[]);
@@ -736,7 +750,8 @@ handleEffect(
         throw err;
       }
     }
-    if (await keyboardCommand(guest, method, params ?? {})) return {};
+    if (PAGE_COMMANDS.has(method)) return await pageCommand(guest, method, params ?? {});
+    if (method === "Page.handleJavaScriptDialog") closeDialogBox(guest);
     return await guest.debugger.sendCommand(method, params ?? {});
   }), { local: true },
 );
@@ -1826,6 +1841,7 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
   app.whenReady().then(async () => {
     // Before any window or Browser tile page loads, so none is ever granted without them.
     installPermissions(appPageUrl());
+    pageDownloads.watch(session.fromPartition("persist:browser"));
     await migrateOnStart();
     // A daemon of another protocol is replaced before anything connects to it: each connection
     // waits for this, the window does not.

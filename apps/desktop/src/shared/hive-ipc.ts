@@ -88,6 +88,7 @@ export function hiveOverIpc(port: IpcPort, workspace: WorkspaceClient): Omit<Hiv
     browserPick: (tileId, fx, fy) => port.invoke("browserPick", tileId, fx, fy),
     browserPickArea: (tileId, fx, fy, fw, fh) => port.invoke("browserPickArea", tileId, fx, fy, fw, fh),
     browserHighlight: (tileId, point) => port.invoke("browserHighlight", tileId, point),
+    browserShowDownload: local("browserShowDownload", invoke("browserShowDownload")),
     browserNote: (tileId, repoPath, note) => port.invoke("browserNote", tileId, repoPath, note),
     browserPins: (tileId, pins) => port.invoke("browserPins", tileId, pins),
     browserHoldStill: (tileId, still) => port.invoke("browserHoldStill", tileId, still),
@@ -206,6 +207,7 @@ export function hiveOverIpc(port: IpcPort, workspace: WorkspaceClient): Omit<Hiv
     runUpgrade: local("runUpgrade", invoke("runUpgrade")),
     onUpdateProgress: (cb) => port.on("update:progress", cb),
     onBrowserPopup: (cb) => port.on("browser:popup", cb),
+    onBrowserDownload: (cb) => port.on("browser:download", cb),
     onBrowserPermission: (cb) => port.on("browser:permission", cb),
 
     // Main takes the app's keys before the page (a terminal would otherwise have them) and sends

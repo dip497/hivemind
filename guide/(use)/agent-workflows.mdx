@@ -106,7 +106,11 @@ The command waits until every worker has replied. `--close` closes their tiles a
   - **Each terminal already points at the tiles.** Every terminal gets its own session, which
     starts on the Browser tile in its frame.
   - **A new tab is a tile.** `agent-browser tab new <url>` opens a Browser tile beside the agent.
-  - **Agents see only Browser tiles,** never the Hivemind window itself.
+  - **Agents see only Browser tiles,** never the Hivemind window itself. They see every tab of a
+    tile, and a link that opens a new tab opens one there.
+  - **Pages work as in a browser.** `agent-browser download`, `pdf`, `reload` and `vitals` work on
+    a tile's page. `agent-browser dialog accept` answers a page's `confirm` and closes the box you
+    see for it. A page's `prompt()` always fails: Electron does not have it.
   - **Settings on the same page:** install or update agent-browser, turn **Use these Browser
     tiles** off so it starts a Chrome of its own, or turn **Mark what pages say** off. The same
     settings are `hive config set agentBrowser.useTiles false` and
