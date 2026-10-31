@@ -15,14 +15,14 @@ const agent: Connection = { actor: { kind: "peer", person: "t7", device: "t7", a
 
 /** The control plane, answering each piece of work with `answers[name]`: what it was asked, and
  *  what the API recorded. */
-function plane(answers: Partial<Record<keyof ControlWork, unknown>> = {}, keep?: ControlApiOptions["keep"]) {
+function plane(answers: Partial<Record<keyof ControlWork, unknown>> = {}, keep?: ControlApiOptions["keep"], pageNote?: ControlApiOptions["pageNote"]) {
   const asked: Array<[string, ...unknown[]]> = [];
   const work = new Proxy({} as ControlWork, {
     // Not a promise: awaited, it is the work itself.
     get: (_t, name: string) => (name === "then" ? undefined : (...args: unknown[]) => { asked.push([name, ...args]); return answers[name as keyof ControlWork]; }),
   });
   const recorded: Array<{ verb: string; target?: string; actor: Connection["actor"] }> = [];
-  const server = new WorkspaceServer([controlApi({ control: async () => work, ...(keep ? { keep } : {}) })], {
+  const server = new WorkspaceServer([controlApi({ control: async () => work, ...(keep ? { keep } : {}), ...(pageNote ? { pageNote } : {}) })], {
     perform: async (actor, intent: Intent<unknown>, run) => {
       const r = await run();
       recorded.push({ verb: intent.verb, ...(intent.target !== undefined ? { target: typeof intent.target === "function" ? intent.target(r) : intent.target } : {}), actor });
@@ -92,6 +92,29 @@ test("what changes something is recorded under the API's name, as the caller's, 
     { verb: "plugin.call", target: "acme/board:refresh", actor: person.actor },
     { verb: "settings.reload", actor: person.actor },
   ]);
+});
+
+test("a note on a page is asked as the agent or the person who asks; a malformed one asks nothing; with no window to show a page it is refused as unsupported", async () => {
+  const asked: unknown[][] = [];
+  const answer = { note: { id: "c1" }, kept: "/work/api/.hivemind" } as never;
+  const c = plane({}, undefined, async (...args) => { asked.push(args); return answer; });
+  const area = { x: 1, y: 2, width: 3, height: 4 };
+  assert.deepEqual(await c.call(agent, "page.note", "t7", { body: " broken ", intent: "fix", selector: "#go" }), { result: answer });
+  await c.call(person, "page.note", "b1", { body: "cut off", area });
+  assert.deepEqual(asked, [["t7", { body: "broken", intent: "fix", selector: "#go" }, "t7"], ["b1", { body: "cut off", area }, undefined]]);
+  assert.deepEqual(c.recorded.map((r) => [r.verb, r.target]), [["page.note", "t7"], ["page.note", "b1"]]);
+
+  asked.length = 0;
+  for (const note of [
+    null, {}, { body: "x" }, { body: " ", selector: "#go" }, { body: 7, selector: "#go" }, { body: "x", selector: "" }, { body: "x", selector: "#go", area }, { body: "x".repeat(10_001), selector: "#go" },
+    { body: "x", selector: "#go", intent: "shout" }, { body: "x", area: { ...area, width: 0 } }, { body: "x", area: { ...area, x: "1" } }, { body: "x", area: {} },
+  ]) {
+    assert.equal((await c.call(agent, "page.note", "t7", note)).error?.code, "BAD_REQUEST", JSON.stringify(note));
+  }
+  assert.equal((await c.call(agent, "page.note", "", { body: "x", selector: "#go" })).error?.code, "BAD_REQUEST");
+  assert.deepEqual(asked, []);
+
+  assert.equal((await plane().call(agent, "page.note", "t7", { body: "x", selector: "#go" })).error?.code, "UNSUPPORTED");
 });
 
 test("a malformed call is a bad request, and the control plane is asked nothing", async () => {

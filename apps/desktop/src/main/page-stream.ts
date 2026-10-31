@@ -37,6 +37,8 @@ const drawn = (win: BrowserWindow | null) => !!win && !win.isDestroyed() && win.
 
 export class PageStreams {
   private readonly watches = new Map<string, Watch>();
+  /** How many pieces of work need each tile's page drawn now. */
+  private readonly drawing = new Map<string, number>();
 
   /** `pageOf` is the page a tile shows now (its active tab), or null. */
   constructor(private readonly pageOf: (tileId: string) => WebContents | null) {}
@@ -56,6 +58,25 @@ export class PageStreams {
     if (w.latest) this.offer(tileId, w, viewer);
     else w.nudge();
     return { shown: drawn(windowOf(w.guest)) };
+  }
+
+  /** Do `work` with the tile's page drawn, even scrolled out of its window's view: a page not drawn
+   *  gives no picture. Told as a watch is, and left to a watch that is still on. */
+  async whileDrawn<T>(tileId: string, guest: WebContents, work: () => Promise<T>): Promise<T> {
+    const told = (on: boolean) => { if (!guest.isDestroyed()) guest.hostWebContents?.send(WATCHED_EVENT, tileId, on); };
+    const others = this.drawing.get(tileId) ?? 0;
+    this.drawing.set(tileId, others + 1);
+    if (!others && !this.watches.has(tileId)) told(true);
+    try {
+      return await work();
+    } finally {
+      const left = this.drawing.get(tileId)! - 1;
+      if (left) this.drawing.set(tileId, left);
+      else {
+        this.drawing.delete(tileId);
+        if (!this.watches.has(tileId)) told(false);
+      }
+    }
   }
 
   /** The tiles someone is watching. */

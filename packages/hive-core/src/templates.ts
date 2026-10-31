@@ -119,7 +119,8 @@ resolves automatically.
 - \`hive ctl add-comment <id> "…"\` · \`hive ctl mark-acceptance <id> <index>\` (0-based; \`--undone\` reopens)
 - \`hive update <id> --title … --assignee claude --assignee-type agent\` · \`hive new "Title" --parent <id>\`
 - \`hive ctl delete-issue <id>\` — destructive; only on an explicit ask.
-- \`hive ctl notes list --json\` · \`hive ctl notes show <id>\` — notes the person left on a page in a Browser tile; answer with \`hive ctl notes seen|done --summary …|dismiss --reason …|reply <id> "…"\`. Comments on a diff: \`hive review list|show|resolve\`.
+- \`hive ctl notes list --json\` · \`hive ctl notes show <id>\` — notes the person left on a page in a Browser tile; answer with \`hive ctl notes seen|done --summary …|dismiss --reason …|reply <id> "…"\`. Prove it with \`--attach <file>\` on \`done\` (a video or image). Comments on a diff: \`hive review list|show|resolve\`.
+- \`hive ctl notes add --selector "<css>" --body "…" [--intent fix|change|question] [--attach <file>] --json\` — you found a problem on a page in a Browser tile: leave a note the person sees as a pin on it (\`--area x,y,w,h\` for what no selector names; \`--tile\` for a Browser tile outside your frame).
 
 ### Execution contract (REQUIRED)
 

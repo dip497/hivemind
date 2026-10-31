@@ -6,7 +6,9 @@
  * width and height, as a viewer anywhere sends it (page-stream.ts).
  */
 import type { WebContents } from "electron";
-import type { PageBox, PageElement, ReviewStatus } from "@hivemind/core/review";
+import { ApiError } from "@hivemind/workspace-api/protocol";
+import { addComment, reviewRoot, writePicture, type PageBox, type PageComment, type PageElement, type ReviewStatus } from "@hivemind/core/review";
+import type { PageNoteDraft } from "../shared/ipc.js";
 
 type Send = (method: string, params?: Record<string, unknown>) => Promise<unknown>;
 
@@ -132,18 +134,46 @@ export async function elementAt(page: WebContents, fx: number, fy: number): Prom
   return result.objectId ? describe(send, result.objectId) : null;
 }
 
-/** An area of the page's view, given as fractions, in page coordinates, and the elements in it. */
-export async function elementsIn(page: WebContents, fx: number, fy: number, fw: number, fh: number): Promise<{ area: PageBox; elements: PageElement[] }> {
+/** The one element a selector finds on the page, named as a click on it would name it. A selector
+ *  that finds none the page draws, or several, is refused. */
+export async function elementFor(page: WebContents, selector: string): Promise<PageElement> {
   const send = session(page);
-  const v = await viewport(send);
-  const [x, y, w, h] = [fx * v.width, fy * v.height, fw * v.width, fh * v.height];
+  const { result, exceptionDetails } = (await send("Runtime.evaluate", {
+    expression: `(() => { const found = document.querySelectorAll(${JSON.stringify(selector)}); return found.length === 1 ? found[0] : found.length; })()`,
+  })) as { result: { objectId?: string; value?: number }; exceptionDetails?: unknown };
+  if (exceptionDetails) throw new ApiError("BAD_REQUEST", `${selector} is not a CSS selector`);
+  if (!result.objectId) {
+    throw new ApiError(result.value ? "SEVERAL_ELEMENTS" : "NO_ELEMENT", `${selector} matches ${result.value ?? 0} elements on the page, not one`);
+  }
+  const element = await describe(send, result.objectId);
+  if (!element.box.width || !element.box.height) throw new ApiError("NO_ELEMENT", `${selector} matches an element the page does not draw`);
+  return element;
+}
+
+/** The elements inside a part of the page's view, in its own pixels. */
+async function elementsInView(send: Send, x: number, y: number, w: number, h: number): Promise<PageElement[]> {
   const { result } = (await send("Runtime.evaluate", { expression: `(${INSIDE})(${x}, ${y}, ${w}, ${h})` })) as { result: { objectId?: string } };
   const elements: PageElement[] = [];
   if (result.objectId) {
     const { result: props } = (await send("Runtime.getProperties", { objectId: result.objectId, ownProperties: true })) as { result: { name: string; value?: { objectId?: string } }[] };
     for (const p of props) if (/^\d+$/.test(p.name) && p.value?.objectId) elements.push(await describe(send, p.value.objectId));
   }
-  return { area: { x: Math.round(x + v.x), y: Math.round(y + v.y), width: Math.round(w), height: Math.round(h) }, elements };
+  return elements;
+}
+
+/** An area of the page's view, given as fractions, in page coordinates, and the elements in it. */
+export async function elementsIn(page: WebContents, fx: number, fy: number, fw: number, fh: number): Promise<{ area: PageBox; elements: PageElement[] }> {
+  const send = session(page);
+  const v = await viewport(send);
+  const [x, y, w, h] = [fx * v.width, fy * v.height, fw * v.width, fh * v.height];
+  return { area: { x: Math.round(x + v.x), y: Math.round(y + v.y), width: Math.round(w), height: Math.round(h) }, elements: await elementsInView(send, x, y, w, h) };
+}
+
+/** The elements inside an area given in page coordinates. */
+export async function elementsInArea(page: WebContents, area: PageBox): Promise<PageElement[]> {
+  const send = session(page);
+  const v = await viewport(send);
+  return elementsInView(send, area.x - v.x, area.y - v.y, area.width, area.height);
 }
 
 /** Outline what is at a point, as the inspector does; no point: none. */
@@ -176,8 +206,32 @@ export function around(boxes: readonly PageBox[]): PageBox {
   return { x, y, width: Math.max(...boxes.map((b) => b.x + b.width)) - x, height: Math.max(...boxes.map((b) => b.y + b.height)) - y };
 }
 
+/** How long a note waits for its picture: a page out of view may never draw one. */
+const PICTURE_WITHIN_MS = 10_000;
+
+/** Keep a note on `page` in `repoPath`'s review, with a picture of what it points at. */
+export async function keepNote(page: WebContents, repoPath: string, note: PageNoteDraft, author: string): Promise<PageComment> {
+  const boxes = note.area ? [note.area] : note.elements.map((el) => el.box);
+  if (!boxes.length) throw new Error("a note points at an element or an area");
+  const root = await reviewRoot(repoPath);
+  const id = `c-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+  let gaveUp = false;
+  const taken = pictureOf(page, around(boxes)).then((png) => (gaveUp ? null : writePicture(root, id, png)));
+  const late = new Promise<null>((done) => { setTimeout(() => { gaveUp = true; done(null); }, PICTURE_WITHIN_MS); });
+  const picture = await Promise.race([taken, late]).catch(() => null);
+  const v = await viewport(session(page));
+  return await addComment(root, {
+    id, body: note.body, author, ...(note.intent ? { intent: note.intent } : {}),
+    page: {
+      url: page.getURL(), title: page.getTitle(),
+      viewport: { width: v.width, height: v.height },
+      elements: note.elements, ...(note.area ? { area: note.area } : {}), ...(picture ? { picture } : {}),
+    },
+  }) as PageComment;
+}
+
 /** A note's numbered pin on the page. */
-export interface PagePin { n: number; status: ReviewStatus; selector?: string; box: PageBox }
+export interface PagePin { n: number; status: ReviewStatus; selector?: string; box: PageBox; byAgent?: boolean }
 
 /** Run in the page: one layer of its own, holding the pins, placed on the element each points at
  *  while it is there (else where it was), and kept in place as the page lays out again. */
@@ -191,7 +245,8 @@ const PINS = `function (pins) {
     const sheet = new CSSStyleSheet();
     sheet.replaceSync(":host{position:absolute;left:0;top:0;width:0;height:0;z-index:2147483647;pointer-events:none}" +
       ".pin{position:absolute;min-width:22px;height:22px;padding:0 6px;border-radius:11px;box-sizing:border-box;font:600 12px/22px system-ui,sans-serif;text-align:center;color:#fff;box-shadow:0 1px 4px rgba(0,0,0,.35);transform:translate(-50%,-50%)}" +
-      ".open{background:#2563eb}.seen{background:#d97706}.resolved{background:#16a34a}.dismissed{background:#6b7280}");
+      ".open{background:#2563eb}.seen{background:#d97706}.resolved{background:#16a34a}.dismissed{background:#6b7280}" +
+      ".agent{border-radius:3px;outline:2px solid #fff;outline-offset:-1px}.agent::before{content:'\\u2726\\u00a0';font-size:10px}");
     root.adoptedStyleSheets = [sheet];
     document.documentElement.appendChild(host);
     new ResizeObserver(() => host.place && host.place()).observe(document.documentElement);
@@ -199,7 +254,7 @@ const PINS = `function (pins) {
   const root = host.shadowRoot;
   root.replaceChildren(...pins.map((p) => {
     const d = document.createElement("div");
-    d.className = "pin " + p.status;
+    d.className = "pin " + p.status + (p.byAgent ? " agent" : "");
     d.textContent = p.status === "resolved" ? "\\u2713" : String(p.n);
     d.dataset.n = String(p.n);
     return d;

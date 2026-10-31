@@ -112,9 +112,10 @@ export class AgentScreen {
       reopen.addEventListener("click", () => act("reopen"));
       const closed = n.status === "resolved" || n.status === "dismissed";
       return h("li", { "data-note": n.id, "data-status": n.status },
-        h("p", { class: "note-what" }, n.what, h("span", { class: "quiet" }, ` · ${n.status === "resolved" ? "done" : n.status}`)),
+        h("p", { class: "note-what" }, n.what, h("span", { class: "quiet" }, ` · ${n.status === "resolved" ? "done" : n.status}${n.agent ? ` · by ${n.agent}` : ""}`)),
         h("p", {}, n.body),
         ...(n.summary ? [h("p", { class: "quiet" }, `↳ ${n.summary}`)] : []),
+        ...(n.attachments?.length ? [h("p", { class: "quiet", "data-note-attachments": "" }, `${n.attachments.length} attached on the computer: ${n.attachments.join(", ")}`)] : []),
         h("div", { class: "note-actions" }, ...(closed ? [reopen] : [done, dismiss, why])));
     });
     this.notes.replaceChildren(

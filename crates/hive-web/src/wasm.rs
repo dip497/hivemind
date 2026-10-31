@@ -544,7 +544,7 @@ impl Host {
         }
     }
 
-    /// The notes on pages kept in `repo` of `workspace`: `[{id, body, status, what, url, summary?}]`.
+    /// The notes on pages kept in `repo` of `workspace`: `[{id, body, status, what, url, summary?, agent?, attachments?}]`.
     pub async fn notes(&self, workspace: String, repo: String) -> Result<JsValue, JsError> {
         let notes = notes::notes(&self.connection, &workspace, &repo)
             .await

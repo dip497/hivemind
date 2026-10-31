@@ -29,7 +29,7 @@ export interface PageNoteDraft {
 }
 
 /** A note's numbered pin on its page. */
-export interface PagePin { n: number; status: ReviewStatus; selector?: string; box: PageBox }
+export interface PagePin { n: number; status: ReviewStatus; selector?: string; box: PageBox; byAgent?: boolean }
 
 export interface PairedDeviceSummary {
   device: string;
@@ -904,7 +904,7 @@ export interface HiveIpc {
   /** A BrowserTile reports its guest <webview>'s webContents id (plus its frame
    *  and current URL) so the main process can attach the debugger AND write the
    *  discovery file the `hive-browser` skill reads. Called on dom-ready + on nav. */
-  browserRegister?(tileId: string, webContentsId: number, frameId: string | null, url: string): void;
+  browserRegister?(tileId: string, webContentsId: number, frameId: string | null, url: string, repoPath: string): void;
   /** Send a raw Chrome DevTools Protocol command to the tile's guest page
    *  (auto-attaches on first use). Navigate / click / read DOM / screenshot /
    *  evaluate — the surface an agent uses to "use" the browser. */

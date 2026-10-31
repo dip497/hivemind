@@ -81,8 +81,10 @@ import { ipcPath, upgradeCommand, windowsStartMenuShortcut } from "./platform.js
 import { notesFor, whatsNewSinceLastRun } from "./whats-new.js";
 import { runningRelease, windowsAppFolder } from "../shared/running-release.js";
 import { keyboardCommand } from "./page-keys.js";
-import { around, elementAt, elementsIn, highlightAt, holdStill, pictureOf, showPins } from "./page-notes.js";
-import { addComment, reviewRoot, writePicture } from "@hivemind/core/review";
+import { elementAt, elementFor, elementsIn, elementsInArea, highlightAt, holdStill, keepNote, showPins } from "./page-notes.js";
+import { PERSON_AUTHOR, REVIEW_FILE, pageFilePath, reviewRoot } from "@hivemind/core/review";
+import type { PageNoteAsked, Result } from "@hivemind/workspace-api/methods";
+import { PAGE_FILE_HOST, pageFileNamed } from "../shared/page-file-url.js";
 import type { PageNoteDraft, PagePin } from "../shared/ipc.js";
 import { serveBrowserPort } from "./browser-port.js";
 import { driveSockPath, readOrCreateToken } from "@hivemind/agent-host/hooks/token";
@@ -118,7 +120,7 @@ import { askDrive, serveDrive } from "@hivemind/host/drive";
 import { frameWorktrees, framesDomain } from "@hivemind/host/frames";
 import { worktreeCreate, worktreeList, worktreeRemove } from "@hivemind/host/git-adapter";
 import { answers } from "@hivemind/host/answers";
-import { answerKeys, heldBoards, manifestOf, runsIn, sessionFolder } from "@hivemind/host/needs";
+import { answerKeys, heldBoards, manifestOf, runsIn, sessionFolder, tileOn } from "@hivemind/host/needs";
 import { workspaceSummaries } from "@hivemind/host/home";
 import { agentControl } from "@hivemind/host/agent-control";
 import { StartPlaces } from "@hivemind/host/start-places";
@@ -510,7 +512,7 @@ handle("resolveProject", wrap(async (e, rootHint?: string) => {
 // use <webview> over <iframe>: the guest owns a real webContents, so
 // webContents.debugger hands us full CDP for free, on the same pixels the user
 // sees. The guest auto-attaches on the first command and stays attached.
-interface BrowserGuest { webContentsId: number; frameId: string | null; url: string }
+interface BrowserGuest { webContentsId: number; frameId: string | null; url: string; repoPath: string | null }
 const browserGuests = new Map<string, BrowserGuest>();
 /** Each app window's browser pages (its <webview> guests), by id, as they attach. */
 const browserPages = new WeakMap<WebContents, Set<number>>();
@@ -542,9 +544,9 @@ async function writeBrowserTargets(): Promise<void> {
 
 // A browser tile names the page it shows: one of its own window's browser pages, never another
 // window's nor a window itself, which the debugger below would then drive.
-on("browser:register", (e, tileId: unknown, webContentsId: unknown, frameId: unknown, url: unknown) => {
+on("browser:register", (e, tileId: unknown, webContentsId: unknown, frameId: unknown, url: unknown, repoPath: unknown) => {
   if (typeof tileId !== "string" || typeof webContentsId !== "number" || !browserPages.get(e.sender)?.has(webContentsId)) return;
-  browserGuests.set(tileId, { webContentsId, frameId: typeof frameId === "string" ? frameId : null, url: typeof url === "string" ? url : "" });
+  browserGuests.set(tileId, { webContentsId, frameId: typeof frameId === "string" ? frameId : null, url: typeof url === "string" ? url : "", repoPath: typeof repoPath === "string" ? repoPath : null });
   // Its DevTools target, which the hive-browser skill binds an agent-browser session to.
   const page = browserGuestFor(tileId);
   void (page ? targetOf(page) : Promise.resolve(null)).then(() => writeBrowserTargets());
@@ -694,22 +696,47 @@ handle("browserNote", async (_e, tileId: unknown, repoPath: unknown, note: unkno
   const n = (note ?? {}) as Partial<PageNoteDraft>;
   if (typeof repoPath !== "string" || !repoPath) throw new Error("a note needs the workspace it belongs to");
   if (typeof n.body !== "string" || !n.body.trim()) throw new Error("a note needs words");
-  const elements = Array.isArray(n.elements) ? n.elements : [];
-  const boxes = n.area ? [n.area] : elements.map((el) => el.box);
-  if (!boxes.length) throw new Error("a note points at an element or an area");
-  const root = await reviewRoot(repoPath);
-  const id = `c-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
-  const picture = await writePicture(root, id, await pictureOf(page, around(boxes))).catch(() => null);
-  const metrics = (await page.debugger.sendCommand("Page.getLayoutMetrics")) as { cssVisualViewport: { clientWidth: number; clientHeight: number } };
-  return addComment(root, {
-    id, body: n.body.trim(), author: "you", ...(n.intent ? { intent: n.intent } : {}),
-    page: {
-      url: page.getURL(), title: page.getTitle(),
-      viewport: { width: metrics.cssVisualViewport.clientWidth, height: metrics.cssVisualViewport.clientHeight },
-      elements, ...(n.area ? { area: n.area } : {}), ...(picture ? { picture } : {}),
-    },
-  });
+  return keepNote(page, repoPath, { body: n.body.trim(), intent: n.intent, elements: Array.isArray(n.elements) ? n.elements : [], area: n.area }, PERSON_AUTHOR);
 });
+/** The Browser tile `named` means: itself, or the one in the frame of the agent it names. */
+function browserTileMeant(named: string): string {
+  const bare = toBareId(named);
+  if (browserGuestFor(bare)) return bare;
+  const frame = frameOfTile(bare);
+  const beside = [...browserGuests.keys()].filter((id) => frame && browserGuests.get(id)?.frameId === frame && browserGuestFor(id));
+  if (beside.length > 1) throw new ApiError("SEVERAL_BROWSER_TILES", `${beside.length} Browser tiles are in the frame of ${bare}: ${beside.join(", ")}`);
+  if (!beside.length) throw new ApiError("NO_BROWSER_TILE", `${bare} is no Browser tile showing a page, and none is in its frame`);
+  return beside[0]!;
+}
+/** A file of a note, for a window to show or play: only from a repo a Browser tile here keeps its
+ *  notes in, and only a file a note could hold there. */
+async function pageFileAnswer(request: Request): Promise<Response> {
+  const { repo, name } = pageFileNamed(request.url);
+  if (![...browserGuests.values()].some((g) => g.repoPath === repo)) return new Response("forbidden", { status: 403 });
+  const file = await pageFilePath(await reviewRoot(repo), name);
+  if (!file) return new Response("not found", { status: 404 });
+  return net.fetch(pathToFileURL(file).toString(), { headers: request.headers });
+}
+/** What a note calls the agent of `bare`: the name its tile was given, else its tile's label. A
+ *  tile someone named "you" is still not the person. */
+function agentNamed(bare: string): string {
+  const on = tileOn(heldBoards(workspaceStore()), bare);
+  const name = (on?.board.core?.tileNames?.[on.record.id] || on?.record.label || "agent").slice(0, 80);
+  return name === PERSON_AUTHOR ? "agent" : name;
+}
+/** A note on a tile's page asked for over the API: by the agent of `caller`, or the person. */
+async function pageNoteAsked(named: string, asked: PageNoteAsked, caller: string | undefined): Promise<Result<"page.note">> {
+  const tile = browserTileMeant(named);
+  const page = pageOfTile(tile);
+  const repo = browserGuests.get(tile)!.repoPath;
+  if (!repo) throw new ApiError("NO_BROWSER_TILE", `${tile} has no workspace to keep notes in`);
+  const elements = asked.selector != null ? [await elementFor(page, asked.selector)] : await elementsInArea(page, asked.area!);
+  const author = caller === undefined ? PERSON_AUTHOR : agentNamed(caller);
+  const note = await pageStreams.whileDrawn(tile, page, () => keepNote(page, repo, { body: asked.body, intent: asked.intent, elements, area: asked.area }, author));
+  // A review with no workspace is kept outside the repo, where its window's watch does not see it.
+  workspaceServer.publish("file.changed", repo, { paths: [path.join(repo, ".hivemind", REVIEW_FILE)] });
+  return { note, kept: await reviewRoot(repo) };
+}
 handle("browserPins", (_e, tileId: unknown, pins: unknown) => {
   if (!Array.isArray(pins) || pins.length > 500) throw new Error("pins must be a list");
   return showPins(pageOfTile(tileId), pins as PagePin[]);
@@ -1616,6 +1643,7 @@ const workspaceServer: WorkspaceServer = new WorkspaceServer([
       if (folder === null) throw new ApiError("NOT_FOUND", `no tile ${bare} is open`);
       return placesHere.keep(folder, images, bare);
     },
+    pageNote: pageNoteAsked,
   }),
   // What an agent here and the person say to each other, from its session file, as it is written
   // (M5, spec/agents.md "Conversation").
@@ -2009,6 +2037,7 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
     const mediaOrigins = new Set(["file://", ...(process.env.ELECTRON_RENDERER_URL ? [new URL(process.env.ELECTRON_RENDERER_URL).origin] : [])]);
     serveScheme("hivemedia", async (request) => {
       try {
+        if (new URL(request.url).host === PAGE_FILE_HOST) return await pageFileAnswer(request);
         // hivemedia://media/<filename> — the filename rides in the PATH (host is
         // the fixed marker "media"). Resolve against mediaDir, then verify it
         // never escaped the dir (path-traversal guard).

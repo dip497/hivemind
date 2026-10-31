@@ -94,10 +94,24 @@ export async function isLink(file: string): Promise<boolean> {
 
 /** Write `file` by renaming a new file over it. A cloned project can commit a link at any name in
  *  `.hivemind`: a rename replaces the link, where writing through it would change what it points at. */
-export async function replaceFile(file: string, data: string | Uint8Array): Promise<void> {
+export function replaceFile(file: string, data: string | Uint8Array): Promise<void> {
+  return replaceThrough(file, (tmp) => fs.writeFile(tmp, data, { flag: "wx" }));
+}
+
+/** `replaceFile` with a copy of `source`, which may be too large to hold in memory. */
+export function replaceFileWithCopy(file: string, source: string): Promise<void> {
+  return replaceThrough(file, (tmp) => fs.copyFile(source, tmp, fs.constants.COPYFILE_EXCL));
+}
+
+async function replaceThrough(file: string, write: (tmp: string) => Promise<void>): Promise<void> {
   const tmp = path.join(path.dirname(file), `.${randomUUID()}.tmp`);
-  await fs.writeFile(tmp, data, { flag: "wx" });
-  await fs.rename(tmp, file).catch(async (e) => { await fs.rm(tmp, { force: true }); throw e; });
+  try {
+    await write(tmp);
+    await fs.rename(tmp, file);
+  } catch (e) {
+    await fs.rm(tmp, { force: true });
+    throw e;
+  }
 }
 
 export class HiveError extends Error {

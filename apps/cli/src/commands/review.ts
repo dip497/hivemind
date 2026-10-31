@@ -6,21 +6,28 @@
  *   hive review list [--file <p>] [--status open|resolved|all] [--on page|diff] [--json]
  *   hive review show <id> [--json]
  *   hive review reply <id> <message> [--json]
- *   hive review resolve <id> [--summary <why>] [--json]
+ *   hive review resolve <id> [--summary <why>] [--attach <file>]... [--json]
  *   hive review seen <id> [--json]
  *   hive review dismiss <id> --reason <why> [--json]
  *   hive review reopen <id> [--json]
  *   hive review watch [--timeout <s>] [--json]     block until a new comment lands
+ *
+ * `hive ctl notes add` alone needs the running app, which holds the page.
  */
 import { execFile } from "node:child_process";
+import path from "node:path";
 import { promisify } from "node:util";
 import { defineCommand } from "citty";
 import {
-  HiveError, dismissComment, findRoot, listComments, markSeen, onPage, pageNoteText, readComments, replyTo, reopenComment,
-  resolveComment, reviewRoot, statusOf, type ReviewComment,
+  ATTACHMENT_KINDS, HiveError, MAX_ATTACHMENT_BYTES, attachToComment, checkAttachment, deleteComment, dismissComment, findRoot, listComments, markSeen, onPage,
+  pageNoteText, readComments, replyTo, reopenComment, resolveComment, reviewRoot, statusOf, type PageBox, type ReviewComment,
 } from "@hivemind/core";
+import type { Result } from "@hivemind/workspace-api/methods";
 import { err, ok } from "../format.js";
 import { detectWho } from "../who.js";
+import { HcpCliError, ownTile } from "../hcp.js";
+import { openDrive } from "../drive.js";
+import { helpFor } from "../exit-codes.js";
 
 const run = promisify(execFile);
 
@@ -36,8 +43,41 @@ async function storeRoot(): Promise<string> {
   return reviewRoot(repo);
 }
 
-const fail = (ctx: { json: boolean }, e: unknown, fallback: string): never =>
-  err(ctx, e instanceof HiveError ? e.code : fallback, e instanceof Error ? e.message : String(e));
+const ATTACH_KINDS = ATTACHMENT_KINDS.map((k) => `.${k}`).join(", ");
+
+/** What to do about a refusal, by its code. */
+const FIX: Record<string, string> = {
+  NOT_FOUND: "name a tile of this workspace: `hive ctl tiles` lists them",
+  NO_BROWSER_TILE: "name a Browser tile with --tile <tile> (`hive ctl tiles`), or open one beside you: hive ctl open-tool @hivemind/web/browser --url <url>",
+  SEVERAL_BROWSER_TILES: "name the one you mean with --tile <tile>",
+  NO_ELEMENT: "check the selector against the page, or point at the place with --area x,y,width,height in page pixels",
+  SEVERAL_ELEMENTS: "make the selector match one element, or point at the place with --area x,y,width,height in page pixels",
+  ATTACHMENT_TYPE: `attach a video or image: ${ATTACH_KINDS}`,
+  ATTACHMENT_TOO_BIG: `attach a shorter or smaller file, at most ${MAX_ATTACHMENT_BYTES / 1024 / 1024} MB`,
+  ATTACHMENT_MISSING: "give the path of a file on this computer",
+  ATTACHMENT_NOT_A_NOTE: "attach files to a note on a page (`hive ctl notes list`)",
+  REVIEW_PICTURES: "remove the link at .hivemind/pages: a note's files go in a real folder",
+  UNAVAILABLE: "start the hivemind app",
+  UNSUPPORTED: "run this with the hivemind app open: a note on a page needs the window that shows it",
+};
+
+const fail = (ctx: { json: boolean }, e: unknown, fallback: string): never => {
+  const code = e instanceof HiveError || e instanceof HcpCliError ? e.code : fallback;
+  const given = e instanceof HcpCliError ? e.exit : undefined;
+  const fix = FIX[code.toUpperCase()] ?? (e instanceof HcpCliError ? e.fix : undefined) ?? (code === "BAD_REQUEST" ? helpFor() : undefined);
+  return err(ctx, code, e instanceof Error ? e.message : String(e), given, fix);
+};
+
+/** Each `--attach`, in full: the parser keeps only the last of a flag given several times. */
+function attachedFiles(rawArgs: readonly string[]): string[] {
+  const given: string[] = [];
+  for (let i = 0; i < rawArgs.length; i++) {
+    const a = rawArgs[i]!;
+    if (a === "--attach") given.push(rawArgs[++i] ?? "");
+    else if (a.startsWith("--attach=")) given.push(a.slice("--attach=".length));
+  }
+  return given.filter(Boolean).map((f) => path.resolve(f));
+}
 
 const idArg = { id: { type: "positional", required: true, description: "comment id (from `hive review list`)" } } as const;
 const jsonArg = { json: { type: "boolean" } } as const;
@@ -117,11 +157,16 @@ const replyCmd = defineCommand({
 
 const resolveCmd = defineCommand({
   meta: { name: "resolve", description: "Mark a review comment resolved" },
-  args: { ...idArg, summary: { type: "string", description: "how it was addressed" }, ...jsonArg },
-  async run({ args }) {
+  args: {
+    ...idArg,
+    summary: { type: "string", description: "how it was addressed" },
+    attach: { type: "string", description: `a file to keep on the note as proof (${ATTACH_KINDS}); repeat for several` },
+    ...jsonArg,
+  },
+  async run({ args, rawArgs }) {
     const ctx = { json: !!args.json };
     try {
-      const c = await resolveComment(await storeRoot(), String(args.id), args.summary || undefined);
+      const c = await resolveComment(await storeRoot(), String(args.id), args.summary || undefined, attachedFiles(rawArgs));
       if (!c) return err(ctx, "not_found", `no comment ${args.id}`);
       return ok(ctx, c, () => `resolved ${c.id}`);
     } catch (e) { return fail(ctx, e, "resolve_failed"); }
@@ -164,6 +209,61 @@ const reopenCmd = defineCommand({
       if (!c) return err(ctx, "not_found", `no comment ${args.id}`);
       return ok(ctx, c, () => `reopened ${c.id}`);
     } catch (e) { return fail(ctx, e, "reopen_failed"); }
+  },
+});
+
+/** How long a note may take: its picture waits at most 10 s, and an element has to be named too. */
+const NOTE_WITHIN_MS = 30_000;
+
+/** `x,y,width,height`, in page pixels. */
+function areaOf(given: string): PageBox {
+  const n = given.split(",").map(Number);
+  if (n.length !== 4 || !n.every(Number.isFinite)) throw new HcpCliError("BAD_REQUEST", `--area ${given}: give x,y,width,height in page pixels`, 2);
+  return { x: n[0]!, y: n[1]!, width: n[2]!, height: n[3]! };
+}
+
+const addCmd = defineCommand({
+  meta: { name: "add", description: "Leave a note on the page in a Browser tile, as a pin the person sees (needs the app)" },
+  args: {
+    selector: { type: "string", description: "a CSS selector matching the one element it is about" },
+    area: { type: "string", description: "or the place it is about: x,y,width,height in page pixels" },
+    body: { type: "string", required: true, description: "what you found" },
+    intent: { type: "string", description: "fix | change | question" },
+    tile: { type: "string", description: "the Browser tile (default: the one in your frame)" },
+    attach: { type: "string", description: `a file to keep on the note as proof (${ATTACH_KINDS}); repeat for several` },
+    ...jsonArg,
+  },
+  async run({ args, rawArgs }) {
+    const ctx = { json: !!args.json };
+    try {
+      const files = attachedFiles(rawArgs);
+      for (const file of files) await checkAttachment(file);
+      const tile = args.tile || ownTile();
+      if (!tile) throw new HcpCliError("NO_BROWSER_TILE", "this is no agent's tile, so no frame says which Browser tile: --tile names one", 5);
+      const asked = {
+        body: args.body,
+        ...(args.intent ? { intent: args.intent } : {}),
+        ...(args.selector ? { selector: args.selector } : {}),
+        ...(args.area ? { area: areaOf(args.area) } : {}),
+      };
+      const d = await openDrive();
+      let made: Result<"page.note">;
+      try {
+        made = await d.call("page.note", [tile, asked], NOTE_WITHIN_MS) as Result<"page.note">;
+      } finally {
+        d.close();
+      }
+      let note: ReviewComment = made.note;
+      if (files.length) {
+        // A note whose proof could not be kept is taken back, so the refusal leaves nothing.
+        const kept = await attachToComment(made.kept, note.id, files).catch(async (e: unknown) => {
+          await deleteComment(made.kept, note.id);
+          throw e;
+        });
+        if (kept) note = kept;
+      }
+      return ok(ctx, note, () => `note ${note.id} on ${where(note)}, by ${note.author}`);
+    } catch (e) { return fail(ctx, e, "add_failed"); }
   },
 });
 
@@ -213,9 +313,9 @@ export const reviewCmd = defineCommand({
 /** `hive ctl notes`: the notes left on a page in a Browser tile, which are review comments on a
  *  page, answered the same way. */
 export const notesCmd = defineCommand({
-  meta: { name: "notes", description: "Notes left on a page in a Browser tile: list, read and answer them" },
+  meta: { name: "notes", description: "Notes on a page in a Browser tile: leave one, list, read and answer them" },
   subCommands: {
-    list: listOf("page"), show: showCmd, seen: seenCmd, done: resolveCmd, dismiss: dismissCmd,
+    add: addCmd, list: listOf("page"), show: showCmd, seen: seenCmd, done: resolveCmd, dismiss: dismissCmd,
     reply: replyCmd, reopen: reopenCmd, watch: watchOf("page"),
   },
 });

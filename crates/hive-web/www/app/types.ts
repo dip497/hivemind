@@ -122,6 +122,10 @@ export interface PageNote {
   url: string;
   /** What was done, or why it was dismissed. */
   summary?: string;
+  /** The agent that left it; none when the person did. */
+  agent?: string;
+  /** The names of the files kept on it as proof, which stay on the computer. */
+  attachments?: string[];
 }
 
 /** A workspace the computer holds. */
