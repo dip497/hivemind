@@ -9,6 +9,9 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Added: agents sign in on a Browser tile without seeing the password. `hive ctl browser ask` hands the page to you and the agent waits, seeing none of it; `hive ctl browser sign-in <name>` uses a sign-in you saved in Settings, after your yes on the tile, typed only on its site.
+- Fixed: a question on a Browser tile, such as a site asking for your camera, took a click only once the tile was selected.
+- Fixed: a terminal opened before the agents' browser port was ready was not pointed at the Browser tiles.
 - **Breaking:** an agent reaches only the Browser tiles beside it, in its frame. It no longer sees your tiles in other frames, the cookies of sites it has no tile on, or `$HIVEMIND_BROWSER_TARGETS`; `agent-browser tab list` shows what it can use. Share a tile with every agent, or keep agents out of it, from the robot button in its toolbar.
 - Added: while an agent changes a Browser tile's page, the tile says so, and **Stop** ends it.
 - Fixed: an agent could close the Hivemind window, quit the browser or clear all your cookies through the agents' browser port. These are refused now.

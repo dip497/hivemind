@@ -11,7 +11,7 @@ import { siteOf } from "../../shared/site";
 import { keyLabel } from "./shortcut";
 import { WatchedPage } from "./WatchedPage";
 import { usePageAnnotate } from "./browser-notes";
-import { AgentAccessMenu, DrivingBar } from "./browser-agents";
+import { AgentAccessMenu, DrivingBar, PersonAskBar } from "./browser-agents";
 
 interface Props {
   tileId: string;
@@ -429,6 +429,7 @@ function WebView({ tileId, frameId, url, repoPath, selected, openReq, onClose, p
           otherwise scroll the box by a few pixels between a press and its release. */}
       <div ref={guestsRef} className="flex-1 bg-white relative overflow-clip">
         {ask && <BrowserAsk ask={ask} answer={answer} />}
+        {!ask && <PersonAskBar tileId={tileId} />}
         {notes.layer}
         <div
           className="absolute left-0 top-0"

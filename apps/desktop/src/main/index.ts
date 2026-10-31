@@ -84,7 +84,9 @@ import { keyboardCommand } from "./page-keys.js";
 import { around, elementAt, elementsIn, highlightAt, holdStill, pictureOf, showPins } from "./page-notes.js";
 import { addComment, reviewRoot, writePicture } from "@hivemind/core/review";
 import type { PageNoteDraft, PagePin } from "../shared/ipc.js";
-import { serveBrowserPort } from "./browser-port.js";
+import { serveBrowserPort, type BrowserPort } from "./browser-port.js";
+import { alwaysAllow, keychainInUse, listSignIns, passwordForms, removeSignIn, saveSignIn, signInNamed, signInOnPage } from "./browser-sign-in.js";
+import { answerAsk, askPerson, askState, endAsksOf, goAhead, waitingAsks, type AskState, type PersonAnswer } from "./browser-person-asks.js";
 import { driveSockPath, readOrCreateToken } from "@hivemind/agent-host/hooks/token";
 import { ApiError, isErrorCode } from "@hivemind/workspace-api/protocol";
 import { appViewsDir, handleViewProtocol, listViewPackages, startViewWatchdog, VIEW_SCHEME_PRIVILEGES, viewSdk } from "./view-packages.js";
@@ -523,6 +525,8 @@ function forgetBrowserPage(pageId: number): void {
   let gone = false;
   for (const [tileId, g] of browserGuests) if (g.webContentsId === pageId) { browserGuests.delete(tileId); gone = true; }
   if (!gone) return;
+  for (const tileId of driving.keys()) if (!browserGuests.has(tileId)) driving.delete(tileId);
+  for (const ask of waitingAsks()) if (!browserGuests.has(ask.tile)) endAsksOf(ask.tile);
   for (const tileId of pageStreams.watched()) void pageStreams.moved(tileId);
 }
 
@@ -561,7 +565,7 @@ async function serveAgentBrowserPort(): Promise<void> {
     if (!chromium) await new Promise((r) => setTimeout(r, 100));
   }
   if (!chromium) throw new Error("Chromium's DevTools port did not open");
-  const port = await serveBrowserPort(Number(process.env.HIVEMIND_BROWSER_CDP_PORT), chromium, {
+  const port = agentPort = await serveBrowserPort(Number(process.env.HIVEMIND_BROWSER_CDP_PORT), chromium, {
     pageOf: async (targetId) => (await browserTileOf(targetId))?.page ?? null,
     agentOf: (tile, key) => (tile && key && key === agentKey(tile) ? tile : null),
     reaches: async (agent, targetId) => {
@@ -581,7 +585,6 @@ async function serveAgentBrowserPort(): Promise<void> {
     open: openPageFor,
     acted: agentActed,
   });
-  agentBrowserPort = true;
   let tiles = JSON.stringify(getAppSettings().agentBrowser.tiles);
   onSettingsChange((s) => {
     const now = JSON.stringify(s.agentBrowser.tiles);
@@ -589,8 +592,8 @@ async function serveAgentBrowserPort(): Promise<void> {
     tiles = now;
   });
 }
-/** Whether the agents' port is serving: what `agent-browser` in a terminal is pointed at. */
-let agentBrowserPort = false;
+/** The agents' port, once it serves: a terminal started before then is pointed at it all the same. */
+let agentPort: BrowserPort | null = null;
 
 /** The frame `bare` is in on a board held here; null for none. */
 function frameOfTile(bare: string): string | null {
@@ -628,6 +631,76 @@ function agentPortSecret(): string {
   return portSecret;
 }
 
+const agentLabel = (agent: string | null): string | null =>
+  (agent ? (heldBoards(workspaceStore()).flatMap((b) => b.core?.tiles ?? []).find((t) => t.id === agent)?.label ?? null) : null);
+
+/** The Browser tile an agent means: the one it names, if it may reach it, else the one beside it. */
+function browserTileFor(agent: string | null, given: string | null): string {
+  const tile = given ?? [...browserGuests].find(([tileId, guest]) => agentReaches(agent, tileId, guest))?.[0];
+  if (!tile) throw new ApiError("NOT_FOUND", "No Browser tile is open beside you: open one with `agent-browser tab new <address>`");
+  const guest = browserGuests.get(tile);
+  if (!guest || (agent && !agentReaches(agent, tile, guest))) throw new ApiError("NOT_FOUND", `No Browser tile ${tile} that you can use`);
+  return tile;
+}
+const ON_ANOTHER_ASK = "A question is already waiting on this Browser tile: wait for the person's answer to it";
+/** What `hive ctl browser` does here: ask the person on a tile, and sign in with a saved sign-in. */
+const browserWork = {
+  signIns: () => listSignIns().map(({ name, site }) => ({ name, site })),
+  ask: async (agent: string | null, given: string | null, words: string) => {
+    const tile = browserTileFor(agent, given);
+    const page = browserGuestFor(tile);
+    const target = page ? await targetOf(page) : null;
+    // While the person signs in, an agent holding this page sees nothing of it.
+    const guard = target && agentPort ? agentPort.guard(target, []) : null;
+    const ask = askPerson(tile, agentLabel(agent), { kind: "hand-over", words }, undefined, () => guard?.release());
+    if (ask === null) { guard?.release(); throw new ApiError("BAD_REQUEST", ON_ANOTHER_ASK); }
+    return { ask, tile };
+  },
+  signIn: (agent: string | null, given: string | null, name: string) => {
+    const saved = signInNamed(name);
+    if (!saved) throw new ApiError("NOT_FOUND", `No saved sign-in is called ${name}: the person adds them in Settings ▸ Plugins ▸ Browser ▸ Sign-ins, and \`hive ctl browser sign-ins\` lists them`);
+    const tile = browserTileFor(agent, given);
+    const about = { kind: "sign-in" as const, name, site: saved.site, username: saved.username };
+    const work = async (always: boolean): Promise<AskState> => {
+      if (always) alwaysAllow(name);
+      const page = browserGuestFor(tile);
+      const target = page ? await targetOf(page) : null;
+      if (!page || !target || !agentPort) return { state: "done", outcome: "person", why: "The tile shows no page" };
+      const guard = agentPort.guard(target, passwordForms(name));
+      try {
+        const r = await signInOnPage(page, name);
+        return r.outcome === "sent" ? { state: "done", outcome: "sent", url: r.url } : { state: "done", outcome: "person", why: r.why };
+      } finally { guard.release(); }
+    };
+    const by = agentLabel(agent);
+    const ask = saved.always ? goAhead(tile, by, about, work) : askPerson(tile, by, about, work);
+    if (ask === null) throw new ApiError("BAD_REQUEST", ON_ANOTHER_ASK);
+    return { ask, tile };
+  },
+  state: async (ask: number, ms: number) => {
+    const state = await askState(ask, ms);
+    if (!state) throw new ApiError("NOT_FOUND", `No question ${ask} is known here: it ended a while ago`);
+    return state;
+  },
+  asks: waitingAsks,
+  answer: (ask: number, answer: PersonAnswer) => ({ answered: answerAsk(ask, answer) }),
+};
+const answerOf = (v: unknown): PersonAnswer => {
+  if (v === "yes" || v === "always" || v === "no" || v === "done") return v;
+  throw new ApiError("BAD_REQUEST", "the answer is yes, always, no or done");
+};
+handle("browserAsks", () => waitingAsks());
+handle("browserAnswerAsk", (_e, ask: unknown, answer: unknown) => {
+  if (typeof ask !== "number") throw new Error("a question is a number");
+  return browserWork.answer(ask, answerOf(answer));
+});
+handle("browserSignIns", () => ({ signIns: listSignIns(), keychain: keychainInUse() }), { local: true });
+handle("browserSignInSave", (_e, row: unknown) => {
+  const r = (row ?? {}) as Record<string, unknown>;
+  saveSignIn({ name: String(r.name ?? ""), url: String(r.url ?? ""), username: String(r.username ?? ""), password: String(r.password ?? "") });
+}, { local: true });
+handle("browserSignInRemove", (_e, name: unknown) => removeSignIn(String(name ?? "")), { local: true });
+
 /** How long a page says who is driving it after their last action. */
 const DRIVING_FOR_MS = 4000;
 const driving = new Map<string, { by: string | null; ends: ReturnType<typeof setTimeout> }>();
@@ -638,7 +711,7 @@ function agentActed(agent: string | null, targetId: string): void {
     if (!page || pageTargets.get(page) !== targetId) continue;
     const now = driving.get(tileId);
     if (now) clearTimeout(now.ends);
-    const by = agent ? (heldBoards(workspaceStore()).flatMap((b) => b.core?.tiles ?? []).find((t) => t.id === agent)?.label ?? null) : null;
+    const by = agentLabel(agent);
     const ends = setTimeout(() => { driving.delete(tileId); broadcast("browser:driving", { tileId, driving: false, by: null }); }, DRIVING_FOR_MS);
     driving.set(tileId, { by, ends });
     if (!now) broadcast("browser:driving", { tileId, driving: true, by });
@@ -681,7 +754,7 @@ async function openPageFor(agentTile: string, url: string): Promise<string> {
  *  agent browser control is off, or the person turned this off. */
 function agentBrowserEnv(bare: string): Record<string, string> | null {
   const s = getAppSettings().agentBrowser;
-  if (!agentBrowserPort || !s.useTiles) return null;
+  if (process.env.HIVEMIND_BROWSER_CDP !== "1" || !s.useTiles) return null;
   return {
     AGENT_BROWSER_CDP: `http://127.0.0.1:${process.env.HIVEMIND_BROWSER_CDP_PORT}/?tile=${encodeURIComponent(bare)}&key=${agentKey(bare)}`,
     AGENT_BROWSER_SESSION: `hivemind-${bare}`,
@@ -1650,6 +1723,7 @@ const workspaceServer: WorkspaceServer = new WorkspaceServer([
   // Naming, keys, replies, sessions, tools and pipes, and the person's machine methods (0.23).
   controlApi({
     control: () => control.api(),
+    browser: browserWork,
     // A message's photos, on the machine its agent runs on, in a folder of its tile's.
     keep: (bare, images) => {
       const folder = runsIn(heldBoards(workspaceStore()), bare);

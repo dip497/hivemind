@@ -1,3 +1,4 @@
+import { Input } from "./components/ui/input";
 import { useEffect, useState } from "react";
 import { FileCode, Earth, ListTodo, Puzzle, Trash } from "./components/icons";
 import { toast } from "sonner";
@@ -197,5 +198,49 @@ function AgentBrowser() {
       <div className="flex-1"><label>Mark what pages say</label><p>What a page says is marked as the page's, so an agent tells it apart from what you asked.</p></div>
       <Switch aria-label="Mark what pages say" checked={agentBrowser.markPageText} onCheckedChange={(v) => patchSettings("agentBrowser.markPageText", v)} />
     </div>
+    <SignIns />
+  </div>;
+}
+
+/** Sign-ins an agent can use by name: the app types the password, and the person says yes on the tile. */
+function SignIns() {
+  const [saved, setSaved] = useState<{ name: string; site: string; username: string; always: boolean }[]>([]);
+  const [keychain, setKeychain] = useState(true);
+  const [draft, setDraft] = useState({ name: "", url: "", username: "", password: "" });
+  const [said, setSaid] = useState<string | null>(null);
+  const load = () => void window.hive.browserSignIns?.().then((r) => { setSaved(r.signIns); setKeychain(r.keychain); }).catch(() => {});
+  useEffect(load, []);
+  const save = async () => {
+    setSaid(null);
+    try {
+      await window.hive.browserSignInSave!(draft);
+      setDraft({ name: "", url: "", username: "", password: "" });
+      load();
+    } catch (e) { setSaid((e as Error).message.replace(/^\[[^\]]*\]\s*/, "")); }
+  };
+  const field = (key: keyof typeof draft, placeholder: string, type = "text") => (
+    <Input aria-label={placeholder} placeholder={placeholder} type={type} autoComplete="off" value={draft[key]} onChange={(e) => setDraft((d) => ({ ...d, [key]: e.target.value }))} />
+  );
+  return <div className="flex flex-col gap-2" data-sign-ins>
+    <div className="settings-row">
+      <div className="flex-1">
+        <label>Sign-ins</label>
+        <p>An agent asks for one by name and you say yes on the tile. The app types the password, on that site only, and the agent never sees it.{keychain ? "" : " This computer has no keychain, so they are protected only by your account's file permissions."}</p>
+      </div>
+    </div>
+    {saved.map((s) => (
+      <div className="settings-row" key={s.name} data-sign-in={s.name}>
+        <div className="min-w-0 flex-1"><label>{s.name}</label><p className="truncate">{s.username} on {s.site}{s.always ? ", without asking" : ""}</p></div>
+        <Button variant="outline" onClick={() => void window.hive.browserSignInRemove!(s.name).then(load)}>Remove</Button>
+      </div>
+    ))}
+    <div className="grid grid-cols-2 gap-2">
+      {field("name", "Name, e.g. github")}
+      {field("url", "Sign-in address")}
+      {field("username", "Username")}
+      {field("password", "Password", "password")}
+    </div>
+    {said && <p className="settings-note" role="status">{said}</p>}
+    <div><Button variant="outline" disabled={!draft.name || !draft.url || !draft.username || !draft.password} onClick={() => void save()}>Save sign-in</Button></div>
   </div>;
 }

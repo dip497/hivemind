@@ -80,7 +80,15 @@ export interface BrowserPort {
   server: http.Server;
   /** Who may reach what has changed: end each connection holding a page it no longer reaches. */
   recheck(): Promise<void>;
+  /** A person or a saved sign-in is signing in on page `targetId`. Until `release`, what agents ask
+   *  of it waits, and they see no request's body; for a while after, nor these `secrets` anywhere. */
+  guard(targetId: string, secrets: string[]): { release(): void };
 }
+
+/** How long a password stays hidden from agents after its sign-in: a page or a late event can repeat it. */
+const HIDDEN_FOR_MS = 60_000;
+const HIDDEN_TEXT = "••••••";
+interface Guard { held: boolean; released: Promise<void>; secrets: string[] }
 
 /** Serve on 127.0.0.1:`port` the DevTools port Chromium listens on at `chromium`. A connection
  *  says which agent tile it is for with `?tile=` and that tile's `key=` (its `AGENT_BROWSER_CDP`). */
@@ -92,6 +100,7 @@ export function serveBrowserPort(port: number, chromium: number, pages: BrowserP
     return pages.agentOf(q.get("tile"), q.get("key"));
   };
   const connections = new Set<Connection>();
+  const guards = new Map<string, Guard>();
   // As Chromium's own port: only a loopback name, so a web page cannot reach it by renaming itself.
   const local = (host: string | undefined) => host === ours || host === `localhost:${port}`;
   const rename = (body: string) => body.split(theirs).join(ours).split(`localhost:${chromium}`).join(ours);
@@ -140,7 +149,7 @@ export function serveBrowserPort(port: number, chromium: number, pages: BrowserP
     const agent = agentIn(path);
     void (async () => {
       if (page && !(await pages.reaches(agent, page))) { socket.destroy(); return; }
-      wss.handleUpgrade(req, socket, head, (client) => relay(client, `ws://${theirs}${path.split("?")[0]}`, page, pages, agent, connections));
+      wss.handleUpgrade(req, socket, head, (client) => relay(client, `ws://${theirs}${path.split("?")[0]}`, page, pages, agent, connections, guards));
     })();
   });
 
@@ -156,6 +165,20 @@ export function serveBrowserPort(port: number, chromium: number, pages: BrowserP
             if (held.includes(false)) c.end();
           }));
         },
+        guard: (targetId, secrets) => {
+          let open = () => {};
+          const guard: Guard = { held: true, released: new Promise((r) => { open = r; }), secrets };
+          guards.set(targetId, guard);
+          return {
+            release: () => {
+              guard.held = false;
+              open();
+              const forget = () => { if (guards.get(targetId) === guard) guards.delete(targetId); };
+              if (secrets.length) setTimeout(forget, HIDDEN_FOR_MS).unref?.();
+              else forget();
+            },
+          };
+        },
       });
     });
   });
@@ -167,7 +190,7 @@ interface Connection { agent: string | null; held: Set<string>; end(): void }
 /** One agent's connection, passed to Chromium's, but for keyboard input to a tile's page and for
  *  what is not a tile's page, which it neither sees nor reaches. `own`: the page a connection to
  *  one page is to. */
-function relay(client: WebSocket, to: string, own: string | undefined, pages: BrowserPages, agent: string | null, connections: Set<Connection>): void {
+function relay(client: WebSocket, to: string, own: string | undefined, pages: BrowserPages, agent: string | null, connections: Set<Connection>, guards: Map<string, Guard>): void {
   const pageOf = (id: string) => pages.pageOf(id);
   const isPage: IsPage = (id) => pages.reaches(agent, id);
   const upstream = new WebSocket(to, { perMessageDeflate: false, maxPayload: 512 * 1024 * 1024 });
@@ -180,6 +203,26 @@ function relay(client: WebSocket, to: string, own: string | undefined, pages: Br
   const attaching = new Map<number, string>();
   const listing = new Set<number>();
   const readingCookies = new Set<number>();
+  /** Requests made during a sign-in, whose bodies an agent may not ask for. */
+  const bodiless = new Set<string>();
+  const guardOf = (sessionId: string | undefined) => {
+    const target = sessionId ? sessions.get(sessionId) : own;
+    return target ? guards.get(target) : undefined;
+  };
+  /** What Chromium said, as an agent may read it while a sign-in is guarded. */
+  const guarded = (said: string): string => {
+    let text = said;
+    for (const guard of guards.values()) for (const secret of guard.secrets) if (text.includes(secret)) text = text.split(secret).join(HIDDEN_TEXT);
+    if (!text.includes('"Network.requestWillBeSent"') && !text.includes('"Fetch.requestPaused"')) return text;
+    const m = JSON.parse(text) as { sessionId?: string; params?: { requestId?: string; networkId?: string; request?: { postData?: unknown; postDataEntries?: unknown; hasPostData?: boolean } } };
+    const request = m.params?.request;
+    if (!request || !guardOf(m.sessionId)?.held) return text;
+    for (const id of [m.params?.requestId, m.params?.networkId]) if (id) bodiless.add(id);
+    delete request.postData;
+    delete request.postDataEntries;
+    delete request.hasPostData;
+    return JSON.stringify(m);
+  };
   let ownId = OWN_IDS;
   let ownPending = 0;
   const ask = (m: Record<string, unknown>) => { ownPending++; upstream.send(JSON.stringify({ id: ownId++, ...m })); };
@@ -223,6 +266,15 @@ function relay(client: WebSocket, to: string, own: string | undefined, pages: Br
   client.on("message", (data) => {
     const text = data.toString();
     fromAgent = fromAgent.then(async () => {
+      if (guards.size) {
+        // A page's own requests wait on an interception's answer: it never waits here.
+        const guard = guardOf(/"sessionId":"([^"]+)"/.exec(text)?.[1]);
+        if (guard?.held && !text.includes('"Fetch.')) await guard.released;
+      }
+      if (bodiless.size && text.includes('"Network.getRequestPostData"')) {
+        const m = JSON.parse(text) as Message;
+        if (bodiless.has(String(m.params?.requestId))) { refuse(m, "This request belongs to a sign-in: its body is not an agent's to read"); return; }
+      }
       if (ACTS.test(text)) {
         const session = /"sessionId":"([^"]+)"/.exec(text)?.[1];
         const target = session ? sessions.get(session) : own;
@@ -262,8 +314,9 @@ function relay(client: WebSocket, to: string, own: string | undefined, pages: Br
   upstream.on("open", () => { for (const text of waiting.splice(0)) upstream.send(text); });
   let fromChromium = Promise.resolve();
   upstream.on("message", (data) => {
-    const text = data.toString();
+    const said = data.toString();
     fromChromium = fromChromium.then(async () => {
+      const text = guards.size ? guarded(said) : said;
       const mentionsHidden = hidden.size > 0 && [...hidden].some((s) => text.includes(s));
       if (!mentionsHidden && !text.includes('"Target.') && !listing.size && !attaching.size && !ownPending && !readingCookies.size) return toAgent(text);
       let m: Message;

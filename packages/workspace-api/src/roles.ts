@@ -101,6 +101,8 @@ const LEAST: Record<string, Role> = {
   "agent.sessions": "view",
   "agent.commands": "view",
   "tool.open": "edit",
+  "browser.asks": "agents",
+  "browser.answer": "agents",
   "agent.close": "agents",
   "agent.sleep": "agents",
   "agent.wake": "agents",
@@ -120,7 +122,7 @@ const LEAST: Record<string, Role> = {
 /** The machine's own methods (0.23): a peer's device is another machine, so they are no peer's,
  *  the person's own devices included. An agent on this machine keeps them, but joining and serving
  *  a folder: those are the person's, since a tile is kept to its own workspace. */
-const MACHINE = new Set(["view.emit", "plugin.list", "plugin.commands", "plugin.open", "plugin.call", "plugin.close", "tile.focus", "tile.look", "views.rescan", "agents.rescan",
+const MACHINE = new Set(["browser.signIns", "browser.ask", "browser.signIn", "browser.askState", "view.emit", "plugin.list", "plugin.commands", "plugin.open", "plugin.call", "plugin.close", "tile.focus", "tile.look", "views.rescan", "agents.rescan",
   "widgets.rescan", "tools.rescan", "settings.reload", "host.status", "host.join", "host.add", "notifications.play", "notifications.recentSounds"]);
 
 /** The machine's methods that are the person's alone: an agent's tile is refused them too. */
@@ -129,6 +131,7 @@ const PERSON = new Set(["host.join", "host.add", "notifications.play"]);
 /** Why a peer with `access`, or an agent here in `tile`, may not call `method`, in words that name
  *  what works instead. */
 export function refusalOf(who: { access: Access; tile?: string }, method: string): string {
+  if (method === "browser.answer" && who.tile !== undefined) return "a question on a Browser tile is the person's to answer";
   if (method === "host.join") {
     return "joining a workspace is the person's, at this machine: run `hive join <link>` in a terminal of your own, not from an agent's tile or another device. Your own devices need no link: what they hold opens from Open recent → On your devices in the app";
   }
@@ -144,6 +147,7 @@ export function refusalOf(who: { access: Access; tile?: string }, method: string
 
 /** Whether a peer with `access`, or an agent here in `tile`, may call `method`. */
 export function mayCall(who: { access: Access; tile?: string }, method: string): boolean {
+  if (method === "browser.answer" && who.tile !== undefined) return false;
   if (MACHINE.has(method)) return who.tile !== undefined && !PERSON.has(method);
   if (who.access === "owner") return true;
   const { access } = who;

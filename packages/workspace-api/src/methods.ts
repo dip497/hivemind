@@ -35,6 +35,16 @@ export interface StoreSnapshot {
   objects: BoardObject[];
 }
 
+/** A question an agent has put to the person on a Browser tile. */
+export type BrowserPersonAsk = { ask: number; tile: string; by: string | null } & (
+  | { kind: "hand-over"; words: string }
+  | { kind: "sign-in"; name: string; site: string; username: string }
+);
+/** Where such a question stands. `person`: it needs the person, and `why` says what shows. */
+export type BrowserAskState =
+  | { state: "waiting" | "working" }
+  | { state: "done"; outcome: "done" | "no" | "expired" | "sent" | "person"; url?: string; why?: string };
+
 export interface WorkspaceMethods {
   "git.status": (repo: string) => GitStatusSnapshot;
   /** Tracked and untracked paths, as .gitignore leaves them. */
@@ -199,6 +209,13 @@ export interface WorkspaceMethods {
   /** (0.23) Open a tool's tile in the workspace at `repo`: the tool by its id
    *  (`@owner/name/tool`, or `@owner/name` when the package has one tool), in `frame` if given, at
    *  `url` for one that shows a page, with `state` (0.32) as the tile's first saved state. */
+  /** What an agent asks of the person on a Browser tile, and their answer (0.38). */
+  "browser.signIns": () => { signIns: { name: string; site: string }[] };
+  "browser.ask": (words: string, tile?: string) => { ask: number; tile: string };
+  "browser.signIn": (name: string, tile?: string) => { ask: number; tile: string };
+  "browser.askState": (ask: number, ms?: number) => BrowserAskState;
+  "browser.asks": () => { asks: BrowserPersonAsk[] };
+  "browser.answer": (ask: number, answer: "yes" | "always" | "no" | "done") => { answered: boolean };
   "tool.open": (repo: string, tool: { tool: string; frame?: string; url?: string; state?: Record<string, unknown> }) => { tile: string };
   /** (0.23) Pipe the replies of the agent in `src` to the one in `dst`, as its next prompts. */
   "link.connect": (src: string, dst: string) => void;

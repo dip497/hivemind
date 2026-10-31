@@ -336,6 +336,8 @@ export interface BrowserAppStatus { on: boolean; url: string | null; others: str
 /** A Browser tile's page asks for something (`permissions`: "camera", "microphone", "geolocation",
  *  "notifications"…) and the tile showing page `pageId` asks the person; or that ask is over
  *  (`done`), answered or not. */
+import type { BrowserPersonAsk } from "@hivemind/workspace-api/methods";
+export type { BrowserPersonAsk };
 export type BrowserPermissionEvent =
   | { askId: number; pageId: number; site: string; permissions: string[] }
   | { askId: number; done: true };
@@ -938,6 +940,14 @@ export interface HiveIpc {
   onBrowserWatched: (cb: (tileId: string, watched: boolean) => void) => () => void;
   /** An agent is changing what a Browser tile shows, or has stopped. */
   onBrowserDriving: (cb: (e: { tileId: string; driving: boolean; by: string | null }) => void) => () => void;
+  /** A question put to the person on a Browser tile, or that one has ended. */
+  onBrowserPersonAsk: (cb: (e: BrowserPersonAsk | { ask: number; tile: string; ended: true }) => void) => () => void;
+  browserAsks(): Promise<BrowserPersonAsk[]>;
+  browserAnswerAsk(ask: number, answer: "yes" | "always" | "no" | "done"): Promise<{ answered: boolean }>;
+  /** Saved sign-ins, without their passwords; whether this computer's keychain guards them. */
+  browserSignIns?(): Promise<{ signIns: { name: string; site: string; url: string; username: string; always: boolean }[]; keychain: boolean }>;
+  browserSignInSave?(row: { name: string; url: string; username: string; password: string }): Promise<void>;
+  browserSignInRemove?(name: string): Promise<void>;
   /** The person's answer to a Browser tile page's ask (`onBrowserPermission`). */
   answerBrowserPermission?(askId: number, allowed: boolean): void;
   /** The rights a site (an origin) in a Browser tile is asked about, each with the person's answer. */

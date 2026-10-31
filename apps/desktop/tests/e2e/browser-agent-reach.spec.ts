@@ -88,11 +88,13 @@ test.beforeAll(async () => {
 
   // What the terminal was given, as an agent in it would read it.
   await term.locator(".xterm-screen").click();
+  // Each try is typed again, and rewrites the file: what a whole one said is kept as it is read.
   await expect.poll(async () => {
     await page.keyboard.type(`printenv AGENT_BROWSER_CDP > ${printed}\n`);
-    return fs.existsSync(printed) && fs.readFileSync(printed, "utf8").includes("key=");
-  }, { timeout: 20_000, intervals: [1500] }).toBe(true);
-  agentQuery = new URL(fs.readFileSync(printed, "utf8").trim()).search;
+    const now = fs.existsSync(printed) ? fs.readFileSync(printed, "utf8") : "";
+    if (now.includes("key=")) agentQuery = new URL(now.trim()).search;
+    return agentQuery;
+  }, { timeout: 20_000, intervals: [1500] }).toContain("key=");
 });
 test.afterAll(async () => {
   await app?.close();

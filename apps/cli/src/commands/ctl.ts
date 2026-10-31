@@ -343,6 +343,54 @@ const openTool = sub("open-tool", "Open an enabled tool plugin", {
   return onDrive(async (d) => d.call("tool.open", [await workspaceOf(d, a.repo), { tool: a.tool, ...(a.frame ? { frame: a.frame } : {}), ...(a.url ? { url: a.url } : {}), ...(state !== undefined ? { state } : {}) }]));
 });
 
+/** Longer than this and an agent's own tool may give up on the command: the wait starts again with `wait`. */
+const BROWSER_ASK_WAIT_MS = 110_000;
+const browserTileArg = { tile: { type: "string", description: "the Browser tile (default: the one beside you)" } } as const;
+const browserWaitArg = { timeout: { type: "string", description: `how long to wait, e.g. 90s (default ${BROWSER_ASK_WAIT_MS / 1000}s); the question stays up after that` } } as const;
+/** Wait, in short requests, for how question `ask` ends: its exit code says how it did. */
+async function browserAnswer(d: Drive, ask: number, tile: string | undefined, total: number) {
+  const until = Date.now() + total;
+  for (;;) {
+    const left = until - Date.now();
+    const state = await d.call("browser.askState", [ask, Math.max(0, Math.min(left, 10_000))]) as Result<"browser.askState">;
+    if (state.state === "done") {
+      const result = { ask, ...(tile ? { tile } : {}), ...state };
+      if (state.outcome === "done" || state.outcome === "sent") return result;
+      return { __exit: state.outcome === "expired" ? EXIT.timeout : EXIT.refused, result };
+    }
+    if (left <= 0) return { __exit: EXIT.timeout, result: { ask, ...(tile ? { tile } : {}), state: state.state, fix: `still up: hive ctl browser wait ${ask}` } };
+  }
+}
+const browser = defineCommand({
+  meta: { name: "browser", description: "Ask the person on a Browser tile, and sign in with a saved sign-in: the password never reaches you" },
+  subCommands: {
+    "sign-ins": sub("sign-ins", "List the saved sign-ins, by name and site", {}, () => onDrive((d) => d.call("browser.signIns", []))),
+    "sign-in": sub("sign-in", "Sign in on a Browser tile with a saved sign-in, once the person says yes there", {
+      name: { type: "positional", required: true, description: "its name: hive ctl browser sign-ins" },
+      ...browserTileArg, ...browserWaitArg,
+    }, (a) => onDrive(async (d) => {
+      const { ask, tile } = await d.call("browser.signIn", [String(a.name), a.tile]) as Result<"browser.signIn">;
+      return browserAnswer(d, ask, tile, durationFlag(a.timeout, "timeout", BROWSER_ASK_WAIT_MS));
+    })),
+    ask: sub("ask", "Ask the person to do something in a Browser tile's page themselves, such as sign in; you wait, and see nothing of it", {
+      words: { type: "positional", required: true, description: "what you ask them to do" },
+      ...browserTileArg, ...browserWaitArg,
+    }, (a) => onDrive(async (d) => {
+      const { ask, tile } = await d.call("browser.ask", [String(a.words), a.tile]) as Result<"browser.ask">;
+      return browserAnswer(d, ask, tile, durationFlag(a.timeout, "timeout", BROWSER_ASK_WAIT_MS));
+    })),
+    wait: sub("wait", "Go on waiting for a question's answer", {
+      ask: { type: "positional", required: true, description: "its number" },
+      ...browserWaitArg,
+    }, (a) => onDrive((d) => browserAnswer(d, intFlag(a.ask, "ask", 0), undefined, durationFlag(a.timeout, "timeout", BROWSER_ASK_WAIT_MS)))),
+    asks: sub("asks", "The questions waiting on the person", {}, () => onDrive((d) => d.call("browser.asks", []))),
+    answer: sub("answer", "The person's answer to a question: yes, always, no or done", {
+      ask: { type: "positional", required: true, description: "its number" },
+      answer: { type: "positional", required: true, description: "yes | always | no | done" },
+    }, (a) => onDrive((d) => d.call("browser.answer", [intFlag(a.ask, "ask", 0), String(a.answer) as "yes"]))),
+  },
+});
+
 const spawn = sub("spawn", "Spawn an agent tile; prints { tile }", {
   // Named, not listed: help is built before the agents on this machine are loaded, so a
   // list here would silently omit every agent you installed. An `--agent` that is wrong is
@@ -841,6 +889,6 @@ export const ctlCmd = defineCommand({
     whoami, agents, tiles, frames, frame, "open-tool": openTool, spawn, sessions, send, keys, read, stream, workflow, approve, approval, report, inbox, "open-review": openReview,
     focus, close, sleep, wake, rename, connect, disconnect, view, plugin, tile,
     "set-state": setState, "add-comment": addComment, "mark-acceptance": markAcceptance,
-    "delete-issue": deleteIssueCmd, "list-workspaces": listWorkspacesCmd, notes: notesCmd,
+    "delete-issue": deleteIssueCmd, "list-workspaces": listWorkspacesCmd, notes: notesCmd, browser,
   },
 });

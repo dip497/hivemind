@@ -74,11 +74,11 @@ test("what an agent types into a browser tile's page lands in that page, not in 
   await guest.send("Runtime.evaluate", { expression: "document.getElementById('email').focus()" });
   await guest.send("Input.insertText", { text: "test@example.com" });
   for (const k of [...key("x", "x"), ...key("Backspace"), ...key("Enter", "\r")]) await guest.send("Input.dispatchKeyEvent", k);
-  const title = await guest.send("Runtime.evaluate", { expression: "document.title", returnByValue: true });
+  // A key reaches the page by its input queue, which a read does not wait behind.
+  await expect.poll(async () => (await guest.send("Runtime.evaluate", { expression: "document.title", returnByValue: true })).result?.result?.value).toBe("sent:test@example.com");
   guest.close();
 
   expect(await fieldInApp()).toBe("");
-  expect(title.result?.result?.value).toBe("sent:test@example.com");
 
   // The same through the app's own way in (hive ctl, automation in the app).
   await page.evaluate((id) => window.hive.browserCdp(id!, "Runtime.evaluate", { expression: "document.getElementById('email').value=''; document.getElementById('email').focus()" }), tileId);

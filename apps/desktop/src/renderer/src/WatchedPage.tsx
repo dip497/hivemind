@@ -4,7 +4,7 @@ import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
 import type { PageFrame, PageInput } from "../../shared/page-input";
 import { usePageAnnotate } from "./browser-notes";
-import { AgentAccessMenu, DrivingBar } from "./browser-agents";
+import { AgentAccessMenu, DrivingBar, PersonAskBar } from "./browser-agents";
 
 /** The modifier bits a page's input names: Alt 1, Ctrl 2, Meta 4, Shift 8. */
 const modifiersOf = (e: { altKey: boolean; ctrlKey: boolean; metaKey: boolean; shiftKey: boolean }) =>
@@ -146,6 +146,7 @@ export function WatchedPage({ tileId, url, repoPath, onClose }: { tileId: string
         data-watched-page-picture
         ref={area}
       >
+        <PersonAskBar tileId={tileId} />
         {notes.layer && drawn && <div className="absolute left-0 top-0" style={drawn}>{notes.layer}</div>}
         {src && (
           <img

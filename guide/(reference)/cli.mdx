@@ -344,6 +344,12 @@ hive ctl notes dismiss <id> --reason "why not"
 hive ctl notes reply <id> "answer"
 hive ctl notes watch [--timeout 300]    # wait for the next note on a page; exit 4 on timeout
 hive review watch [--timeout 300] [--file f]   # wait for the next comment; exit 4 on timeout
+hive ctl browser ask "Please sign in" [--tile t] [--timeout 90s]   # the person does it in the tile; you wait and see nothing
+hive ctl browser sign-ins               # saved sign-ins, by name and site
+hive ctl browser sign-in <name> [--tile t] [--timeout 90s]   # the app types it once the person says yes; you never see the password
+hive ctl browser wait <ask>             # go on waiting: the question stays up for 5 minutes
+hive ctl browser asks                   # the questions waiting on the person
+hive ctl browser answer <ask> yes|always|no|done   # the person's; refused to an agent
 ```
 
 ## Terminals that outlive the app

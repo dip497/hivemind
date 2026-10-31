@@ -113,6 +113,13 @@ The command waits until every worker has replied. `--close` closes their tiles a
     **Every agent** and **No agents**. The same setting is
     `hive config set agentBrowser.tiles.<tile> all` (or `none`). While an agent changes the page,
     the tile says so, and **Stop** ends it and shuts agents out of that tile.
+  - **Signing in, without the agent seeing the password.** Tiles keep their logins, so most agents
+    never need one. When one does, it has two ways, and you answer on the tile:
+    - `hive ctl browser ask "Please sign in"`: you sign in yourself. Until you press **Done**, the
+      agent waits and sees none of it.
+    - `hive ctl browser sign-in github`: a sign-in you saved in **Sign-ins** on the same page. After
+      **Sign in once** or **Always on this site**, the app types it, only on that site and only in
+      the page's own visible fields. An agent can't choose where it goes.
   - **Settings on the same page:** install or update agent-browser, turn **Use these Browser
     tiles** off so it starts a Chrome of its own, or turn **Mark what pages say** off. The same
     settings are `hive config set agentBrowser.useTiles false` and
