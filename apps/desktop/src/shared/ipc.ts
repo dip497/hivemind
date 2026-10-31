@@ -344,6 +344,8 @@ export interface PageDownload {
   id: string;
   name: string;
   state: "saving" | "saved" | "failed";
+  /** It went to the folder an agent asked for, not Downloads. */
+  forAgent?: boolean;
 }
 
 export type BrowserPermissionEvent =
@@ -968,7 +970,7 @@ export interface HiveIpc {
    *  session; `enabled` = persisted choice (applies on next launch). */
   getBrowserSettings?(): Promise<{ active: boolean; enabled: boolean; port: string }>;
   /** The agent-browser on this computer's PATH, and the newest on npm (null: not known). */
-  agentBrowserStatus?(): Promise<{ installed: string | null; latest: string | null }>;
+  agentBrowserStatus?(): Promise<{ installed: string | null; latest: string | null; ffmpeg: boolean }>;
   /** Install agent-browser, or update the one there; what it said last, and its version after. */
   agentBrowserInstall?(): Promise<{ ok: boolean; out: string; version: string | null }>;
   /** Persist the agent-browser bridge on/off choice (applies after relaunch). */

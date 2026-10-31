@@ -19,6 +19,8 @@ printf '#!/bin/sh\\necho "agent-browser 0.41.0"\\n' > "${bin}/agent-browser"
 chmod +x "${bin}/agent-browser"
 echo "added 1 package"
 `, { mode: 0o755 });
+  // An ffmpeg that does not run, in front of any this computer has.
+  fs.writeFileSync(path.join(bin, "ffmpeg"), "#!/bin/sh\nexit 127\n", { mode: 0o755 });
   const env = { ...process.env, PATH: `${bin}:/usr/bin:/bin`, HIVEMIND_SHELL_ENV: "0", HIVEMIND_BROWSER_CDP: "1", HIVEMIND_BROWSER_CDP_PORT: PORT } as Record<string, string>;
   delete env.ELECTRON_RUN_AS_NODE;
   app = await electron.launch({ args: [path.resolve("out/main/index.js"), "--no-sandbox", `--user-data-dir=${ud}`], cwd: path.resolve("."), env });
@@ -40,6 +42,7 @@ test("not installed, the Browser tool's settings install agent-browser, and say 
   await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: "tool:@hivemind/web" } })));
   const row = page.locator("[data-agent-browser]");
   await expect(row.locator("[data-agent-browser-version]")).toContainText("Not installed");
+  await expect(row.locator("[data-ffmpeg-missing]")).toContainText("needs ffmpeg");
   await row.locator("[data-agent-browser-install]").click();
   await expect(row.locator("[data-agent-browser-version]")).toContainText("0.41.0 is installed", { timeout: 20_000 });
   await expect(row.locator("[data-agent-browser-install]")).toHaveCount(0);

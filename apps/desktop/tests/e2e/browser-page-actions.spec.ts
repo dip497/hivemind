@@ -158,11 +158,14 @@ test("an agent's download lands where it asked and it hears the file finish; onc
   expect(a.events.filter((e) => /download/i.test(e.method ?? "")).every((e) => e.params?.guid === guid)).toBe(true);
   expect(fs.readFileSync(path.join(folder, guid)).equals(FILE)).toBe(true);
   expect(fs.readdirSync(downloadsFolder)).toHaveLength(before);
-  expect(await tile.locator("[data-page-download]").count()).toBe(0);
+  // Said on the tile too: a person's click in an agent's window lands here, and they should know.
+  await expect(tile.locator('[data-page-download="saved"]')).toContainText("An agent:");
+  await tile.locator('[data-page-download="saved"]').getByRole("button", { name: /dismiss/ }).click();
 
   await page.waitForTimeout(11_000);
   await personClicks(100, 30);
   await expect(tile.locator('[data-page-download="saved"]')).toContainText("file", { timeout: 15_000 });
+  await expect(tile.locator('[data-page-download="saved"]')).not.toContainText("An agent:");
   expect(fs.readdirSync(downloadsFolder)).toHaveLength(before + 1);
   expect(fs.readdirSync(folder)).toEqual([guid]);
   await tile.locator('[data-page-download="saved"]').getByRole("button", { name: /dismiss/ }).click();

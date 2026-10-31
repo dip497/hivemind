@@ -109,28 +109,30 @@ export class PageDownloads {
         savePath = wanted?.behavior === "allowAndName" ? path.join(folder, id) : this.freePath(folder, name);
       } catch { /* a folder that cannot be made fails the download, below */ }
     }
-    const forThePerson = wanted === null;
+    // Said on the tile whoever it is for: an agent's window can catch a person's click.
+    const say = (state: PageDownload["state"]) => {
+      if (!page.isDestroyed()) this.tellTile(page, { pageId: page.id, id, name: savePath && !wanted ? path.basename(savePath) : name, state, ...(wanted ? { forAgent: true } : {}) });
+    };
     if (savePath === null) {
       item.cancel();
       progress("canceled");
-      if (forThePerson) this.tellTile(page, { pageId: page.id, id, name, state: "failed" });
+      say("failed");
       return;
     }
     const to = savePath;
     item.setSavePath(to);
     this.saving.add(to);
-    if (forThePerson) this.tellTile(page, { pageId: page.id, id, name: path.basename(to), state: "saving" });
+    say("saving");
     item.on("updated", () => progress("inProgress"));
     item.once("done", (_e, state) => {
       this.saving.delete(to);
       const completed = state === "completed";
       progress(completed ? "completed" : "canceled", completed ? to : undefined);
-      if (!forThePerson) return;
       if (completed) {
         this.saved.set(id, to);
         if (this.saved.size > REMEMBERED) this.saved.delete(this.saved.keys().next().value as string);
       }
-      if (!page.isDestroyed()) this.tellTile(page, { pageId: page.id, id, name: path.basename(to), state: completed ? "saved" : "failed" });
+      say(completed ? "saved" : "failed");
     });
   }
 }

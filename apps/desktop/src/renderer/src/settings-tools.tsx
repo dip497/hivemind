@@ -159,7 +159,7 @@ function BrowserControl({ toolOn }: { toolOn: boolean }) {
  *  of it, and how terminals use it. */
 function AgentBrowser() {
   const { agentBrowser } = useSettings();
-  const [status, setStatus] = useState<{ installed: string | null; latest: string | null } | null>(null);
+  const [status, setStatus] = useState<{ installed: string | null; latest: string | null; ffmpeg: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
   const [said, setSaid] = useState<string | null>(null);
   useEffect(() => { void window.hive.agentBrowserStatus?.().then(setStatus).catch(() => {}); }, []);
@@ -168,7 +168,7 @@ function AgentBrowser() {
     setSaid(null);
     try {
       const r = await window.hive.agentBrowserInstall!();
-      setStatus((s) => ({ installed: r.version, latest: s?.latest ?? null }));
+      setStatus((s) => ({ installed: r.version, latest: s?.latest ?? null, ffmpeg: s?.ffmpeg ?? true }));
       setSaid(r.ok ? `agent-browser ${r.version ?? ""} is installed.` : `It did not install: ${r.out}`);
     } finally { setBusy(false); }
   };
@@ -190,6 +190,7 @@ function AgentBrowser() {
       )}
     </div>
     {said && <p className="settings-note" role="status">{said}</p>}
+    {status && !status.ffmpeg && <p className="settings-note" data-ffmpeg-missing>An agent's video proof (<code>agent-browser record</code>) needs ffmpeg, which isn't on this computer. Install it with <code>brew install ffmpeg</code>, <code>winget install ffmpeg</code>, or your package manager.</p>}
     <div className="settings-row">
       <div className="flex-1"><label>Use these Browser tiles</label><p>agent-browser in each terminal drives these tiles in a session of its own, and a new tab opens a Browser tile beside the agent. Off: it starts its own Chrome. For terminals started from now on.</p></div>
       <Switch aria-label="agent-browser uses these Browser tiles" checked={agentBrowser.useTiles} onCheckedChange={(v) => patchSettings("agentBrowser.useTiles", v)} />

@@ -969,9 +969,11 @@ async function agentBrowserLatest(): Promise<string | null> {
     return typeof v === "string" && /^\d+\.\d+\.\d+$/.test(v) ? v : null;
   } catch { return null; }
 }
+/** Whether an agent's `record` can run: it pipes frames into ffmpeg. */
+const ffmpegHere = () => new Promise<boolean>((resolve) => execFile("ffmpeg", ["-version"], { timeout: 5000 }, (err) => resolve(!err)));
 handle("agentBrowserStatus", async () => {
-  const [installed, latest] = await Promise.all([agentBrowserVersion(), agentBrowserLatest()]);
-  return { installed, latest };
+  const [installed, latest, ffmpeg] = await Promise.all([agentBrowserVersion(), agentBrowserLatest(), ffmpegHere()]);
+  return { installed, latest, ffmpeg };
 }, { local: true });
 // Its own `upgrade` knows how it was installed (npm, Homebrew, Cargo); a first install is npm's.
 handleEffect("agentBrowserInstall", () => ({}), async () => {

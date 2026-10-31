@@ -33,7 +33,7 @@ export function PageDownloads({ downloads, dismiss }: { downloads: PageDownload[
     <div className="absolute left-0 bottom-0 z-10 flex max-w-full flex-col">
       {downloads.map((d) => (
         <div key={d.id} data-page-download={d.state} className="h-7 flex items-center gap-2 px-2 bg-[var(--color-bg4)] border-t border-r border-[var(--color-line)] text-label text-[var(--color-fg2)]">
-          <span className="min-w-0 truncate" title={d.name}>{WORDS[d.state]} <span className="font-mono text-[var(--color-fg)]">{d.name}</span></span>
+          <span className="min-w-0 truncate" title={d.name}>{d.forAgent ? "An agent: " : ""}{WORDS[d.state]} <span className="font-mono text-[var(--color-fg)]">{d.name}</span></span>
           {d.state === "saved" && <Button variant="ghost" size="xs" className="nodrag shrink-0" onClick={() => void window.hive.browserShowDownload?.(d.id)}>Show in folder</Button>}
           <Button variant="ghost" size="icon-2xs" className="nodrag shrink-0" aria-label={`dismiss ${d.name}`} title="Dismiss" onClick={() => dismiss(d.id)}><XIcon /></Button>
         </div>

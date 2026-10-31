@@ -1,5 +1,6 @@
 // Notes on a Browser tile's page: what is at a point is named as a person would name it, found
 // again by a selector that matches it alone, and kept with a picture, in the review an agent reads.
+import { seedAgents } from "./helpers/agents";
 import { test, expect, _electron as electron, type ElectronApplication, type Page } from "@playwright/test";
 import { execFileSync, spawn } from "node:child_process";
 import { tileToken } from "@hivemind/agent-host/hooks/token";
@@ -37,6 +38,7 @@ const FIXTURE = `<!doctype html><title>Pricing</title><style>
 <div id="veil"></div>`;
 
 test.beforeAll(async () => {
+  seedAgents(process.env.XDG_CONFIG_HOME!, ["claude"]);
   execFileSync("git", ["init", "-q"], { cwd: repo });
   fs.mkdirSync(path.join(repo, ".hivemind"));
   fs.mkdirSync(home);

@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Added: agents have a hive-browser guide for signing in without a password, leaving notes, recording proof, testing an app and checking a page; Settings says when video proof needs ffmpeg.
 - Added: agents sign in on a Browser tile without seeing the password. `hive ctl browser ask` hands the page to you and the agent waits, seeing none of it; `hive ctl browser sign-in <name>` uses a sign-in you saved in Settings, after your yes on the tile, typed only on its site.
 - Fixed: a question on a Browser tile, such as a site asking for your camera, took a click only once the tile was selected.
 - Fixed: a terminal opened before the agents' browser port was ready was not pointed at the Browser tiles.
