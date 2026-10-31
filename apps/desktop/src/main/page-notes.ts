@@ -138,8 +138,12 @@ export async function elementAt(page: WebContents, fx: number, fy: number): Prom
  *  that finds none the page draws, or several, is refused. */
 export async function elementFor(page: WebContents, selector: string): Promise<PageElement> {
   const send = session(page);
-  const { result, exceptionDetails } = (await send("Runtime.evaluate", {
-    expression: `(() => { const found = document.querySelectorAll(${JSON.stringify(selector)}); return found.length === 1 ? found[0] : found.length; })()`,
+  // The selector goes in as a value, never as code.
+  const doc = (await send("Runtime.evaluate", { expression: "document" })) as { result: { objectId: string } };
+  const { result, exceptionDetails } = (await send("Runtime.callFunctionOn", {
+    objectId: doc.result.objectId,
+    functionDeclaration: "function (selector) { const found = this.querySelectorAll(selector); return found.length === 1 ? found[0] : found.length; }",
+    arguments: [{ value: selector }],
   })) as { result: { objectId?: string; value?: number }; exceptionDetails?: unknown };
   if (exceptionDetails) throw new ApiError("BAD_REQUEST", `${selector} is not a CSS selector`);
   if (!result.objectId) {

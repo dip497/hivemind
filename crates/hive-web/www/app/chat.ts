@@ -33,7 +33,7 @@ export interface Sending {
 const PHOTO_MARK = /\[Image #\d+\]\s*/g;
 const wordsOf = (text: string): string => text.replace(PHOTO_MARK, "").trim();
 /** What an agent given a photo as a path adds after the person's words: those paths and no more. */
-const ONLY_PATHS = /^(?:\S*[/\\]\S*\s*)*$/;
+const onlyPaths = (text: string): boolean => text.split(/\s+/).every((word) => !word || /[/\\]/.test(word));
 
 /** How long one task draws for. */
 const SLICE_MS = 12;
@@ -182,7 +182,7 @@ export class Chat {
   private arrived(e: Entry): void {
     const text = wordsOf(e.text ?? "");
     // With photos, the session file has their paths after the words, or the agent's own marks.
-    const mine = this.pending.find((p) => (p.text === text || (p.photos && text.startsWith(p.text) && ONLY_PATHS.test(text.slice(p.text.length).trim()))) && e.at >= p.at - SKEW_MS);
+    const mine = this.pending.find((p) => (p.text === text || (p.photos && text.startsWith(p.text) && onlyPaths(text.slice(p.text.length).trim()))) && e.at >= p.at - SKEW_MS);
     if (!mine) return;
     if (mine.photos) this.photosOf.set(e.id, mine.photos);
     mine.arrived?.();
