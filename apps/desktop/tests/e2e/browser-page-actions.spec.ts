@@ -174,6 +174,7 @@ test("an agent's download lands where it asked and it hears the file finish; onc
   expect(fs.readdirSync(downloadsFolder)).toHaveLength(count);
   await a.send("Browser.setDownloadBehavior", { behavior: "default" });
   a.close();
+  fs.rmSync(folder, { recursive: true, force: true });
 });
 
 test("printing a tile's page gives the agent a PDF", async () => {
