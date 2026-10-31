@@ -114,6 +114,12 @@ export interface Screen {
   theme: Record<string, unknown>;
 }
 
+/** What an agent asks the person on a Browser tile on the computer. */
+export type BrowserAsk = { ask: number; tile: string; by: string | null } & (
+  | { kind: "hand-over"; words: string }
+  | { kind: "sign-in"; name: string; site: string; username: string }
+);
+
 /** A note the person left on a page in a Browser tile (hive-phone's `notes::Note`). */
 export interface PageNote {
   id: string;

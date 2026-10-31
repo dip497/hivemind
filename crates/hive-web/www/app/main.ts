@@ -84,6 +84,8 @@ const app: App = {
   send: async (agent, text, photos, going) => reached().send(agent, text, photos, going),
   stop: (agent) => act(() => phone!.stop(agent), NOTICES.notStopped),
   close: (agent) => act(() => phone!.close(agent), NOTICES.closed),
+  browserAsks: (agent) => phone ? phone.browserAsks(agent).catch(() => []) : Promise.resolve([]),
+  answerBrowserAsk: (agent, ask, answer) => phone ? phone.answerBrowserAsk(agent, ask, answer).catch(() => false) : Promise.resolve(false),
   notes: (agent) => phone ? phone.notes(agent).catch(() => []) : Promise.resolve([]),
   changeNote: (agent, id, to, reason) => phone ? phone.changeNote(agent, id, to, reason) : Promise.resolve(false),
   sendNotes: (agent, ids) => phone ? phone.sendNotes(agent, ids) : Promise.resolve(false),

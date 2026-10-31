@@ -108,6 +108,8 @@ test.beforeAll(async () => {
   await expect.poll(() => page.evaluate(async (id) => {
     try { await window.hive.browserCdp(id, "Runtime.evaluate", { expression: "1" }); return true; } catch { return false; }
   }, tileId), { timeout: 25_000 }).toBe(true);
+  // This suite's connections name no agent: a tile shared with every agent is what they reach.
+  await page.evaluate((id) => window.hive.settingsSet("agentBrowser.tiles", { [id]: "all" }), tileId);
 });
 test.afterAll(async () => {
   await app?.close();

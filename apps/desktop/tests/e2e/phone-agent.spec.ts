@@ -52,6 +52,8 @@ const app = {
   },
   stop: async (a) => (window.calls.push(["stop", a.tile]), !window.stopFails),
   close: async (a) => (window.calls.push(["close", a.tile]), true),
+  browserAsks: async () => window.asks ?? [],
+  answerBrowserAsk: async (a, ask, to) => (window.calls.push(["answerBrowserAsk", ask, to]), window.asks = [], true),
   notes: async (a) => (window.calls.push(["notes", a.workspace]), window.notes ?? []),
   changeNote: async (a, id, to, reason) => (window.calls.push(["changeNote", id, to, reason ?? null]), true),
   sendNotes: async (a, ids) => (window.calls.push(["sendNotes", a.tile, ids]), true),
@@ -731,6 +733,20 @@ test("a permission names its tool in sans and shows its command in mono on a pan
   expect(allow!.y).toBeLessThan(deny!.y);
   await card.locator("[data-answer=allow]").click();
   await expect.poll(() => page.evaluate(() => (window as unknown as { calls: unknown[][] }).calls.filter((c) => c[0] === "answer"))).toEqual([["answer", "t1", { allow: true }]]);
+});
+
+test("a question on a Browser tile is answered from the agent's screen", async () => {
+  const page = await screen();
+  await page.evaluate(() => {
+    (window as unknown as { asks: object[] }).asks = [{ ask: 7, tile: "b1", by: "Claude", kind: "sign-in", name: "github", site: "https://github.com", username: "me@example.com" }];
+  });
+  await open(page, "t1");
+  await show(page, overview(agent("t1", "Claude")));
+  const card = page.locator("[data-browser-asks]");
+  await expect(card).toContainText("wants to sign in to https://github.com as me@example.com");
+  await card.locator('[data-browser-ask-answer="yes"]').click();
+  await expect.poll(() => page.evaluate(() => (window as unknown as { calls: unknown[][] }).calls.filter((c) => c[0] === "answerBrowserAsk"))).toEqual([["answerBrowserAsk", 7, "yes"]]);
+  await expect(card).toBeHidden();
 });
 
 test("the notes left on pages in the agent's workspace: open ones sent to it, each done, dismissed with a reason, or reopened", async () => {

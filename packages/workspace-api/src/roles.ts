@@ -101,8 +101,6 @@ const LEAST: Record<string, Role> = {
   "agent.sessions": "view",
   "agent.commands": "view",
   "tool.open": "edit",
-  "browser.asks": "agents",
-  "browser.answer": "agents",
   "agent.close": "agents",
   "agent.sleep": "agents",
   "agent.wake": "agents",

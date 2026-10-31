@@ -12,6 +12,9 @@ import { TerminalView } from "./terminal.js";
 import type { Agent, Overview, PageNote, SlashCommand } from "./types.js";
 import { NOTICES, ago, elapsed, kindLabel, stateLabel, where } from "./words.js";
 
+/** How often an open agent screen asks what waits on the person on Browser tiles. */
+const ASKS_EVERY_MS = 5000;
+
 export class AgentScreen {
   readonly el = h("section", { class: "screen agent-screen", "data-screen": "agent" });
   private readonly title = h("h1", {});
@@ -43,6 +46,10 @@ export class AgentScreen {
   private readonly menu = h("div", { class: "card menu", role: "menu", hidden: true });
   /** The notes left on pages in its workspace: what each says and where it stands, to send to it. */
   private readonly notes = h("div", { class: "card notes-card", hidden: true, "data-page-notes": "" });
+  /** What agents ask on Browser tiles on its computer, asked again while this screen is open. */
+  private readonly browserAsks = h("div", { class: "card", hidden: true, "data-browser-asks": "" });
+  private asksTimer: ReturnType<typeof setInterval> | null = null;
+  private asksSeen = "";
   /** Whether its terminal shows, rather than its chat. */
   private terminal = false;
   private tile: string | null = null;
@@ -84,7 +91,32 @@ export class AgentScreen {
     this.message = message.querySelector("textarea")!;
     this.message.addEventListener("input", () => void this.suggest());
     this.composing = message;
-    this.dock.append(this.newestSlot, this.closing.el, this.waits, this.working, this.problem, this.suggested, message);
+    this.dock.append(this.newestSlot, this.closing.el, this.browserAsks, this.waits, this.working, this.problem, this.suggested, message);
+  }
+
+  /** What agents ask the person on Browser tiles there, each with its answers. */
+  private async showBrowserAsks(): Promise<void> {
+    const a = this.agent;
+    if (!a) return;
+    const asks = await this.app.browserAsks(a);
+    const seen = JSON.stringify(asks.map((q) => q.ask));
+    if (seen === this.asksSeen) return;
+    this.asksSeen = seen;
+    const say = (ask: number, to: "yes" | "always" | "no" | "done") => void this.app.answerBrowserAsk(a, ask, to).then(() => this.showBrowserAsks());
+    const answer = (ask: number, label: string, to: "yes" | "always" | "no" | "done", primary = false) => {
+      const b = h("button", { type: "button", "data-browser-ask-answer": to, ...(primary ? { class: "primary" } : {}) }, label);
+      b.addEventListener("click", () => say(ask, to));
+      return b;
+    };
+    this.browserAsks.hidden = asks.length === 0;
+    this.browserAsks.replaceChildren(...asks.map((q) => {
+      const who = q.by ?? "An agent";
+      return q.kind === "sign-in"
+        ? h("div", { "data-browser-ask": q.ask }, h("p", {}, `${who} wants to sign in to ${q.site} as ${q.username}. It won't see the password.`),
+            h("div", { class: "note-actions" }, answer(q.ask, "Sign in once", "yes", true), answer(q.ask, "Always on this site", "always"), answer(q.ask, "No", "no")))
+        : h("div", { "data-browser-ask": q.ask }, h("p", {}, `${who}: ${q.words} On ${this.app.computer()}, in a Browser tile. It can't see the page until you're done.`),
+            h("div", { class: "note-actions" }, answer(q.ask, "Done", "done", true), answer(q.ask, "Not now", "no")));
+    }));
   }
 
   /** The workspace's notes on pages, asked of the computer again: open ones can be sent to the agent,
@@ -204,6 +236,10 @@ export class AgentScreen {
     this.closing.el.hidden = true;
     this.unfollow?.();
     this.unfollow = null;
+    if (this.asksTimer) clearInterval(this.asksTimer);
+    this.asksTimer = null;
+    this.asksSeen = "";
+    this.browserAsks.hidden = true;
     this.term.unwatch();
     this.tile = null;
     this.showWorking();
@@ -232,6 +268,11 @@ export class AgentScreen {
     if (this.message.placeholder !== hint) {
       this.message.placeholder = hint;
       this.message.setAttribute("aria-label", hint);
+    }
+    // A question comes without notice: asked while this screen is open, and no longer.
+    if (!this.asksTimer) {
+      this.asksTimer = setInterval(() => void this.showBrowserAsks(), ASKS_EVERY_MS);
+      void this.showBrowserAsks();
     }
     if (!this.unfollow && this.chat) {
       const chat = this.chat;

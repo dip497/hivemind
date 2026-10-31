@@ -9,7 +9,7 @@ use hive_phone::{
     failure::{Failure, Lost},
     home, homes,
     identity::DeviceCertificate,
-    markdown, network, notes, pairing, person,
+    browser_asks, markdown, network, notes, pairing, person,
     screen::{Screen, FIRST_HISTORY},
     views,
     workspace::{self, Answer, Input, Reply, Sent, Watched},
@@ -578,6 +578,18 @@ impl Host {
             Some(sent) => to_js(&serde_json::to_value(sent).map_err(err)?),
             None => Ok(JsValue::NULL),
         }
+    }
+
+    /// The questions waiting on the person on Browser tiles on this computer.
+    #[wasm_bindgen(js_name = browserAsks)]
+    pub async fn browser_asks(&self, workspace: String) -> Result<JsValue, JsError> {
+        to_js(&browser_asks::asks(&self.connection, &workspace).await.map_err(err)?)
+    }
+
+    /// The person's answer to one of them: `yes`, `always`, `no` or `done`.
+    #[wasm_bindgen(js_name = answerBrowserAsk)]
+    pub async fn answer_browser_ask(&self, workspace: String, ask: f64, answer: String) -> Result<bool, JsError> {
+        browser_asks::answer(&self.connection, &workspace, ask as u64, &answer).await.map_err(err)
     }
 
     /// The notes on pages kept in `repo` of `workspace`: `[{id, body, status, what, url, summary?}]`.

@@ -7,7 +7,7 @@ import init, { Device, type Host, Homes, Term, type ViewSession, connectWith, de
 import type { Filter } from "./home.js";
 import type { Account, Computer } from "./accounts.js";
 import { deviceKey, get } from "./store.js";
-import type { Agent, Folders, Held, Offered, Others, Overview, PageNote, Paired, Photo, Piece, Places, Reply, Screen, Sent, Shown, SlashCommand, Start, Unfolded, ViewFile } from "./types.js";
+import type { Agent, BrowserAsk, Folders, Held, Offered, Others, Overview, PageNote, Paired, Photo, Piece, Places, Reply, Screen, Sent, Shown, SlashCommand, Start, Unfolded, ViewFile } from "./types.js";
 import { message } from "./words.js";
 
 /** What connecting shows, step by step (pair.ts). */
@@ -361,6 +361,14 @@ export class Phone {
   private async repoOf(agent: Agent): Promise<string | null> {
     const held = (await this.on(agent.device).workspaces()) as Held[];
     return held.find((w) => w.workspace === agent.workspace)?.repo ?? null;
+  }
+
+  browserAsks(agent: Agent): Promise<BrowserAsk[]> {
+    return this.on(agent.device).browserAsks(agent.workspace) as Promise<BrowserAsk[]>;
+  }
+
+  answerBrowserAsk(agent: Agent, ask: number, answer: "yes" | "always" | "no" | "done"): Promise<boolean> {
+    return this.on(agent.device).answerBrowserAsk(agent.workspace, ask, answer);
   }
 
   async notes(agent: Agent): Promise<PageNote[]> {
