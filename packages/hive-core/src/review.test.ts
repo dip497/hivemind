@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import {
   addComment, dismissComment, listComments, markSeen, normalizeComments, readComments, reopenComment,
-  replyTo, resolveComment, reviewPath, reviewRoot, statusOf, writeComments,
+  replyTo, resolveComment, reviewPath, reviewRoot, statusOf, writeComments, writePicture,
 } from "./review.js";
 
 const root = async () => fs.mkdtemp(path.join(os.tmpdir(), "hm-review-"));
