@@ -10,6 +10,7 @@ import { SiteButton } from "./browser-site";
 import { siteOf } from "../../shared/site";
 import { keyLabel } from "./shortcut";
 import { WatchedPage } from "./WatchedPage";
+import { usePageAnnotate } from "./browser-notes";
 
 interface Props {
   tileId: string;
@@ -18,6 +19,8 @@ interface Props {
   frameId?: string | null;
   /** Initial URL for the first tab. */
   url?: string;
+  /** The workspace its page's notes are kept in. */
+  repoPath: string;
   /** Tile selection — the wrapper's `tile-locked` class gates pointer-events
    *  when false so the wheel pans the canvas (matches TerminalTile). */
   selected?: boolean;
@@ -127,10 +130,10 @@ function TabView({
 /** A page: in the app window, a web view on the canvas; where there is none (a browser tab the
  *  app serves), that same page, watched and used from there. */
 export function BrowserTile(props: Props) {
-  return window.hive.browserRegister ? <WebView {...props} /> : <WatchedPage tileId={props.tileId} url={props.url} onClose={props.onClose} />;
+  return window.hive.browserRegister ? <WebView {...props} /> : <WatchedPage tileId={props.tileId} url={props.url} repoPath={props.repoPath} onClose={props.onClose} />;
 }
 
-function WebView({ tileId, frameId, url, selected, openReq, onClose, pinned, onTogglePin }: Props) {
+function WebView({ tileId, frameId, url, repoPath, selected, openReq, onClose, pinned, onTogglePin }: Props) {
   const seq = useRef(1);
   const initialUrls = useRef<Record<string, string>>({ t0: url ?? DEFAULT_URL });
   const [tabs, setTabs] = useState<TabMeta[]>(() => [
@@ -167,6 +170,14 @@ function WebView({ tileId, frameId, url, selected, openReq, onClose, pinned, onT
 
   const active = tabs.find((t) => t.id === activeId);
   const activeWv = () => wvMap.current.get(activeId) ?? null;
+  // Each finished load of the active tab is a new document, which has no pins yet.
+  const [loads, setLoads] = useState(0);
+  const wasLoading = useRef(false);
+  useEffect(() => {
+    if (wasLoading.current && active && !active.loading) setLoads((n) => n + 1);
+    wasLoading.current = !!active?.loading;
+  }, [active?.loading, active]);
+  const notes = usePageAnnotate({ tileId, repoPath, url: active?.url, loads });
 
   // Point the main-process CDP bridge at the ACTIVE tab's guest, so an agent
   // always drives the visible page. Re-registered on tab switch.
@@ -391,6 +402,7 @@ function WebView({ tileId, frameId, url, selected, openReq, onClose, pinned, onT
           placeholder="Search or enter address"
           title={active?.title}
         />
+        {notes.button}
         <Button variant="ghost" size="icon-2xs" className="nodrag" onClick={() => setFindOpen((v) => !v)} aria-label="find" title={`Find in page (${keyLabel("mod+f")})`}><Search /></Button>
         <Button variant="ghost" size="icon-2xs" className="nodrag" onClick={toggleDevtools} aria-label="devtools" title="Toggle DevTools"><Wrench /></Button>
         {/* Visible CDP proof — runs the same bridge an agent uses against the visible tab. */}
@@ -414,6 +426,7 @@ function WebView({ tileId, frameId, url, selected, openReq, onClose, pinned, onT
         )}
       </div>
 
+      {notes.bar}
       {findOpen && (
         <div className="h-8 flex items-center gap-2 px-2 bg-[var(--color-bg4)] border-b border-[var(--color-line)]">
           <Input
@@ -439,6 +452,7 @@ function WebView({ tileId, frameId, url, selected, openReq, onClose, pinned, onT
           otherwise scroll the box by a few pixels between a press and its release. */}
       <div ref={guestsRef} className="flex-1 bg-white relative overflow-clip">
         {ask && <BrowserAsk ask={ask} answer={answer} />}
+        {notes.layer}
         <div
           className="absolute left-0 top-0"
           style={{

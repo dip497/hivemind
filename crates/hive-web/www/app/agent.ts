@@ -8,7 +8,7 @@ import { Chat } from "./chat.js";
 import { Ask, type Composer, type Picked, composer, h, icon, iconButton, say } from "./dom.js";
 import { PHOTOS_MAX, photoOf } from "./photos.js";
 import { TerminalView } from "./terminal.js";
-import type { Agent, Overview, SlashCommand } from "./types.js";
+import type { Agent, Overview, PageNote, SlashCommand } from "./types.js";
 import { NOTICES, ago, elapsed, kindLabel, stateLabel, where } from "./words.js";
 
 export class AgentScreen {
@@ -40,6 +40,8 @@ export class AgentScreen {
   private readonly flip = iconButton("agents", "Terminal", () => this.showTerminal(!this.terminal), { "data-view-toggle": "" });
   /** What the ⋯ holds. */
   private readonly menu = h("div", { class: "card menu", role: "menu", hidden: true });
+  /** The notes left on pages in its workspace: what each says and where it stands, to send to it. */
+  private readonly notes = h("div", { class: "card notes-card", hidden: true, "data-page-notes": "" });
   /** Whether its terminal shows, rather than its chat. */
   private terminal = false;
   private tile: string | null = null;
@@ -60,11 +62,17 @@ export class AgentScreen {
       this.menu.hidden = true;
       if (this.agent) this.closing.ask(`Close ${this.agent.agent}? It stops, and its tile closes on ${app.computer()}.`);
     });
-    this.menu.append(close);
+    const notes = h("button", { type: "button", role: "menuitem", "data-open-notes": "" }, "Notes on pages");
+    notes.addEventListener("click", () => {
+      this.menu.hidden = true;
+      void this.showNotes();
+    });
+    this.menu.append(notes, close);
     const more = iconButton("more", "More", () => (this.menu.hidden = !this.menu.hidden), { "data-more": "" });
     this.el.addEventListener("click", () => (this.menu.hidden = true));
     this.el.append(
       h("header", { class: "backbar" }, back, h("div", { class: "what" }, this.title, h("p", { class: "sub" }, this.dot, this.sub)), this.flip, more, this.menu),
+      this.notes,
       this.gone,
       this.body,
       this.dock);
@@ -74,6 +82,46 @@ export class AgentScreen {
     this.message.addEventListener("input", () => void this.suggest());
     this.composing = message;
     this.dock.append(this.newestSlot, this.closing.el, this.waits, this.working, this.problem, this.suggested, message);
+  }
+
+  /** The workspace's notes on pages, asked of the computer again: open ones can be sent to the agent,
+   *  and each done, dismissed with a reason, or reopened. */
+  private async showNotes(): Promise<void> {
+    const a = this.agent;
+    if (!a) return;
+    const list = await this.app.notes(a).catch((): PageNote[] => []);
+    const open = list.filter((n) => n.status === "open" || n.status === "seen");
+    const shut = h("button", { type: "button", "data-close-notes": "" }, "Close");
+    shut.addEventListener("click", () => (this.notes.hidden = true));
+    const send = h("button", { type: "button", class: "primary", "data-send-notes": "", disabled: !open.length },
+      open.length ? `Send ${open.length} to ${a.agent}` : "Nothing open to send");
+    const told = h("p", { class: "quiet", role: "status", "data-notes-told": "" });
+    send.addEventListener("click", () => void this.app.sendNotes(a, open.map((n) => n.id)).then((ok) => say(told, ok ? `Sent to ${a.agent}.` : "It did not take them.")));
+    const items = list.map((n) => {
+      const act = (to: "done" | "dismiss" | "reopen", reason?: string) =>
+        void this.app.changeNote(a, n.id, to, reason).then((ok) => (ok ? this.showNotes() : say(told, "The computer did not take it.")));
+      const why = h("input", { type: "text", placeholder: "Why not?", hidden: true, "data-note-reason": "" }) as HTMLInputElement;
+      const done = h("button", { type: "button", "data-note-done": "" }, "Done");
+      done.addEventListener("click", () => act("done"));
+      const dismiss = h("button", { type: "button", "data-note-dismiss": "" }, "Dismiss");
+      dismiss.addEventListener("click", () => {
+        if (why.hidden) { why.hidden = false; why.focus(); return; }
+        if (why.value.trim()) act("dismiss", why.value.trim());
+      });
+      const reopen = h("button", { type: "button", "data-note-reopen": "" }, "Reopen");
+      reopen.addEventListener("click", () => act("reopen"));
+      const closed = n.status === "resolved" || n.status === "dismissed";
+      return h("li", { "data-note": n.id, "data-status": n.status },
+        h("p", { class: "note-what" }, n.what, h("span", { class: "quiet" }, ` · ${n.status === "resolved" ? "done" : n.status}`)),
+        h("p", {}, n.body),
+        ...(n.summary ? [h("p", { class: "quiet" }, `↳ ${n.summary}`)] : []),
+        h("div", { class: "note-actions" }, ...(closed ? [reopen] : [done, dismiss, why])));
+    });
+    this.notes.replaceChildren(
+      h("header", { class: "notes-head" }, h("h2", {}, "Notes on pages"), shut),
+      list.length ? h("ol", { class: "notes-list" }, ...items) : h("p", { class: "quiet" }, "No notes on pages in this workspace."),
+      send, told);
+    this.notes.hidden = false;
   }
 
   /** `tile` was just started from here: until the computer lists it, it is starting, not gone. */

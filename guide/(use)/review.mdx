@@ -1,18 +1,18 @@
 ---
 title: "Review an agent's changes"
-description: "Watch an agent's edits in the Code tile, comment on a line so the agent fixes it, and approve or change an agent's plan."
+description: "Comment on an agent's changes or on a web page in a Browser tile so the agent fixes it, and approve or change an agent's plan."
 ---
 
-Read what an agent changed as it works, and send it line comments it fixes as its next task.
+Point at what should change, in an agent's diff or on a web page, and the agent fixes it as its next task.
 
 <AgentPrompt description="Paste this into your coding agent so it answers the review comments left on its work." page="review">{`
 Work through the open review comments on this project's changes in Hivemind.
 
 1. In the project folder, run \`hive review list --status open --json\`. If there are none, wait for the next one with \`hive review watch --timeout 300\`. It exits 4 when none comes in time; then tell me and stop.
-2. For each comment, read it with \`hive review show <id>\`, open the file and line it names, and make the fix.
+2. For each comment, read it with \`hive review show <id>\` and run \`hive review seen <id>\`. A comment on a diff names a file and line. A note on a page names the page, each element it points at with a CSS selector, and a picture file to open. Make the fix.
 3. Run the project's tests or build to check the fix.
 4. Reply with what you changed: \`hive review reply <id> "<what changed>"\`. Then run \`hive review resolve <id> --summary "<how it was fixed>"\`.
-5. If you disagree with a comment or cannot do it, reply saying why and leave it open.
+5. If you disagree with a comment or cannot do it, run \`hive review dismiss <id> --reason "<why>"\`. If it is a question, answer with \`hive review reply <id> "<answer>"\`.
 
 Check: \`hive review list --status open\` shows only the comments you left open. Tell me which ones and why.
 `}</AgentPrompt>
@@ -34,9 +34,41 @@ commands work with or without the app:
 hive review list --status open
 hive review show <id>
 hive review reply <id> "fixed in 3f2c1a"
+hive review seen <id>                # you are on it
 hive review resolve <id> --summary "how it was fixed"
+hive review dismiss <id> --reason "why not"
 hive review reopen <id>
 hive review watch --timeout 300     # wait for the next comment
+```
+
+## Leave notes on a web page
+
+1. In a Browser tile, open the page and press the notes button in its toolbar.
+2. Check: the pointer outlines what it is on.
+3. Click something to note it. Hold Ctrl (⌘ on a Mac) and click to gather several, then click
+   one more. Drag to note an area.
+4. Write what should change, pick **Fix**, **Change** or **Question**, and press Enter.
+5. Check: a numbered pin shows on the page, and the note is in the list under the address bar.
+6. Press **Send to an agent** and pick the agent.
+7. Check: the agent receives the open notes, with a picture of each and how to answer them.
+
+As the agent works, each pin shows where its note stands: blue is open, orange is seen, a check
+is done, and grey is dismissed. **Hold still** stops the page's animations and videos, so a moving
+thing can be clicked. Notes work the same from another computer, in the app served to a browser:
+see [Use the app in a browser tab](/browser-tab).
+
+On your phone, open an agent and choose ⋯ ▸ **Notes on pages**. It lists the notes in that agent's
+workspace. **Send** gives the open ones to that agent, and each note can be marked **Done**,
+**Dismiss**ed with a reason, or **Reopen**ed.
+
+Notes are review comments, kept with the diff's in `.hivemind/review.json`. An agent answers them
+with `hive ctl notes`:
+
+```bash
+hive ctl notes list
+hive ctl notes seen <id>
+hive ctl notes done <id> --summary "what was done"
+hive ctl notes dismiss <id> --reason "why not"
 ```
 
 ## Approve an agent's plan

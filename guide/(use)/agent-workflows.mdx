@@ -101,7 +101,16 @@ The command waits until every worker has replied. `--close` closes their tiles a
 ## Let agents use a browser and plugins
 
 - **Browser**: switch on the Browser tool, then **Agent browser control** on its page in
-  **Settings → Plugins**, and restart the app. Agents then drive the Browser tile you see.
+  **Settings → Plugins**, and restart the app. Agents then drive the Browser tiles you see with
+  [agent-browser](https://github.com/vercel-labs/agent-browser), with no setup of their own:
+  - **Each terminal already points at the tiles.** Every terminal gets its own session, which
+    starts on the Browser tile in its frame.
+  - **A new tab is a tile.** `agent-browser tab new <url>` opens a Browser tile beside the agent.
+  - **Agents see only Browser tiles,** never the Hivemind window itself.
+  - **Settings on the same page:** install or update agent-browser, turn **Use these Browser
+    tiles** off so it starts a Chrome of its own, or turn **Mark what pages say** off. The same
+    settings are `hive config set agentBrowser.useTiles false` and
+    `hive config set agentBrowser.markPageText false`.
 - **Plugins**: an agent opens a plugin and runs its commands:
 
 ```bash

@@ -30,7 +30,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { keepOnAppPage } from "./app-navigation.js";
 import { APP_PAGE_ARG } from "../shared/app-page.js";
 import { createHash } from "node:crypto";
-import { spawn } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import {
   findRoot,
   listWorkspaces,
@@ -80,6 +80,11 @@ import type { ReadScreen } from "@hivemind/agent-host/session-relay";
 import { ipcPath, upgradeCommand, windowsStartMenuShortcut } from "./platform.js";
 import { notesFor, whatsNewSinceLastRun } from "./whats-new.js";
 import { runningRelease, windowsAppFolder } from "../shared/running-release.js";
+import { keyboardCommand } from "./page-keys.js";
+import { around, elementAt, elementsIn, highlightAt, holdStill, pictureOf, showPins } from "./page-notes.js";
+import { addComment, reviewRoot, writePicture } from "@hivemind/core/review";
+import type { PageNoteDraft, PagePin } from "../shared/ipc.js";
+import { serveBrowserPort } from "./browser-port.js";
 import { driveSockPath, readOrCreateToken } from "@hivemind/agent-host/hooks/token";
 import { ApiError, isErrorCode } from "@hivemind/workspace-api/protocol";
 import { appViewsDir, handleViewProtocol, listViewPackages, startViewWatchdog, VIEW_SCHEME_PRIVILEGES, viewSdk } from "./view-packages.js";
@@ -519,9 +524,11 @@ function browserTargetsPath(): string {
   return path.join(app.getPath("userData"), "browser-targets.json");
 }
 async function writeBrowserTargets(): Promise<void> {
-  const tiles = [...browserGuests.entries()].map(([tileId, g]) => ({
-    tileId, frameId: g.frameId, url: g.url,
-  }));
+  const tiles = [...browserGuests.entries()].map(([tileId, g]) => {
+    const page = browserGuestFor(tileId);
+    const targetId = page ? pageTargets.get(page) : undefined;
+    return { tileId, frameId: g.frameId, url: g.url, ...(targetId ? { targetId } : {}) };
+  });
   const doc = {
     cdpEnabled: process.env.HIVEMIND_BROWSER_CDP === "1",
     cdpPort: process.env.HIVEMIND_BROWSER_CDP_PORT ?? null,
@@ -538,7 +545,9 @@ async function writeBrowserTargets(): Promise<void> {
 on("browser:register", (e, tileId: unknown, webContentsId: unknown, frameId: unknown, url: unknown) => {
   if (typeof tileId !== "string" || typeof webContentsId !== "number" || !browserPages.get(e.sender)?.has(webContentsId)) return;
   browserGuests.set(tileId, { webContentsId, frameId: typeof frameId === "string" ? frameId : null, url: typeof url === "string" ? url : "" });
-  void writeBrowserTargets();
+  // Its DevTools target, which the hive-browser skill binds an agent-browser session to.
+  const page = browserGuestFor(tileId);
+  void (page ? targetOf(page) : Promise.resolve(null)).then(() => writeBrowserTargets());
   void pageStreams.moved(tileId);
 }, { local: true });
 /** A page that has gone takes its tile's registration with it (the tile closed, or its tab did). */
@@ -549,6 +558,97 @@ function forgetBrowserPage(pageId: number): void {
   void writeBrowserTargets();
   for (const tileId of pageStreams.watched()) void pageStreams.moved(tileId);
 }
+
+/** Each browser page's DevTools target id, as it says once asked. */
+const pageTargets = new WeakMap<WebContents, string>();
+async function targetOf(page: WebContents): Promise<string | null> {
+  const known = pageTargets.get(page);
+  if (known) return known;
+  const attached = page.debugger.isAttached();
+  try {
+    if (!attached) page.debugger.attach("1.3");
+    const { targetInfo } = (await page.debugger.sendCommand("Target.getTargetInfo")) as { targetInfo: { targetId: string } };
+    pageTargets.set(page, targetInfo.targetId);
+    return targetInfo.targetId;
+  } catch {
+    return null;
+  } finally {
+    if (!attached && page.debugger.isAttached()) page.debugger.detach();
+  }
+}
+/** The browser tile page that is DevTools target `targetId`, if one is. */
+async function browserPageOf(targetId: string): Promise<WebContents | null> {
+  for (const tileId of browserGuests.keys()) {
+    const page = browserGuestFor(tileId);
+    if (page && (await targetOf(page)) === targetId) return page;
+  }
+  return null;
+}
+/** The agents' DevTools port (browser-port.ts), in front of Chromium's own, which listens wherever
+ *  it finds room and says where in DevToolsActivePort. */
+async function serveAgentBrowserPort(): Promise<void> {
+  const file = path.join(app.getPath("userData"), "DevToolsActivePort");
+  let chromium = 0;
+  for (let i = 0; i < 50 && !chromium; i++) {
+    chromium = Number(readFileSyncSafe(file).split("\n")[0]) || 0;
+    if (!chromium) await new Promise((r) => setTimeout(r, 100));
+  }
+  if (!chromium) throw new Error("Chromium's DevTools port did not open");
+  await serveBrowserPort(Number(process.env.HIVEMIND_BROWSER_CDP_PORT), chromium, { pageOf: browserPageOf, near: inFrameOf, open: openPageFor });
+  agentBrowserPort = true;
+}
+/** Whether the agents' port is serving: what `agent-browser` in a terminal is pointed at. */
+let agentBrowserPort = false;
+
+/** The frame `bare` is in on a board held here; null for none. */
+function frameOfTile(bare: string): string | null {
+  for (const b of heldBoards(workspaceStore())) { const f = b.core?.frameOf?.[bare]; if (f) return f; }
+  return null;
+}
+/** Whether the Browser tile showing target `targetId` is in the frame of the agent of `agentTile`. */
+function inFrameOf(agentTile: string, targetId: string): boolean {
+  const frame = frameOfTile(agentTile);
+  if (!frame) return false;
+  for (const [tileId, g] of browserGuests) {
+    const page = browserGuestFor(tileId);
+    if (page && pageTargets.get(page) === targetId) return g.frameId === frame;
+  }
+  return false;
+}
+/** A Browser tile beside the agent of `agentTile`, showing `url`: its page's target, once it shows. */
+async function openPageFor(agentTile: string, url: string): Promise<string> {
+  let scheme = "";
+  try { scheme = new URL(url).protocol; } catch { /* not an address */ }
+  if (url !== "about:blank" && scheme !== "http:" && scheme !== "https:") throw new Error("a Browser tile opens http and https pages, or about:blank");
+  const repo = heldBoards(workspaceStore()).find((b) => b.core?.tiles.some((t) => t.id === agentTile))?.repo;
+  if (!repo) throw new Error(`no tile ${agentTile} is open here to open a Browser tile beside`);
+  // Blank first, which shows at once; the page is then loaded in it, as a tab's would be.
+  const tile = await (await control.api()).openTool(agentTile, repo, "@hivemind/web/browser", { url: "about:blank" });
+  for (let waited = 0; waited < 20_000; waited += 100) {
+    const page = browserGuestFor(tile);
+    const target = page ? await targetOf(page) : null;
+    if (page && target) {
+      if (url !== "about:blank") page.loadURL(url).catch(() => { /* the page says why itself */ });
+      return target;
+    }
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  throw new Error("the Browser tile did not open in time");
+}
+
+/** What points `agent-browser` in the terminal of `bare` at the Browser tiles, in a session of its
+ *  own: the agents' port, said with the tile it is for, so a new tab opens beside it. Null when
+ *  agent browser control is off, or the person turned this off. */
+function agentBrowserEnv(bare: string): Record<string, string> | null {
+  const s = getAppSettings().agentBrowser;
+  if (!agentBrowserPort || !s.useTiles) return null;
+  return {
+    AGENT_BROWSER_CDP: `http://127.0.0.1:${process.env.HIVEMIND_BROWSER_CDP_PORT}/?tile=${encodeURIComponent(bare)}`,
+    AGENT_BROWSER_SESSION: `hivemind-${bare}`,
+    ...(s.markPageText ? { AGENT_BROWSER_CONTENT_BOUNDARIES: "1" } : {}),
+  };
+}
+const readFileSyncSafe = (file: string): string => { try { return readFileSync(file, "utf8"); } catch { return ""; } };
 
 function browserGuestFor(tileId: string): Electron.WebContents | null {
   const g = browserGuests.get(tileId);
@@ -572,6 +672,51 @@ handle("browserInput", (e, tileId: unknown, input: unknown) => {
   return pageStreams.input(tileIdOf(tileId), e.sender, done);
 });
 
+// Notes on a tile's page (page-notes.ts), from the app window or a page the app serves.
+const pageOfTile = (tileId: unknown): WebContents => {
+  const page = browserGuestFor(tileIdOf(tileId));
+  if (!page) throw new Error("this tile shows no page");
+  return page;
+};
+const fraction = (v: unknown): number => {
+  if (typeof v !== "number" || !Number.isFinite(v) || v < 0 || v > 1) throw new Error("a point is a fraction of the page, 0 to 1");
+  return v;
+};
+handle("browserPick", (_e, tileId: unknown, fx: unknown, fy: unknown) => elementAt(pageOfTile(tileId), fraction(fx), fraction(fy)));
+handle("browserPickArea", (_e, tileId: unknown, fx: unknown, fy: unknown, fw: unknown, fh: unknown) =>
+  elementsIn(pageOfTile(tileId), fraction(fx), fraction(fy), fraction(fw), fraction(fh)));
+handle("browserHighlight", (_e, tileId: unknown, point: unknown) => {
+  const p = point as { fx?: unknown; fy?: unknown } | null;
+  return highlightAt(pageOfTile(tileId), p ? { fx: fraction(p.fx), fy: fraction(p.fy) } : null);
+});
+handle("browserNote", async (_e, tileId: unknown, repoPath: unknown, note: unknown) => {
+  const page = pageOfTile(tileId);
+  const n = (note ?? {}) as Partial<PageNoteDraft>;
+  if (typeof repoPath !== "string" || !repoPath) throw new Error("a note needs the workspace it belongs to");
+  if (typeof n.body !== "string" || !n.body.trim()) throw new Error("a note needs words");
+  const elements = Array.isArray(n.elements) ? n.elements : [];
+  const boxes = n.area ? [n.area] : elements.map((el) => el.box);
+  if (!boxes.length) throw new Error("a note points at an element or an area");
+  const root = await reviewRoot(repoPath);
+  const id = `c-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+  const picture = await writePicture(root, id, await pictureOf(page, around(boxes))).catch(() => null);
+  const metrics = (await page.debugger.sendCommand("Page.getLayoutMetrics")) as { cssVisualViewport: { clientWidth: number; clientHeight: number } };
+  return addComment(root, {
+    id, body: n.body.trim(), author: "you", ...(n.intent ? { intent: n.intent } : {}),
+    page: {
+      url: page.getURL(), title: page.getTitle(),
+      viewport: { width: metrics.cssVisualViewport.clientWidth, height: metrics.cssVisualViewport.clientHeight },
+      elements, ...(n.area ? { area: n.area } : {}), ...(picture ? { picture } : {}),
+    },
+  });
+});
+handle("browserPins", (_e, tileId: unknown, pins: unknown) => {
+  if (!Array.isArray(pins) || pins.length > 500) throw new Error("pins must be a list");
+  return showPins(pageOfTile(tileId), pins as PagePin[]);
+});
+handle("browserHoldStill", (_e, tileId: unknown, still: unknown) => holdStill(pageOfTile(tileId), still === true));
+
+
 handleEffect(
   "browserCdp",
   (tileId, method) => ({ target: named(tileId), detail: named(method) }),
@@ -591,6 +736,7 @@ handleEffect(
         throw err;
       }
     }
+    if (await keyboardCommand(guest, method, params ?? {})) return {};
     return await guest.debugger.sendCommand(method, params ?? {});
   }), { local: true },
 );
@@ -638,6 +784,36 @@ handle("relaunchApp", () => {
   }
   stopServices();
   app.exit(0);
+}, { local: true });
+
+// ── agent-browser, the CLI agents drive the Browser tiles with ─────────────
+/** The agent-browser on this computer's PATH: its version, or null when there is none. */
+function agentBrowserVersion(): Promise<string | null> {
+  return new Promise((resolve) => execFile("agent-browser", ["--version"], { timeout: 10_000, env: process.env }, (err, out) => {
+    resolve(err ? null : /(\d+\.\d+\.\d+)/.exec(String(out))?.[1] ?? null);
+  }));
+}
+/** The newest agent-browser on npm; null when it cannot be asked, or update checks are off. */
+async function agentBrowserLatest(): Promise<string | null> {
+  if (!getAppSettings().network.updateCheck) return null;
+  try {
+    const r = await net.fetch("https://registry.npmjs.org/agent-browser/latest", { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(8000) });
+    const v = r.ok ? ((await r.json()) as { version?: unknown }).version : null;
+    return typeof v === "string" && /^\d+\.\d+\.\d+$/.test(v) ? v : null;
+  } catch { return null; }
+}
+handle("agentBrowserStatus", async () => {
+  const [installed, latest] = await Promise.all([agentBrowserVersion(), agentBrowserLatest()]);
+  return { installed, latest };
+}, { local: true });
+// Its own `upgrade` knows how it was installed (npm, Homebrew, Cargo); a first install is npm's.
+handleEffect("agentBrowserInstall", () => ({}), async () => {
+  const had = await agentBrowserVersion();
+  const [file, args] = had ? ["agent-browser", ["upgrade"]] : [process.platform === "win32" ? "npm.cmd" : "npm", ["install", "-g", "agent-browser@latest"]];
+  const said = await new Promise<{ ok: boolean; out: string }>((resolve) => execFile(file, args, { timeout: 300_000, env: process.env, maxBuffer: 4 * 1024 * 1024, shell: process.platform === "win32" }, (err, stdout, stderr) => {
+    resolve({ ok: !err, out: `${stdout}${stderr}`.trim().split("\n").slice(-4).join("\n") });
+  }));
+  return { ...said, version: await agentBrowserVersion() };
 }, { local: true });
 
 // ── app version + self-update ─────────────────────────────────────────────
@@ -1305,6 +1481,9 @@ async function startSession(opts: StartOpts, out: SessionOutput): Promise<{ pid:
   // the pty id; the policy is keyed by the bare id.
   const supSpec = control.supervise.get(toBareId(opts.tileId));
   if (supSpec) opts = { ...opts, env: { ...(opts.env ?? {}), HIVE_SUPERVISE: supSpec } };
+  // agent-browser here drives the Browser tiles; a terminal on another machine cannot reach the port.
+  const browsing = isRemote(opts.cwd) ? null : agentBrowserEnv(toBareId(opts.tileId));
+  if (browsing) opts = { ...opts, env: { ...browsing, ...(opts.env ?? {}) } };
   // An initial ▶ Work prompt rides the spawn env (crosses the wire + persists),
   // to be appended as claude's positional argv at exec (applyInitialPrompt) —
   // this is the auto-submitting path that replaced typing into the booting TUI.
@@ -1574,7 +1753,9 @@ async function writeSettings(patch: Record<string, unknown>): Promise<void> {
 // off by default and bound to 127.0.0.1.
 if (process.env.HIVEMIND_BROWSER_CDP === "1" || readSettings().browserCdp === true) {
   const port = process.env.HIVEMIND_BROWSER_CDP_PORT || "9333";
-  app.commandLine.appendSwitch("remote-debugging-port", port);
+  // Agents use `port`, served once the app is ready (serveAgentBrowserPort); Chromium's own is
+  // wherever there is room.
+  app.commandLine.appendSwitch("remote-debugging-port", "0");
   app.commandLine.appendSwitch("remote-debugging-address", "127.0.0.1");
   process.env.HIVEMIND_BROWSER_CDP = "1";
   process.env.HIVEMIND_BROWSER_CDP_PORT = port;
@@ -1652,6 +1833,11 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
       pushAppError(`Couldn't refresh the PTY daemon: ${(e as Error).message ?? "unknown error"}`, "pty-daemon");
     });
     refreshWindowsStartMenuShortcut();
+    if (process.env.HIVEMIND_BROWSER_CDP === "1") {
+      serveAgentBrowserPort().catch((e: unknown) => {
+        pushAppError(`Agent browser control could not start on port ${process.env.HIVEMIND_BROWSER_CDP_PORT}: ${(e as Error).message ?? e}`, "browser");
+      });
+    }
     handleViewProtocol();
     handleToolProtocol();
     installSettingsIpc(broadcast);

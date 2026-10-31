@@ -582,3 +582,16 @@ button { cursor: pointer; }
   font: 14px/20px var(--sans); box-shadow: var(--float);
 }
 .page-newer-reload { border: 0; border-radius: 10px; padding: 6px 12px; background: var(--accent); color: var(--on-text); font: 500 14px/20px var(--sans); }
+
+/* An agent's workspace's notes on pages, over its chat. */
+.notes-card { position: absolute; inset: 56px 8px auto 8px; max-height: 70%; overflow: auto; z-index: 5; display: flex; flex-direction: column; gap: 8px; padding: 12px; }
+.notes-card[hidden] { display: none; }
+.notes-head { display: flex; align-items: center; justify-content: space-between; }
+.notes-head h2 { font-size: 16px; margin: 0; }
+.notes-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.notes-list li { display: flex; flex-direction: column; gap: 4px; border-bottom: 1px solid var(--line, rgba(127,127,127,.25)); padding-bottom: 8px; }
+.notes-list p { margin: 0; }
+.note-what { font-weight: 600; }
+.note-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.note-actions input { flex: 1; min-width: 120px; }
+

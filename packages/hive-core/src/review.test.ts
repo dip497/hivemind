@@ -1,10 +1,11 @@
 import { describe, expect, test } from "bun:test";
+import { execFileSync } from "node:child_process";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import {
-  addComment, listComments, normalizeComments, readComments, reopenComment,
-  replyTo, resolveComment, reviewPath, reviewRoot, writeComments,
+  addComment, dismissComment, listComments, markSeen, normalizeComments, readComments, reopenComment,
+  replyTo, resolveComment, reviewPath, reviewRoot, statusOf, writeComments, writePicture,
 } from "./review.js";
 
 const root = async () => fs.mkdtemp(path.join(os.tmpdir(), "hm-review-"));
@@ -14,6 +15,41 @@ const seed = {
 };
 
 describe("review comments", () => {
+  test("a note's picture stays out of the project's git history", async () => {
+    const dir = await root();
+    execFileSync("git", ["init", "-q"], { cwd: dir });
+    const reviews = path.join(dir, ".hivemind");
+    await writePicture(reviews, "c1", new Uint8Array([1, 2, 3]));
+    const untracked = execFileSync("git", ["status", "--porcelain", "--untracked-files=all"], { cwd: dir, encoding: "utf8" });
+    expect(untracked).not.toContain("c1.png");
+    expect(await fs.readFile(path.join(reviews, "pages", "c1.png"))).toHaveLength(3);
+  });
+
+  test("a link a cloned project committed is replaced, and what it points at is left alone", async () => {
+    const outside = path.join(await root(), "precious");
+    await fs.writeFile(outside, "keep");
+    const reviews = await root();
+    await fs.mkdir(path.join(reviews, "pages"));
+    await fs.symlink(outside, path.join(reviews, "pages", ".gitignore"));
+    await fs.symlink(outside, path.join(reviews, "pages", "c1.png"));
+    await fs.symlink(outside, reviewPath(reviews));
+
+    await writePicture(reviews, "c1", new Uint8Array([1, 2, 3]));
+    await writeComments(reviews, []);
+
+    expect(await fs.readFile(outside, "utf8")).toBe("keep");
+    expect((await fs.lstat(path.join(reviews, "pages", "c1.png"))).isFile()).toBe(true);
+    expect((await fs.lstat(reviewPath(reviews))).isFile()).toBe(true);
+  });
+
+  test("a pictures folder that is a link is refused, and nothing lands where it points", async () => {
+    const elsewhere = await root();
+    const reviews = await root();
+    await fs.symlink(elsewhere, path.join(reviews, "pages"));
+    await expect(writePicture(reviews, "c1", new Uint8Array([1]))).rejects.toThrow("not a folder");
+    expect(await fs.readdir(elsewhere)).toEqual([]);
+  });
+
   test("a comment round-trips through the file the CLI reads", async () => {
     const r = await root();
     const added = await addComment(r, seed);
@@ -93,5 +129,52 @@ describe("review comments", () => {
     const r = await root();
     await writeComments(r, normalizeComments([{ id: "c-1", file: "a.ts", body: "b" }]));
     expect((await fs.readdir(r)).filter((f) => f.endsWith(".tmp"))).toEqual([]);
+  });
+
+  const pageNote = {
+    page: {
+      url: "http://localhost:3000/pricing",
+      viewport: { width: 1280, height: 800 },
+      elements: [{ name: 'button "Start trial"', selector: "main > .hero > button", text: "Start trial", box: { x: 10, y: 20, width: 120, height: 40 } }],
+      picture: "c-1.png",
+    },
+    body: "too small on phones", author: "you", intent: "fix" as const,
+  };
+
+  test("a note on a page round-trips with what it points at, and lists apart from the diff's", async () => {
+    const r = await root();
+    await addComment(r, seed);
+    const note = await addComment(r, pageNote);
+    const back = (await readComments(r)).find((c) => c.id === note.id)!;
+    expect(back).toMatchObject({ body: "too small on phones", intent: "fix", page: { url: "http://localhost:3000/pricing", picture: "c-1.png" } });
+    expect((await listComments(r, { on: "page" })).map((c) => c.id)).toEqual([note.id]);
+    expect(await listComments(r, { on: "diff" })).toHaveLength(1);
+    expect(await listComments(r, { file: "src/a.ts" })).toHaveLength(1);
+  });
+
+  test("a comment moves open → seen → resolved, or is dismissed with a reason, and only a closed one reopens", async () => {
+    const r = await root();
+    const a = await addComment(r, pageNote);
+    expect(statusOf((await markSeen(r, a.id))!)).toBe("seen");
+    expect(statusOf((await resolveComment(r, a.id, "bigger now"))!)).toBe("resolved");
+    await expect(markSeen(r, a.id)).rejects.toThrow("resolved");
+    await expect(resolveComment(r, a.id)).rejects.toThrow("reopen it first");
+    expect(statusOf((await reopenComment(r, a.id))!)).toBe("open");
+    await expect(reopenComment(r, a.id)).rejects.toThrow("only a resolved or dismissed comment");
+    await expect(dismissComment(r, a.id, "  ")).rejects.toThrow("needs a reason");
+    const dismissed = (await dismissComment(r, a.id, "works as intended"))!;
+    expect(statusOf(dismissed)).toBe("dismissed");
+    expect(dismissed.summary).toBe("works as intended");
+    // Dismissed is closed: it lists with the resolved ones.
+    expect((await listComments(r, { status: "resolved" })).map((c) => c.id)).toEqual([a.id]);
+  });
+
+  test("a page note's picture is a file name, never a path", () => {
+    const [kept, escaped] = normalizeComments([
+      { id: "c-1", ...pageNote },
+      { id: "c-2", ...pageNote, page: { ...pageNote.page, picture: "../../.ssh/id_rsa.png" } },
+    ]);
+    expect(kept!.page.picture).toBe("c-1.png");
+    expect(escaped!.page.picture).toBeUndefined();
   });
 });

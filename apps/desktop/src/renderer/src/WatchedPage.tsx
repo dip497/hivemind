@@ -3,6 +3,7 @@ import { ArrowLeft, ArrowRight, RotateCw, X as XIcon, GripVertical, ExternalLink
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
 import type { PageFrame, PageInput } from "../../shared/page-input";
+import { usePageAnnotate } from "./browser-notes";
 
 /** The modifier bits a page's input names: Alt 1, Ctrl 2, Meta 4, Shift 8. */
 const modifiersOf = (e: { altKey: boolean; ctrlKey: boolean; metaKey: boolean; shiftKey: boolean }) =>
@@ -11,7 +12,7 @@ const BUTTONS = ["left", "middle", "right"] as const;
 
 /** A browser tile's page where there is no web view (a browser tab the app serves): the page the
  *  app window holds, the same one its agent drives, shown as it changes and used from here. */
-export function WatchedPage({ tileId, url, onClose }: { tileId: string; url?: string; onClose?: () => void }) {
+export function WatchedPage({ tileId, url, repoPath, onClose }: { tileId: string; url?: string; repoPath: string; onClose?: () => void }) {
   const [frame, setFrame] = useState<PageFrame | null>(null);
   const [shown, setShown] = useState(true);
   const [problem, setProblem] = useState<string | null>(null);
@@ -49,6 +50,24 @@ export function WatchedPage({ tileId, url, onClose }: { tileId: string; url?: st
     lastSrc.current = src;
   }, [frame]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (frame && !editing.current) setAddress(frame.url); }, [frame?.url]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Notes on the page, made here as in the app window: the layer lies over the picture as drawn.
+  const [loads, setLoads] = useState(0);
+  useEffect(() => { setLoads((n) => n + 1); }, [frame?.url]);
+  const notes = usePageAnnotate({ tileId, repoPath, url: frame?.url, loads });
+  // Measured when the box changes size or a picture of another size arrives, not per picture.
+  const area = useRef<HTMLDivElement>(null);
+  const [natural, setNatural] = useState<{ width: number; height: number } | null>(null);
+  const [room, setRoom] = useState<{ width: number; height: number } | null>(null);
+  useEffect(() => {
+    const box = area.current;
+    if (!box) return;
+    const seen = new ResizeObserver(() => setRoom({ width: box.clientWidth, height: box.clientHeight }));
+    seen.observe(box);
+    return () => seen.disconnect();
+  }, []);
+  const scale = natural && room ? Math.min(room.width / natural.width, room.height / natural.height) : 0;
+  const drawn = scale ? { width: natural!.width * scale, height: natural!.height * scale } : null;
 
   const send = (input: PageInput) => { void window.hive.browserInput(tileId, input).catch(() => {}); };
   // Where on the page: the picture is drawn whole in its box, from the top left, at one scale.
@@ -102,8 +121,10 @@ export function WatchedPage({ tileId, url, onClose }: { tileId: string; url?: st
         <a className="nodrag inline-flex" href={frame?.url ?? url} target="_blank" rel="noopener noreferrer" title="Open in a tab of this browser" aria-label="open in a tab of this browser">
           <Button variant="ghost" size="icon-2xs" tabIndex={-1}><ExternalLink /></Button>
         </a>
+        {notes.button}
         {onClose && <Button variant="ghost" size="icon-2xs" className="nodrag" onClick={onClose} aria-label="close tile" title="Close tile"><XIcon /></Button>}
       </div>
+      {notes.bar}
       <div
         className="nodrag nowheel nopan relative flex-1 min-h-0 bg-[var(--color-bg)] overflow-hidden"
         onMouseDown={(e) => { keys.current?.focus({ preventScroll: true }); e.preventDefault(); mouse("mousePressed", e); }}
@@ -120,14 +141,20 @@ export function WatchedPage({ tileId, url, onClose }: { tileId: string; url?: st
         }}
         onContextMenu={(e) => e.preventDefault()}
         data-watched-page-picture
+        ref={area}
       >
+        {notes.layer && drawn && <div className="absolute left-0 top-0" style={drawn}>{notes.layer}</div>}
         {src && (
           <img
             ref={picture}
             src={src}
             alt={frame?.title ?? ""}
             draggable={false}
-            onLoad={() => window.hive.browserFrameShown(tileId)}
+            onLoad={(e) => {
+              window.hive.browserFrameShown(tileId);
+              const { naturalWidth: width, naturalHeight: height } = e.currentTarget;
+              setNatural((n) => (n && n.width === width && n.height === height ? n : { width, height }));
+            }}
             className="absolute inset-0 h-full w-full object-contain object-left-top select-none"
           />
         )}

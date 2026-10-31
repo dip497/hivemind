@@ -112,6 +112,18 @@ export interface Screen {
   theme: Record<string, unknown>;
 }
 
+/** A note the person left on a page in a Browser tile (hive-phone's `notes::Note`). */
+export interface PageNote {
+  id: string;
+  body: string;
+  status: "open" | "seen" | "resolved" | "dismissed";
+  /** What it points at: an element's name, or "Area". */
+  what: string;
+  url: string;
+  /** What was done, or why it was dismissed. */
+  summary?: string;
+}
+
 /** A workspace the computer holds. */
 export interface Held {
   workspace: string;

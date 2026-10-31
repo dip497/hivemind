@@ -10,7 +10,7 @@ import type { ViewScreen } from "@hivemind/workspace-api/views";
 import type { StartImage } from "@hivemind/workspace-api/agents";
 import type { NotificationSettings } from "./notification-settings.js";
 import type { RecentSound, SoundMoment, SoundResult } from "@hivemind/workspace-api/notifications";
-import type { ReviewComment } from "@hivemind/core/review";
+import type { PageBox, PageElement, ReviewComment, ReviewIntent, ReviewStatus } from "@hivemind/core/review-shape";
 import type { MachineKind } from "@hivemind/core";
 import type { LegacyLayout, WorkspaceChange } from "@hivemind/workspace-host/layout";
 import type { Participant, PresenceState } from "@hivemind/workspace-host/presence";
@@ -20,6 +20,17 @@ import type { ClientGrant, NewGrant } from "@hivemind/workspace-api/grants";
 export type { Grant };
 
 /** One of the person's other devices, as Settings → Connect lists it (R14, spec/pairing.md). */
+/** A note on a page before it is kept: what it says and points at. */
+export interface PageNoteDraft {
+  body: string;
+  intent?: ReviewIntent;
+  elements: PageElement[];
+  area?: PageBox;
+}
+
+/** A note's numbered pin on its page. */
+export interface PagePin { n: number; status: ReviewStatus; selector?: string; box: PageBox }
+
 export interface PairedDeviceSummary {
   device: string;
   name: string;
@@ -719,8 +730,17 @@ export interface HiveIpc {
   // ── review comments ───────────────────────────────────────
   /** Every comment on this repo, resolved ones included. */
   reviewList(repoPath: string): Promise<ReviewComment[]>;
-  /** Replace the whole list — what the diff tile does after an edit. */
+  /** Replace the whole list — what the diff tile does after an edit. Notes on pages are kept. */
   reviewSave(repoPath: string, comments: ReviewComment[]): Promise<void>;
+  /** One comment closed, reopened, answered or removed; refused when the rules say no. */
+  reviewResolve(repoPath: string, id: string, summary?: string): Promise<ReviewComment>;
+  reviewDismiss(repoPath: string, id: string, reason: string): Promise<ReviewComment>;
+  reviewReopen(repoPath: string, id: string): Promise<ReviewComment>;
+  reviewReply(repoPath: string, id: string, body: string): Promise<ReviewComment>;
+  reviewEdit(repoPath: string, id: string, body: string): Promise<ReviewComment>;
+  reviewDelete(repoPath: string, id: string): Promise<void>;
+  /** These notes on a page as one message to an agent, with how to answer them; null: none there. */
+  reviewMessage(repoPath: string, ids: string[]): Promise<string | null>;
 
   // ── git ───────────────────────────────────────────────────
   gitStatus(repoPath: string): Promise<GitStatusSnapshot>;
@@ -897,6 +917,18 @@ export interface HiveIpc {
   browserFrameShown(tileId: string): void;
   /** Click, scroll, type or go somewhere on a watched page. */
   browserInput(tileId: string, input: PageInput): Promise<void>;
+  /** What is at a point of a tile's page, a point being fractions of its visible width and height. */
+  browserPick(tileId: string, fx: number, fy: number): Promise<PageElement | null>;
+  /** An area of a tile's page, in fractions, and the elements in it. */
+  browserPickArea(tileId: string, fx: number, fy: number, fw: number, fh: number): Promise<{ area: PageBox; elements: PageElement[] }>;
+  /** Outline what is at a point of the page; null: nothing. */
+  browserHighlight(tileId: string, point: { fx: number; fy: number } | null): Promise<void>;
+  /** Keep a note on the tile's page, with a picture of what it points at, in `repoPath`'s review. */
+  browserNote(tileId: string, repoPath: string, note: PageNoteDraft): Promise<ReviewComment>;
+  /** Show the page's notes as numbered pins on it. */
+  browserPins(tileId: string, pins: PagePin[]): Promise<void>;
+  /** Hold the page's animations and media still, or let them go. */
+  browserHoldStill(tileId: string, still: boolean): Promise<void>;
   onBrowserFrame: (cb: (tileId: string, frame: PageFrame) => void) => () => void;
   /** The app window holding a watched page started or stopped drawing it. */
   onBrowserPageShown: (cb: (tileId: string, shown: boolean) => void) => () => void;
@@ -913,6 +945,10 @@ export interface HiveIpc {
   /** Agent-browser bridge settings for the in-app toggle. `active` = live this
    *  session; `enabled` = persisted choice (applies on next launch). */
   getBrowserSettings?(): Promise<{ active: boolean; enabled: boolean; port: string }>;
+  /** The agent-browser on this computer's PATH, and the newest on npm (null: not known). */
+  agentBrowserStatus?(): Promise<{ installed: string | null; latest: string | null }>;
+  /** Install agent-browser, or update the one there; what it said last, and its version after. */
+  agentBrowserInstall?(): Promise<{ ok: boolean; out: string; version: string | null }>;
   /** Persist the agent-browser bridge on/off choice (applies after relaunch). */
   setBrowserCdpEnabled?(enabled: boolean): Promise<{ ok: true }>;
   /** Restart the app so a settings change that needs a fresh launch takes hold. */

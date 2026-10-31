@@ -17,6 +17,7 @@
     "./views": "./src/views.ts",
     "./view-files": "./src/view-files.ts",
     "./review": "./src/review.ts",
+    "./review-shape": "./src/review-shape.ts",
     "./remote-uri": "./src/remote-uri.ts",
     "./settings-schema": "./src/settings-schema.ts",
     "./appearance-extra": "./src/appearance-extra.ts",

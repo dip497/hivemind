@@ -519,7 +519,10 @@ fn a_tap_is_a_click_to_a_program_that_takes_the_mouse_and_nothing_to_one_that_do
         Some("\x1b[<0;10;5M\x1b[<0;10;5m")
     );
     // The old way: a press, then a release, button 3, each a byte past 32.
-    assert_eq!(at(b"\x1b[?1000h", 10, 5).as_deref(), Some("\x1b[M *%\x1b[M#*%"));
+    assert_eq!(
+        at(b"\x1b[?1000h", 10, 5).as_deref(),
+        Some("\x1b[M *%\x1b[M#*%")
+    );
     // A shell, less, and a program that let the mouse go: nothing; the tap is the keyboard's.
     assert_eq!(at(b"$ ls\r\n", 10, 5), None);
     assert_eq!(at(b"\x1b[?1049h", 10, 5), None);
