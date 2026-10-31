@@ -3,7 +3,7 @@
  *  hooks) it must wire itself (`launch.hcp`, `session.resume`), and claiming a
  *  capability nothing here delivers is refused. */
 import { AGENT_EVENTS, EVENT_HOOK, INPUT_KINDS, TURN_OUTCOMES, isAgentEventName } from "./events.js";
-import type { AgentAsset, AgentCapabilities, AgentCommands, AgentHome, AgentHomeFile, AgentHookEntry, AgentHooks, AgentIcon, AgentInstall, AgentLaunch, AgentOption, AgentProviderDef, AgentSession, AgentTranscript, SessionFind, TileStatus, TranscriptRule } from "./types.js";
+import type { AgentAsset, AgentCapabilities, AgentCommands, AgentHome, AgentHomeFile, AgentHookEntry, AgentHooks, AgentIcon, AgentInstall, AgentLaunch, AgentOption, AgentProviderDef, AgentSession, AgentTranscript, SessionFind, TileStatus, TranscriptNotice, TranscriptRule, TranscriptSaying } from "./types.js";
 import { compileDetect, validateExpr, validateScope, type DetectRules, type Expr, type Scope, type ScreenReading } from "./detect-rules.js";
 import { RESERVED_AGENTS } from "./reserved.js";
 import { MIN_APP_VERSION_RE } from "./catalog.js";
@@ -454,7 +454,83 @@ function validateTranscript(raw: unknown): AgentTranscript {
     }
     out.said.push(rule);
   });
+  if (t.notices !== undefined) {
+    req(Array.isArray(t.notices) && t.notices.length >= 1 && t.notices.length <= 16, `${w}.notices must be 1-16 rules`);
+    out.notices = (t.notices as unknown[]).map((raw, i) => validateNotice(raw, `${w}.notices[${i}]`, out.said, path, values));
+  }
+  if (t.unwrap !== undefined) {
+    req(strArray(t.unwrap) && t.unwrap.length >= 1 && t.unwrap.length <= 8 && t.unwrap.every((n) => ELEMENT_RE.test(n)), `${w}.unwrap must be 1-8 element names`);
+    out.unwrap = t.unwrap;
+  }
   return out;
+}
+
+/** An element's name, as a notice names it. */
+const ELEMENT_RE = /^[A-Za-z_][\w-]{0,63}$/;
+const SAYINGS_MAX = 32;
+const SAYING_MAX = 200;
+
+/** A rule of `session.transcript.notices`. */
+function validateNotice(
+  raw: unknown,
+  at: string,
+  said: TranscriptRule[],
+  path: (v: unknown, at: string) => string,
+  values: (v: unknown, at: string) => Record<string, string | number | boolean>,
+): TranscriptNotice {
+  req(isObj(raw), `${at} must be a map`);
+  const r = raw as Record<string, unknown>;
+  const says = r.says;
+  req(Array.isArray(says) && says.length >= 1 && says.length <= SAYINGS_MAX, `${at}.says must be 1-${SAYINGS_MAX} lines`);
+  const notice: TranscriptNotice = { says: [] };
+  if (r.require !== undefined) notice.require = values(r.require, `${at}.require`);
+  if (r.unless !== undefined) notice.unless = values(r.unless, `${at}.unless`);
+  if (r.each !== undefined) {
+    notice.each = path(r.each, `${at}.each`);
+    req(said.some((rule) => rule.each === notice.each), `${at}.each must be a list a rule of said reads`);
+    req(r.text !== undefined, `${at}.each needs text: where each item's text is`);
+  }
+  if (r.item !== undefined) {
+    req(notice.each !== undefined, `${at}.item needs each: the list whose items it requires`);
+    notice.item = values(r.item, `${at}.item`);
+  }
+  if (r.text !== undefined) notice.text = path(r.text, `${at}.text`);
+  if (r.elements !== undefined) {
+    req(notice.text !== undefined, `${at}.elements needs text: where the elements are`);
+    req(strArray(r.elements) && r.elements.length >= 1 && r.elements.length <= 8 && r.elements.every((n) => ELEMENT_RE.test(n)), `${at}.elements must be 1-8 element names`);
+    notice.elements = r.elements;
+  }
+  const inElements = (v: unknown, where: string): string => {
+    req(typeof v === "string" && notice.elements?.includes(v.split(".")[0]!) === true && v.split(".").length <= 2 && v.split(".").every((n) => ELEMENT_RE.test(n)), `${where} must be an element of elements, or element.child`);
+    return v as string;
+  };
+  if (r.reads !== undefined) notice.reads = inElements(r.reads, `${at}.reads`);
+  if (r.detail !== undefined) {
+    req(strArray(r.detail) && r.detail.length >= 1 && r.detail.length <= 4, `${at}.detail must be 1-4 elements`);
+    notice.detail = r.detail.map((d, i) => inElements(d, `${at}.detail[${i}]`));
+  }
+  if (r.who !== undefined) {
+    req(r.who === "person", `${at}.who may only be person: the person's own words in the program's wrapping`);
+    notice.who = "person";
+  }
+  for (const [i, line] of (says as unknown[]).entries()) {
+    const where = `${at}.says[${i}]`;
+    req(isObj(line), `${where} must be a map`);
+    const x = line as Record<string, unknown>;
+    req(typeof x.say === "string" && x.say.length >= 1 && x.say.length <= SAYING_MAX, `${where}.say must be text of at most ${SAYING_MAX} characters`);
+    const saying: TranscriptSaying = { say: x.say as string };
+    if (x.when !== undefined) {
+      req(notice.text !== undefined, `${where}.when needs text: what it is held against`);
+      req(typeof x.when === "string" && x.when.length >= 1 && x.when.length <= SAYING_MAX, `${where}.when must be text of at most ${SAYING_MAX} characters`);
+      saying.when = x.when as string;
+    }
+    if (x.quiet !== undefined) {
+      req(x.quiet === true, `${where}.quiet must be true`);
+      saying.quiet = true;
+    }
+    notice.says.push(saying);
+  }
+  return notice;
 }
 
 function validateSession(raw: unknown): AgentSession {

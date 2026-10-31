@@ -235,8 +235,8 @@ export class ControlPlane {
       // An agent that attaches a photo whose path is pasted alone is given each so; any other, the
       // paths in its message, where it reads them.
       deliverToTile: (ptyId, text, onSent, photos) => (photos?.length && (o.pastesPhotos?.(toBareId(ptyId)) ?? false)
-        ? this.mailbox.deliver(ptyId, text, onSent, { pasted: photos })
-        : this.mailbox.deliver(ptyId, withPhotos(text, photos ?? []), onSent)),
+        ? this.mailbox.deliver(ptyId, text, onSent, { pasted: photos, refuseWhenFull: true })
+        : this.mailbox.deliver(ptyId, withPhotos(text, photos ?? []), onSent, { refuseWhenFull: true })),
       inbox: this.inbox,
       slept: (bare) => this.slept(bare),
       woke: (bare, ready) => this.woke(bare, ready),

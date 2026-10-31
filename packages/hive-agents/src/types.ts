@@ -190,6 +190,42 @@ export interface AgentTranscript {
   /** A record with any of these values says nothing. */
   skipWhen?: Record<string, string | number | boolean>;
   said: TranscriptRule[];
+  /** What the agent's own program wrote into the file as if the person had said it, read before
+   *  `said`: a record or item one of these reads, `said` does not. */
+  notices?: TranscriptNotice[];
+  /** Elements the agent wraps round what the person pasted: their text shows without the tags. */
+  unwrap?: string[];
+}
+
+/** One kind of text the agent's own program wrote: the records it is in (`require`, and none of
+ *  `unless`), the record itself or each item of the list `each` (those `item` requires), where its
+ *  text is, and what that says. With `elements`, the whole text is those elements and nothing else,
+ *  the first of them always: text that merely mentions one is not this. */
+export interface TranscriptNotice {
+  require?: Record<string, string | number | boolean>;
+  unless?: Record<string, string | number | boolean>;
+  each?: string;
+  item?: Record<string, string | number | boolean>;
+  text?: string;
+  elements?: string[];
+  /** What `when` is held against: an element of `elements`, or `element.child`; else the text. */
+  reads?: string;
+  /** Elements, or `element.child`, shown once the person opens it, a part each. */
+  detail?: string[];
+  /** `person`: the person's own words in the program's wrapping, as a command they typed; else a
+   *  notice. */
+  who?: "person";
+  /** What it says: the first that fits. */
+  says: TranscriptSaying[];
+}
+
+/** `when`: what `reads` says, `{name}` for a part that may be anything and a `*` last for any end;
+ *  none, whatever it says. `say`: the line, `{name}` for a part of `when` or an element (nothing
+ *  left: it says nothing). `quiet`: it should barely register. */
+export interface TranscriptSaying {
+  when?: string;
+  say: string;
+  quiet?: true;
 }
 
 /** One way a record says something: the records it reads (`require`: each field equal to its

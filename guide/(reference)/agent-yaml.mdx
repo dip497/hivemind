@@ -184,6 +184,39 @@ session:
         asks: { list: input.questions, question: question, options: options, label: label, description: description, many: multiSelect }
 ```
 
+Some agents write their own text into the session file as if the person had typed it: a background
+task finishing, a summary of the conversation so far. `notices` says which, so the phone shows a
+quiet line instead of a bubble from the person. `unwrap` names elements the agent wraps around what
+the person pasted; the person's text shows without those tags.
+
+```yaml
+    unwrap: [pasted_content]
+    notices:
+    - require: { type: user }
+      unless: { origin.kind: human }
+      text: message.content
+      elements: [task-notification, system-reminder]
+      reads: task-notification.summary
+      detail: [task-notification.result]
+      says:
+      - { when: 'Background command "{what}" completed*', say: 'Background command finished: {what}' }
+      - { when: 'Agent "{what}" is waiting*', say: Helper is waiting on its own background work, quiet: true }
+      - { say: '{task-notification.summary}' }
+```
+
+| Field | What it says |
+|---|---|
+| `require`, `unless` | the records it reads: each `require` field equal to its value, no `unless` field equal to its value |
+| `each`, `item` | read each item of this list that `said` also reads, those `item` requires, not the record |
+| `text` | where the text is; none: `says` says its line for any such record |
+| `elements` | the whole text is these elements and nothing else, the first always. Text that only mentions one stays the person's |
+| `reads` | what `when` is held against: an element, or `element.child`; none: the whole text |
+| `detail` | elements, or `element.child`, shown when the person opens the line |
+| `who: person` | the person's own words in the program's wrapping, such as a command they typed: shown as theirs |
+| `says` | the first that fits gives the line. `when` is the text to match, `{name}` for a part that may be anything and `*` last for any ending; none fits anything. `say` is the line, `{name}` for a part of `when` or an element; a line left empty says nothing. `quiet: true` makes it barely show |
+
+A record or item a notice reads is not read by `said`. An agent with no `notices` is read as before.
+
 `conformance/conversation.json` in the repository has cases to test a mapping against.
 
 ## launch, assets, hooks, home

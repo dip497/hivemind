@@ -520,6 +520,13 @@ impl Host {
             .map_err(err)
     }
 
+    /// How many bytes this connection has put on the network so far, what it repeats among them:
+    /// a message's progress, read while it goes.
+    #[wasm_bindgen(js_name = sentBytes)]
+    pub fn sent_bytes(&self) -> f64 {
+        self.connection.stats().udp_tx.bytes as f64
+    }
+
     /// Send the agent of `tile` the message `text` with `images` (`[{type, data}]`, the bytes in
     /// base64), typed in once it is at its prompt, or into its turn when it reads one there:
     /// `{held}`, whether it waits for the turn to end; null when no agent runs there.

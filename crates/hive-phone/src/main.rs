@@ -326,7 +326,7 @@ fn spoken(e: &Entry) -> String {
             let first = r.text.lines().next().unwrap_or("");
             format!("tool{}: {first}", if r.error { " failed" } else { "" })
         }
-        _ => String::new(),
+        _ => e.notice.as_ref().map_or_else(String::new, |n| n.text.clone()),
     }
 }
 

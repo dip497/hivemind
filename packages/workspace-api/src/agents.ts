@@ -161,7 +161,8 @@ export interface ToolAsked {
 export type ConversationEntry =
   | { id: string; at: number; who: "person" | "agent"; text: string }
   | { id: string; at: number; who: "agent"; tool: { id: string; name: string; about?: string; asks?: Asked[] } }
-  | { id: string; at: number; who: "tool"; result: { of: string; text: string; error?: true } };
+  | { id: string; at: number; who: "tool"; result: { of: string; text: string; error?: true } }
+  | { id: string; at: number; who: "program"; notice: { text: string; quiet?: true; detail?: string } };
 
 /** A tool use unfolded (spec/agents.md 0.9): its name, what it is about and its input whole, and
  *  what it gave back once it has; each cut to `TOOL_MAX` characters, `truncated` then. */

@@ -1,4 +1,4 @@
-# Workspace API (0.37)
+# Workspace API (0.38)
 
 What a workspace's host is asked for, and what it answers. The host is the machine the
 workspace's repo is on; today its callers are the app's windows (in the app, or in a browser tab it serves), peers on
@@ -64,7 +64,7 @@ and not read (a program that stopped reading) is closed.
 The first line says who connects: `{"hello": {"token", "workspace"?}}`.
 
 - **The install's token** (`hcp.token`) is the person at this machine. The host answers
-  `{"hello": {"api": "0.37", "as": "person"}}` and serves every method, as to a window of theirs.
+  `{"hello": {"api": "0.38", "as": "person"}}` and serves every method, as to a window of theirs.
 - **A grant's token** is a program the person let drive workspaces (`grant.create`), or a tool
   plugin's service, whose grant is made when it starts and taken back when it stops (`plugin` in
   `grant.list` names the plugin). It names one of the grant's workspaces by its folder, which may

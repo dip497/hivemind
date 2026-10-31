@@ -49,10 +49,12 @@ export interface Paired {
 export interface Entry {
   id: string;
   at: number;
-  who: "person" | "agent" | "tool";
+  who: "person" | "agent" | "tool" | "program";
   text?: string;
   tool?: { id: string; name: string; about?: string };
   result?: { of: string; text: string; error?: boolean };
+  /** A line the agent's own program wrote, in the person's words. */
+  notice?: { text: string; quiet?: boolean; detail?: string };
 }
 
 /** A tool use unfolded, as the computer answers `agent.tool`: what it is about and its input whole,

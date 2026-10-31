@@ -4,7 +4,7 @@
  * whichever agent keeps it. Nothing here knows one agent's format; the manifest does.
  */
 import { setValueAt, valueAt } from "./field-path.js";
-import type { AgentTranscript, TranscriptAsks, TranscriptRule } from "./types.js";
+import type { AgentTranscript, TranscriptAsks, TranscriptNotice, TranscriptRule } from "./types.js";
 
 /** A question a tool use asks the person, and the options to choose from; `descriptions`: what
  *  each option means, by its place ("" for one that says nothing); `many`: several may be. */
@@ -19,7 +19,16 @@ export interface Asked {
 export type TranscriptEntry =
   | { id: string; at: number; who: "person" | "agent"; text: string }
   | { id: string; at: number; who: "agent"; tool: { id: string; name: string; about?: string; asks?: Asked[]; input?: string } }
-  | { id: string; at: number; who: "tool"; result: { of: string; text: string; error?: true } };
+  | { id: string; at: number; who: "tool"; result: { of: string; text: string; error?: true } }
+  | { id: string; at: number; who: "program"; notice: Notice };
+
+/** A line the agent's own program wrote into the conversation, in the person's words; `quiet`: it
+ *  should barely register; `detail`: what it says more, once opened. */
+export interface Notice {
+  text: string;
+  quiet?: true;
+  detail?: string;
+}
 
 const ABOUT_MAX = 120;
 /** A tool's `about` read whole: what a wait on it shows. */
@@ -29,12 +38,122 @@ const RESULT_MAX = 2000;
 const ASKED_MAX = 4;
 const OPTIONS_MAX = 9;
 const ASKED_TEXT_MAX = 300;
+/** The most characters of a notice's line, and of what it says more. */
+const NOTICE_MAX = 160;
+const NOTICE_DETAIL_MAX = 4000;
 
 const isText = (v: unknown): v is string => typeof v === "string";
 
 /** Whether `from` holds each value `wants` names. */
 function fits(from: unknown, wants: Record<string, unknown> | undefined): boolean {
   return !wants || Object.entries(wants).every(([path, value]) => valueAt(from, path) === value);
+}
+
+/** Whether `from` holds any value `wants` names. */
+function holdsAny(from: unknown, wants: Record<string, unknown> | undefined): boolean {
+  return !!wants && Object.entries(wants).some(([path, value]) => valueAt(from, path) === value);
+}
+
+/** The elements `text` is made of, each by name its inside, when it is those `names` and nothing
+ *  else, the first always; null when anything else is there. An element's end is its last: what it
+ *  holds may quote its tag. */
+function elementsOf(text: string, names: readonly string[]): Map<string, string> | null {
+  const found = new Map<string, string>();
+  for (let at = text.search(/\S/); at >= 0 && at < text.length;) {
+    const name = names.find((n) => text.startsWith(`<${n}>`, at));
+    if (!name || found.has(name)) return null;
+    const start = at + name.length + 2;
+    const end = text.lastIndexOf(`</${name}>`);
+    if (end < start) return null;
+    found.set(name, text.slice(start, end));
+    const after = text.slice(end + name.length + 3).search(/\S/);
+    if (after < 0) break;
+    at = end + name.length + 3 + after;
+  }
+  return found.has(names[0]!) ? found : null;
+}
+
+/** What `path`, an element or `element.child`, holds in `found`; a child to its first end when
+ *  `firstEnd`, as a short line is, else to its last. */
+function elementAt(found: Map<string, string>, path: string, firstEnd: boolean): string | undefined {
+  const [name, child] = path.split(".") as [string, string | undefined];
+  const inside = found.get(name);
+  if (inside === undefined || child === undefined) return inside;
+  const open = inside.indexOf(`<${child}>`);
+  if (open < 0) return undefined;
+  const start = open + child.length + 2;
+  const end = firstEnd ? inside.indexOf(`</${child}>`, start) : inside.lastIndexOf(`</${child}>`);
+  return end < start ? undefined : inside.slice(start, end);
+}
+
+/** The parts of `text` a saying's `when` names, when it says that; null when it does not. */
+function partsIn(text: string, when: string): Record<string, string> | null {
+  const open = when.endsWith("*");
+  const pieces = (open ? when.slice(0, -1) : when).split(/\{([\w-]+)\}/);
+  const parts: Record<string, string> = {};
+  if (!text.startsWith(pieces[0]!)) return null;
+  let at = pieces[0]!.length;
+  for (let i = 1; i < pieces.length; i += 2) {
+    const after = pieces[i + 1]!;
+    // A part goes to where what follows it is; last with nothing after it, to the end.
+    const end = after === "" && i + 2 >= pieces.length ? text.length : text.indexOf(after, at);
+    if (end < 0) return null;
+    parts[pieces[i]!] = text.slice(at, end);
+    at = end + after.length;
+  }
+  return open || at === text.length ? parts : null;
+}
+
+/** Text a terminal would colour or move by, as the text it shows. */
+const plainText = (text: string): string =>
+  // eslint-disable-next-line no-control-regex
+  text.replace(/\x1b\[[0-9;?]*[ -/]*[@-~]/g, "").replace(/[\x00-\x08\x0b-\x1f\x7f]/g, "").trim();
+
+/** What `rule` makes of `from`: the entry, null when what it reads says nothing, undefined when it
+ *  does not read this. */
+function noticeOf(rule: TranscriptNotice, from: unknown, id: string, at: number): TranscriptEntry | null | undefined {
+  const text = rule.text === undefined ? undefined : valueAt(from, rule.text);
+  if (rule.text !== undefined && !isText(text)) return undefined;
+  const found = rule.elements && isText(text) ? elementsOf(text, rule.elements) : new Map<string, string>();
+  if (!found) return undefined;
+  const read = rule.reads === undefined ? text : elementAt(found, rule.reads, true);
+  for (const saying of rule.says) {
+    const parts = saying.when === undefined ? {} : isText(read) ? partsIn(read.trim(), saying.when) : null;
+    if (!parts) continue;
+    const said = saying.say.replace(/\{([\w.-]+)\}/g, (_, name: string) => parts[name] ?? elementAt(found, name, true) ?? "");
+    const line = plainText(said);
+    if (!line) return null;
+    if (rule.who) return { id, at, who: "person", text: line };
+    const detail = rule.detail?.map((d) => plainText(elementAt(found, d, false) ?? "")).filter(Boolean).join("\n\n");
+    return {
+      id, at, who: "program",
+      notice: { text: line.replace(/\s+/g, " ").slice(0, NOTICE_MAX), ...(saying.quiet ? { quiet: true as const } : {}), ...(detail ? { detail: detail.slice(0, NOTICE_DETAIL_MAX) } : {}) },
+    };
+  }
+  return undefined;
+}
+
+/** `text` with the element `name` taken off wherever it wraps something whole, its tags and the
+ *  line breaks against them; an open tag with no end of the same attributes stays as written. */
+function unwrapped(text: string, name: string): string {
+  let out = text;
+  for (let from = out.indexOf(`<${name}`); from >= 0; from = out.indexOf(`<${name}`, from)) {
+    const close = out.indexOf(">", from);
+    const attributes = close < 0 ? "" : out.slice(from + name.length + 1, close);
+    if (close < 0 || (attributes !== "" && !attributes.startsWith(" "))) {
+      from += 1;
+      continue;
+    }
+    const end = out.indexOf(`</${name}${attributes}>`, close);
+    if (end < 0) {
+      from = close;
+      continue;
+    }
+    const inner = out.slice(close + 1, end).replace(/^\n/, "").replace(/\n$/, "");
+    out = out.slice(0, from) + inner + out.slice(end + name.length + attributes.length + 3);
+    from += inner.length;
+  }
+  return out;
 }
 
 /** What a tool gave back, as text: itself, or the `text` of each item of a list, a line each. */
@@ -120,6 +239,20 @@ export function transcriptEntries(transcript: AgentTranscript, lines: readonly s
     const time = valueAt(record, transcript.at);
     const at = isText(time) ? Date.parse(time) : NaN;
     if (!isText(id) || Number.isNaN(at)) continue;
+    const notices = transcript.notices?.filter((n) => fits(record, n.require) && !holdsAny(record, n.unless)) ?? [];
+    const asNotice = (from: unknown, of: string, item?: { each: string }): { entry: TranscriptEntry | null } | undefined => {
+      for (const n of notices) {
+        if (n.each !== item?.each || !fits(from, n.item)) continue;
+        const entry = noticeOf(n, from, of, at);
+        if (entry !== undefined) return { entry };
+      }
+      return undefined;
+    };
+    const told = asNotice(record, id);
+    if (told) {
+      if (told.entry) entries.push(told.entry);
+      continue;
+    }
     const rules = transcript.said.filter((rule) => fits(record, rule.require));
     const walked = new Set<string>();
     for (const rule of rules) {
@@ -134,10 +267,17 @@ export function transcriptEntries(transcript: AgentTranscript, lines: readonly s
       if (!Array.isArray(items)) continue;
       const readers = rules.filter((r) => r.each === rule.each);
       items.forEach((item, i) => {
+        const of = items.length > 1 ? `${id}/${i}` : id;
+        const noticed = asNotice(item, of, { each: rule.each! });
         const reader = readers.find((r) => fits(item, r.item));
-        const entry = reader && entryOf(reader, item, items.length > 1 ? `${id}/${i}` : id, at, whole, full);
+        const entry = noticed ? noticed.entry : reader && entryOf(reader, item, of, at, whole, full);
         if (entry) entries.push(entry);
       });
+    }
+  }
+  if (transcript.unwrap?.length) {
+    for (const e of entries) {
+      if (e.who === "person") e.text = transcript.unwrap.reduce(unwrapped, e.text);
     }
   }
   return entries;

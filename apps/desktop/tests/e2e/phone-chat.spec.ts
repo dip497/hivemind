@@ -3,10 +3,11 @@
 // as a prompt of the person's, but as a queued_command attachment; the page shows it at once, and
 // keeps showing it once the session file has it. One held for an agent that reads none mid-turn
 // shows as queued and goes when its turn ends. Photos picked go with a message, kept on the
-// computer, and the agent is given their paths. The agent is the scripted stand-in
+// computer, and the agent is given their paths. What the agent's own program writes into its session
+// file shows as quiet lines, not as the person's. The agent is the scripted stand-in
 // (fixtures/fake-agent.cjs) behind the real claude manifest and hooks, on a network of its own whose
 // server serves the page.
-import { test, expect, chromium, type Browser, type ElectronApplication } from "@playwright/test";
+import { test, expect, chromium, type Browser, type ElectronApplication, type Page } from "@playwright/test";
 import { execSync, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
@@ -77,8 +78,30 @@ async function chatWith(steers: boolean, marks = false) {
   };
   const transcripts = path.join(home, ".claude", "projects");
   const recorded = () => fs.readdirSync(transcripts, { recursive: true }).filter((f) => String(f).endsWith(".jsonl")).map((f) => fs.readFileSync(path.join(transcripts, String(f)), "utf8")).join("");
-  return { page, box, send, recorded, home, person: page.locator('[data-chat] [data-who="person"]'), agent: page.locator('[data-chat] [data-who="agent"]') };
+  const sessionFile = () => path.join(transcripts, String(fs.readdirSync(transcripts, { recursive: true }).find((f) => String(f).endsWith(".jsonl"))));
+  const prompts = () => recorded().split("\n").filter(Boolean).map((l) => JSON.parse(l) as { type: string; message?: { content: unknown } })
+    .filter((r) => r.type === "user" && typeof r.message?.content === "string").map((r) => r.message!.content as string);
+  return { page, box, send, recorded, prompts, sessionFile, tile, home, person: page.locator('[data-chat] [data-who="person"]'), agent: page.locator('[data-chat] [data-who="agent"]') };
 }
+
+/** Photos as a phone's camera takes them: a `width` by `height` picture of noise, a PNG, far past
+ *  what the page keeps as it is. */
+const cameraPhotos = (page: Page, count: number, width = 1600, height = 1200) => page.evaluate(async ([count, width, height]) => {
+  const shots: number[][] = [];
+  for (let n = 0; n < count; n++) {
+    const canvas = Object.assign(document.createElement("canvas"), { width, height });
+    const g = canvas.getContext("2d")!;
+    const noise = g.createImageData(width, height);
+    for (let i = 0; i < noise.data.length; i += 4) {
+      const v = Math.random() * 255;
+      [noise.data[i], noise.data[i + 1], noise.data[i + 2], noise.data[i + 3]] = [v, 255 - v, (v * n) % 255, 255];
+    }
+    g.putImageData(noise, 0, 0);
+    const blob = await new Promise<Blob>((done) => canvas.toBlob((b) => done(b!), "image/png"));
+    shots.push([...new Uint8Array(await blob.arrayBuffer())]);
+  }
+  return shots;
+}, [count, width, height]).then((shots) => shots.map((bytes, n) => ({ name: `camera-${n}.png`, mimeType: "image/png", buffer: Buffer.from(bytes) })));
 
 test("a message sent from the phone while Claude Code works shows in its chat at once, as the person's, and stays there once Claude Code takes it into the running turn", async ({}, testInfo) => {
   test.skip(!hiveNetBuilt() || !hiveWebBuilt(), "build hive-net (cargo build in crates/hive-net) and the page (crates/hive-web/build.sh) first");
@@ -201,4 +224,126 @@ test("a photo the agent attaches is shown with the message it went with, once: t
   await expect(person).toHaveText(["echo fix this"]);
   await expect(person.locator(".photos img")).toHaveCount(1);
   await page.screenshot({ path: testInfo.outputPath("photo-delivered.png") });
+});
+
+/** A record the agent's own program writes, as Claude Code's session file holds one, its text invented. */
+const written = (id: string, content: unknown, more: object = {}) => `${JSON.stringify({ type: "user", uuid: id, timestamp: new Date().toISOString(), message: { role: "user", content }, ...more })}\n`;
+const notification = (summary: string, more = "") => `<task-notification>\n<task-id>af46</task-id>\n<output-file>/tmp/invented/tasks/af46.output</output-file>\n<status>completed</status>\n<summary>${summary}</summary>\n${more}<usage><total_tokens>1234</total_tokens></usage>\n</task-notification>`;
+const fromProgram = { origin: { kind: "task-notification" } };
+
+test("what the agent's own program writes shows as quiet lines, never as the person's: a run of them is one line with a count that opens to each, a helper's report only when opened; the person's own words about one stay theirs", async ({}, testInfo) => {
+  test.skip(!hiveNetBuilt() || !hiveWebBuilt(), "build hive-net (cargo build in crates/hive-net) and the page (crates/hive-web/build.sh) first");
+  test.setTimeout(240_000);
+  const { page, send, sessionFile, person: said, agent } = await chatWith(true);
+  await send("echo ready");
+  await expect(agent).toHaveText(["ready"], { timeout: 30_000 });
+
+  fs.appendFileSync(sessionFile(), [
+    ...["Build the site", "Run the unit tests", "Lint"].map((what, n) => written(`b${n}`, notification(`Background command "${what}" completed (exit code 0)`), fromProgram)),
+    written("w0", notification('Agent "Tidy the docs" is waiting on its own background work', "<note>Still running.</note>\n<result>This agent has not reported yet.</result>\n"), fromProgram),
+    written("f0", notification('Agent "Tidy the docs" finished', "<result>Tidied **three** pages.</result>\n"), fromProgram),
+    written("mine", "why does <task-notification> show on my phone?", { origin: { kind: "human" } }),
+    written("w1", notification('Agent "Check the links" is waiting on its own background work'), fromProgram),
+    written("w2", notification('Agent "Check the sizes" is waiting on its own background work'), fromProgram),
+    written("mine2", "and what about this one?", { origin: { kind: "human" } }),
+    written("alone", notification('Background command "Deploy" failed with exit code 2'), fromProgram),
+  ].join(""));
+
+  // The person's words stay theirs, and nothing else is shown as theirs.
+  await expect(said).toHaveText(["echo ready", "why does <task-notification> show on my phone?", "and what about this one?"], { timeout: 30_000 });
+  const chat = page.locator("[data-chat]");
+  for (const raw of ["af46", "/tmp/invented", "total_tokens", "<summary>", "<result>"]) await expect(chat).not.toContainText(raw);
+
+  // One that stands alone says itself.
+  await expect(page.locator('[data-entry="alone"]')).toHaveText("Background command failed: Deploy");
+
+  // A run is one line: what says something counted, what only says it still waits not.
+  const fold = page.locator("[data-notices]").first();
+  await expect(fold.locator("[data-notices-summary]")).toHaveText("4 background updates");
+  await expect(fold.locator(".notices-list")).toBeHidden();
+  await expect(fold.locator('[data-entry="b0"]')).toBeHidden();
+  // A run that only waits barely registers.
+  await expect(page.locator("[data-notices]").nth(1).locator("[data-notices-summary]")).toHaveText("2 background updates");
+  await expect(page.locator("[data-notices]").nth(1)).toHaveAttribute("data-quiet", "");
+  await page.screenshot({ path: testInfo.outputPath("notices-folded.png") });
+
+  await fold.locator("> button").click();
+  await expect(fold.locator('[data-entry="b0"]')).toHaveText("Background command finished: Build the site");
+  await expect(fold.locator('[data-entry="w0"]')).toContainText("Helper is waiting on its own background work");
+  const helper = fold.locator('[data-entry="f0"]');
+  await expect(helper.locator("[data-notice-line]")).toHaveText("Helper finished: Tidy the docs");
+  await expect(helper.locator("[data-notice-detail]")).toBeHidden();
+  await helper.locator("button").click();
+  await expect(helper.locator("[data-notice-detail]")).toHaveText("Tidied three pages.");
+  await page.screenshot({ path: testInfo.outputPath("notices-opened.png") });
+});
+
+test("sending with photos: the box empties at once and the message moves into the chat; on failure it says so and offers Try again and Put back, kept while the person looks away, words and photos whole", async ({}, testInfo) => {
+  test.skip(!hiveNetBuilt() || !hiveWebBuilt(), "build hive-net (cargo build in crates/hive-net) and the page (crates/hive-web/build.sh) first");
+  test.setTimeout(300_000);
+  const { page, box, prompts, tile, person: said, agent } = await chatWith(false);
+  await page.locator("[data-photo-picker]").setInputFiles(await cameraPhotos(page, 4, 800, 600));
+  const inBox = page.locator("[data-message] [data-photo]");
+  await expect(inBox).toHaveCount(4, { timeout: 30_000 });
+  const message = "echo what is wrong in these";
+  await box.fill(message);
+  const shotAt = testInfo.outputPath("sending-at-once.png");
+
+  // Tapped twice, nothing goes twice: the box was emptied by the first.
+  await page.locator("[data-message] button[type=submit]").dblclick();
+  await expect(box).toHaveValue("");
+  await expect(inBox).toHaveCount(0);
+  const bubble = page.locator("[data-chat] [data-pending]");
+  await expect(bubble).toHaveCount(1);
+  await expect(bubble.locator("[data-pending-photos] img")).toHaveCount(4);
+  await page.screenshot({ path: shotAt });
+  await expect.poll(prompts, { timeout: 30_000 }).toHaveLength(1);
+  await expect(agent).toHaveCount(1, { timeout: 30_000 });
+  await expect(page.locator("[data-chat] [data-pending]")).toHaveCount(0, { timeout: 30_000 });
+  await expect(said.locator(".photos img")).toHaveCount(4);
+
+  // With the link gone it cannot go, and says so.
+  await page.locator("[data-photo-picker]").setInputFiles(await cameraPhotos(page, 2, 800, 600));
+  await expect(inBox).toHaveCount(2, { timeout: 30_000 });
+  const second = "echo again with two";
+  await box.fill(second);
+  await page.context().setOffline(true);
+  await page.locator("[data-message] button[type=submit]").click();
+  await expect(box).toHaveValue("");
+  const failed = page.locator('[data-chat] [data-pending="failed"]');
+  await expect(failed).toHaveCount(1, { timeout: 90_000 });
+  await expect(failed.locator("[data-pending-state]")).toContainText("Not sent");
+  // Trial clicks: whatever floats above the box while the link is gone leaves them to be tapped.
+  await failed.locator("[data-try-again]").click({ trial: true });
+  await failed.locator("[data-put-back]").click({ trial: true });
+  await expect(failed.locator('[data-who="person"]')).toHaveText(second);
+  await expect(failed.locator("[data-pending-photos] img")).toHaveCount(2);
+  await page.screenshot({ path: testInfo.outputPath("sending-failed.png") });
+
+  // Looked away from, it is still there.
+  await page.locator('[data-screen="agent"] [data-back]').click();
+  await expect(page.locator(`[data-agent="${tile}"]`)).toBeVisible();
+  await page.locator(`[data-agent="${tile}"]`).click();
+  await expect(failed).toHaveCount(1);
+  await expect(failed.locator("[data-pending-photos] img")).toHaveCount(2);
+
+  // Put back: in the box, words and photos, and out of the chat.
+  await failed.locator("[data-put-back]").click();
+  await expect(page.locator("[data-chat] [data-pending]")).toHaveCount(0);
+  await expect(box).toHaveValue(second);
+  await expect(inBox).toHaveCount(2);
+  await page.screenshot({ path: testInfo.outputPath("sending-put-back.png") });
+
+  // Sent again, failed again, and tried again with the link back: it goes, once.
+  await page.locator("[data-message] button[type=submit]").click();
+  await expect(failed).toHaveCount(1, { timeout: 90_000 });
+  await page.context().setOffline(false);
+  await expect(page.locator("[data-paired]")).toBeAttached({ timeout: 60_000 });
+  await expect(async () => {
+    if (await failed.count()) await failed.locator("[data-try-again]").click({ timeout: 2_000 });
+    await expect(page.locator("[data-chat] [data-pending]")).toHaveCount(0, { timeout: 8_000 });
+  }).toPass({ timeout: 120_000 });
+  await expect.poll(prompts, { timeout: 30_000 }).toHaveLength(2);
+  expect(prompts()[1]).toContain(second);
+  await page.screenshot({ path: testInfo.outputPath("sending-delivered.png") });
 });

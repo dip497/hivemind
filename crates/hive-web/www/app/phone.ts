@@ -121,6 +121,9 @@ class Link {
   ) {}
 }
 
+/** How often a message on its way is asked how far it got. */
+const SEND_TICK_MS = 200;
+
 export class Phone {
   private readonly links = new Map<string, Link>();
   /** One endpoint per key, every computer reached under it dialled through it: two endpoints of
@@ -319,8 +322,18 @@ export class Phone {
 
   /** Send `agent` a message, typed in at its prompt, or into its turn when it reads one there.
    *  Whether it went, and whether it waits for the turn to end. */
-  async send(agent: Agent, text: string, photos: Photo[] = []): Promise<Sent | false> {
-    return ((await this.on(agent.device).send(agent.workspace, agent.tile, text, photos)) as Sent | null) ?? false;
+  async send(agent: Agent, text: string, photos: Photo[], going: (part: number) => void): Promise<Sent | false> {
+    const host = this.on(agent.device);
+    const size = photos.reduce((all, p) => all + p.data.length, text.length);
+    const from = host.sentBytes();
+    // What the connection put on the network since: the rest of what it carries is small beside
+    // photos, and all of it is not gone until the computer says so.
+    const moved = setInterval(() => going(Math.min(0.99, (host.sentBytes() - from) / size)), SEND_TICK_MS);
+    try {
+      return ((await host.send(agent.workspace, agent.tile, text, photos)) as Sent | null) ?? false;
+    } finally {
+      clearInterval(moved);
+    }
   }
 
   /** Stop `agent`'s turn. Whether it was in one. */

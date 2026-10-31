@@ -43,8 +43,14 @@ const app = {
   tool: async () => ({}),
   commands: async (a) => (window.calls.push(["commands", a.tile]), window.commands ?? []),
   answer: async (a, reply) => (window.calls.push(["answer", a.tile, reply]), true),
-  send: async (a, text) => (window.calls.push(["send", a.tile, text]), window.sent === undefined ? { held: false } : window.sent),
-  stop: async (a) => (window.calls.push(["stop", a.tile]), true),
+  send: async (a, text, _photos, going) => {
+    window.calls.push(["send", a.tile, text]);
+    if (window.going !== undefined) going(window.going);
+    if (window.gate) await window.gate;
+    if (window.refused) throw new Error(window.refused);
+    return window.sent === undefined ? { held: false } : window.sent;
+  },
+  stop: async (a) => (window.calls.push(["stop", a.tile]), !window.stopFails),
   close: async (a) => (window.calls.push(["close", a.tile]), true),
   notes: async (a) => (window.calls.push(["notes", a.workspace]), window.notes ?? []),
   changeNote: async (a, id, to, reason) => (window.calls.push(["changeNote", id, to, reason ?? null]), true),
@@ -98,7 +104,7 @@ test("an agent just started shows as starting until the computer lists it, never
   await expect(notice).toBeVisible();
 });
 
-test("a message held until the agent's turn ends shows as queued, with Send now, which stops the turn; one that did not go leaves the chat and stays in the box", async () => {
+test("a message held until the agent's turn ends shows as queued, with Send now, which stops the turn", async () => {
   test.skip(!built(), "no page build: run crates/hive-web/build.sh");
   const page = await screen();
   await show(page, overview(agent("t1", "Phone test", { state: "working" })));
@@ -119,14 +125,230 @@ test("a message held until the agent's turn ends shows as queued, with Send now,
   await page.evaluate(() => (window as unknown as { said: (p: object) => void }).said({ session: "s1", cursor: 1, entries: [{ id: "u1", at: Date.now(), who: "person", text: "and the docs" }] }));
   await expect(page.locator('[data-chat] [data-who="person"]')).toHaveText(["and the docs"]);
   await expect(page.locator("[data-chat] [data-pending]")).toHaveCount(0);
+});
 
-  await page.evaluate(() => ((window as unknown as { sent: unknown }).sent = false));
+/** What the test does to what `send` answers. */
+type Sending = { sent?: unknown; refused?: string; going?: number; gate?: Promise<void>; openGate?: () => void };
+const sending = (page: Page, set: Sending) => page.evaluate((s) => Object.assign(window, s), set as object);
+const gateSends = (page: Page) => page.evaluate(() => {
+  (window as unknown as Sending).gate = new Promise((open) => ((window as unknown as Sending).openGate = open));
+});
+const openGate = (page: Page) => page.evaluate(() => {
+  const w = window as unknown as Sending;
+  w.gate = undefined;
+  w.openGate!();
+});
+const onePhoto = { name: "shot.png", mimeType: "image/png", buffer: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNgYPjPAAAEAgEAPT4sMAAAAABJRU5ErkJggg==", "base64") };
+
+test("a message leaves the box as it is sent and goes into the chat, its photos with it; with photos it says how far it got, without them a plain Sending…", async () => {
+  test.skip(!built(), "no page build: run crates/hive-web/build.sh");
+  const page = await screen();
+  await show(page, overview(agent("t1", "Phone test")));
+  await open(page, "t1");
+  const box = page.locator("[data-message] textarea");
+  await gateSends(page);
+  await sending(page, { going: 0.4 });
+  await page.locator("[data-photo-picker]").setInputFiles([onePhoto, { ...onePhoto, name: "two.png" }]);
+  await expect(page.locator("[data-message] [data-photo]")).toHaveCount(2);
+  await box.fill("look at these");
+  await page.locator("[data-message] button[type=submit]").click();
+  // At once, while the computer has not answered.
+  await expect(box).toHaveValue("");
+  await expect(page.locator("[data-message] [data-photo]")).toHaveCount(0);
+  await expect(page.locator("[data-message] button[type=submit]")).toBeDisabled();
+  const going = page.locator('[data-chat] [data-pending="going"]');
+  await expect(going.locator('[data-who="person"]')).toHaveText("look at these");
+  await expect(going.locator("[data-pending-photos] img")).toHaveCount(2);
+  await expect(going.locator("[data-pending-state]")).toHaveText("Sending… 40%");
+  await expect(going.locator("[data-pending-bar]")).toBeVisible();
+  await openGate(page);
+  await expect(page.locator('[data-chat] [data-pending="sent"] [data-pending-state]')).toHaveText("Sent");
+  await expect(page.locator("[data-chat] [data-pending-bar]")).toBeHidden();
+
+  await gateSends(page);
+  await box.fill("just words");
+  await page.locator("[data-message] button[type=submit]").click();
+  await expect(page.locator('[data-chat] [data-pending="going"] [data-pending-state]')).toHaveText("Sending…");
+  await openGate(page);
+});
+
+test("messages go one at a time, in the order sent: the next waits for the computer to answer the last, whatever becomes of it", async () => {
+  test.skip(!built(), "no page build: run crates/hive-web/build.sh");
+  const page = await screen();
+  await show(page, overview(agent("t1", "Phone test")));
+  await open(page, "t1");
+  const box = page.locator("[data-message] textarea");
+  const sends = () => page.evaluate(() => (window as unknown as { calls: string[][] }).calls.filter((c) => c[0] === "send").map((c) => c[2]));
+  await gateSends(page);
+  for (const text of ["first", "second", "third"]) {
+    await box.fill(text);
+    await page.locator("[data-message] button[type=submit]").click();
+    await expect(box).toHaveValue("");
+  }
+  await expect(page.locator("[data-chat] [data-pending]")).toHaveCount(3);
+  expect(await sends()).toEqual(["first"]);
+  await sending(page, { refused: "It broke" });
+  await openGate(page);
+  await expect.poll(sends).toEqual(["first", "second", "third"]);
+  await expect(page.locator('[data-chat] [data-pending="failed"]')).toHaveCount(3);
+});
+
+test("a message that did not go stays in the chat and says why: Try again sends it again, Put back returns its words and photos to the box, and it is still there after looking away", async () => {
+  test.skip(!built(), "no page build: run crates/hive-web/build.sh");
+  const page = await screen();
+  await show(page, overview(agent("t1", "Phone test"), agent("t2", "Other")));
+  await open(page, "t1");
+  const box = page.locator("[data-message] textarea");
+  const failed = page.locator('[data-chat] [data-pending="failed"]');
+  const sends = () => page.evaluate(() => (window as unknown as { calls: string[][] }).calls.filter((c) => c[0] === "send").length);
+
+  // Thrown, or refused by the computer: each said, nothing lost.
+  await sending(page, { refused: "Not connected to desk right now" });
+  await page.locator("[data-photo-picker]").setInputFiles([onePhoto]);
+  await expect(page.locator("[data-message] [data-photo]")).toHaveCount(1);
   await box.fill("and the changelog");
   await page.locator("[data-message] button[type=submit]").click();
-  await expect.poll(did).toHaveLength(3);
+  await expect(failed.locator("[data-pending-state]")).toContainText("Not sent. Not connected to desk right now");
+  await expect(failed.locator('[data-who="person"]')).toHaveText("and the changelog");
+  await expect(failed.locator("[data-pending-photos] img")).toHaveCount(1);
+  await expect(box).toHaveValue("");
+  await expect(page.locator("[data-message] [data-photo]")).toHaveCount(0);
+
+  await page.evaluate(() => { const w = window as unknown as Sending; w.refused = undefined; w.sent = false; });
+  await failed.locator("[data-try-again]").click();
+  await expect.poll(sends).toBe(2);
+  await expect(failed.locator("[data-pending-state]")).toContainText("Not sent. It was not taken");
+
+  // Looked away from, and back.
+  await open(page, "t2");
+  await expect(failed).toHaveCount(0);
+  await open(page, "t1");
+  await expect(failed.locator('[data-who="person"]')).toHaveText("and the changelog");
+  await expect(failed.locator("[data-pending-photos] img")).toHaveCount(1);
+
+  // With the box holding a draft, it comes back ahead of it.
+  await box.fill("a draft");
+  await failed.locator("[data-put-back]").click();
   await expect(page.locator("[data-chat] [data-pending]")).toHaveCount(0);
-  await expect(page.locator('[data-chat] [data-who="person"]')).toHaveText(["and the docs"]);
-  await expect(box).toHaveValue("and the changelog");
+  await expect(box).toHaveValue("and the changelog\na draft");
+  await expect(page.locator("[data-message] [data-photo]")).toHaveCount(1);
+  expect(await sends()).toBe(2);
+
+  // Tried again, it goes.
+  await sending(page, { sent: { held: false } });
+  await page.locator("[data-message] button[type=submit]").click();
+  await expect(page.locator('[data-chat] [data-pending="sent"]')).toHaveCount(1);
+  await expect.poll(sends).toBe(3);
+
+  // A box whose photos would not fit keeps what it holds, and the message stays in the chat.
+  await sending(page, { sent: false });
+  await page.locator("[data-photo-picker]").setInputFiles([onePhoto, onePhoto]);
+  await expect(page.locator("[data-message] [data-photo]")).toHaveCount(2);
+  await page.locator("[data-message] button[type=submit]").click();
+  await expect(failed).toHaveCount(1);
+  await page.locator("[data-photo-picker]").setInputFiles([onePhoto, onePhoto, onePhoto]);
+  await expect(page.locator("[data-message] [data-photo]")).toHaveCount(3);
+  await failed.locator("[data-put-back]").click();
+  await expect(failed).toHaveCount(1);
+  await expect(page.locator("[data-message] [data-photo]")).toHaveCount(3);
+  await expect(page.locator("[data-photo-problem]")).toContainText("at most 4 photos");
+});
+
+test("with nothing moving for 45 seconds a message says it may not have gone, and an answer after that still counts", async () => {
+  test.skip(!built(), "no page build: run crates/hive-web/build.sh");
+  const now = Date.parse("2026-10-01T10:00:00Z");
+  const page = await screen(now);
+  await show(page, overview(agent("t1", "Phone test")));
+  await open(page, "t1");
+  await gateSends(page);
+  await page.locator("[data-message] textarea").fill("over a bad link");
+  await page.locator("[data-message] button[type=submit]").click();
+  await expect(page.locator('[data-chat] [data-pending="going"]')).toHaveCount(1);
+  await page.clock.runFor(44_000);
+  await expect(page.locator('[data-chat] [data-pending="going"]')).toHaveCount(1);
+  await page.clock.runFor(2_000);
+  await expect(page.locator('[data-chat] [data-pending="failed"] [data-pending-state]')).toContainText("may not have gone");
+  await openGate(page);
+  await expect(page.locator('[data-chat] [data-pending="sent"]')).toHaveCount(1);
+});
+
+test("the second tap of a double tap on send stops nothing: the button becomes Stop only a moment later", async () => {
+  test.skip(!built(), "no page build: run crates/hive-web/build.sh");
+  const page = await screen();
+  await show(page, overview(agent("t1", "Phone test", { state: "working" })));
+  await open(page, "t1");
+  const stops = () => page.evaluate(() => (window as unknown as { calls: string[][] }).calls.filter((c) => c[0] === "stop").length);
+  await page.locator("[data-message] textarea").fill("and one more thing");
+  const button = page.locator("[data-message] button.send");
+  await page.evaluate(() => {
+    const b = document.querySelector<HTMLButtonElement>("[data-message] button.send")!;
+    b.click();
+    b.click();
+  });
+  expect(await stops()).toBe(0);
+  await expect(button).toHaveAttribute("data-stop", "", { timeout: 3_000 });
+  await button.click();
+  await expect.poll(stops).toBe(1);
+});
+
+test("a message queued for an agent that cannot be stopped offers no Send now; when stopping fails, Send now comes back", async () => {
+  test.skip(!built(), "no page build: run crates/hive-web/build.sh");
+  const page = await screen();
+  await show(page, overview(agent("t1", "Phone test", { state: "working", interrupt: undefined }), agent("t2", "Other", { state: "working" })));
+  await open(page, "t1");
+  await sending(page, { sent: { held: true } });
+  await page.locator("[data-message] textarea").fill("when you can");
+  await page.locator("[data-message] button[type=submit]").click();
+  const held = page.locator('[data-chat] [data-pending="held"]');
+  await expect(held).toHaveCount(1);
+  await expect(held.locator("[data-send-now]")).toHaveCount(0);
+
+  await open(page, "t2");
+  await page.evaluate(() => {
+    (window as unknown as { stopFails: boolean }).stopFails = true;
+  });
+  await page.locator("[data-message] textarea").fill("when you can");
+  await page.locator("[data-message] button[type=submit]").click();
+  await held.locator("[data-send-now]").click();
+  await expect(held.locator("[data-send-now]")).toBeVisible();
+  await expect(held.locator("[data-pending-state]")).toContainText("Queued");
+});
+
+test("what the agent's program wrote is one quiet line, told as new to no one scrolled up; a run folds as it grows, words in between ending it", async () => {
+  test.skip(!built(), "no page build: run crates/hive-web/build.sh");
+  const page = await screen();
+  await show(page, overview(agent("t1", "Phone test")));
+  await open(page, "t1");
+  const said = (entries: object[]) => page.evaluate((e) => (window as unknown as { said: (p: object) => void }).said({ session: "s1", cursor: 1, entries: e }), entries);
+  const note = (id: string, text: string, more: object = {}) => ({ id, at: 1, who: "program", notice: { text, ...more } });
+  await said([{ id: "p0", at: 1, who: "person", text: "x\n".repeat(200) }]);
+
+  // Read from further up, a notice is not counted as new.
+  await page.locator("[data-chat]").evaluate((el) => (el.scrollTop = 0));
+  await said([note("n0", "Helper finished: Tidy")]);
+  await expect(page.locator('[data-entry="n0"]')).toBeAttached();
+  await expect(page.locator("[data-newest]")).not.toContainText("1");
+
+  // One alone says itself; another next to it folds both; one more joins, the fold staying one.
+  await expect(page.locator('[data-entry="n0"]')).toHaveText("Helper finished: Tidy");
+  await said([note("n1", "Helper is waiting", { quiet: true })]);
+  const fold = page.locator("[data-notices]");
+  await expect(fold).toHaveCount(1);
+  await expect(fold.locator("[data-notices-summary]")).toHaveText("Helper finished: Tidy");
+  await said([note("n2", "Background command finished: Lint"), note("n3", "Helper finished: Check")]);
+  await expect(fold).toHaveCount(1);
+  await expect(fold.locator("[data-notices-summary]")).toHaveText("3 background updates");
+  await expect(fold).not.toHaveAttribute("data-quiet", "");
+  await expect(fold.locator('[data-entry="n3"]')).toBeHidden();
+  await fold.locator("> button").click();
+  await expect(fold.locator('[data-entry="n1"]')).toBeVisible();
+  await expect(fold.locator('[data-entry="n3"]')).toBeVisible();
+
+  // Words in between end a run.
+  await said([{ id: "p1", at: 1, who: "person", text: "and now?" }, note("n4", "Helper is waiting", { quiet: true }), note("n5", "Helper is waiting", { quiet: true })]);
+  await expect(fold).toHaveCount(2);
+  await expect(fold.nth(1).locator("[data-notices-summary]")).toHaveText("2 background updates");
+  await expect(fold.nth(1)).toHaveAttribute("data-quiet", "");
 });
 
 test("an agent that keeps no conversation the phone can read opens in its terminal; one that does opens in its chat", async () => {

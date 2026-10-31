@@ -6,6 +6,7 @@ import type { App } from "./app.js";
 import { type Answers, answers } from "./answers.js";
 import { Chat } from "./chat.js";
 import { Ask, type Composer, type Picked, composer, h, icon, iconButton, say } from "./dom.js";
+import { Outbox, type Outgoing } from "./outbox.js";
 import { PHOTOS_MAX, photoOf } from "./photos.js";
 import { TerminalView } from "./terminal.js";
 import type { Agent, Overview, PageNote, SlashCommand } from "./types.js";
@@ -53,8 +54,10 @@ export class AgentScreen {
   private unfollow: (() => void) | null = null;
   /** Agents started from here that the computer has not listed yet. */
   private readonly fresh = new Set<string>();
+  private readonly outbox: Outbox;
 
   constructor(private readonly app: App) {
+    this.outbox = new Outbox((a, text, photos, going) => app.send(a, text, photos.map((p) => p.photo), going), NOTICES.notTaken);
     const back = h("button", { type: "button", class: "back", "aria-label": "Back", "data-back": "" }, icon("back"));
     back.addEventListener("click", () => app.back());
     const close = h("button", { type: "button", role: "menuitem", "data-close": "" }, "Close");
@@ -146,6 +149,7 @@ export class AgentScreen {
     this.suggested.hidden = true;
     this.waits.replaceChildren();
     this.chat = new Chat((use) => (this.agent ? this.app.tool(this.agent, use) : Promise.reject(new Error("it is no longer there"))));
+    for (const item of this.outbox.of(tile)) this.showOutgoing(item, this.chat);
     this.terminal = false;
     this.place(this.chat.el);
     this.newestSlot.replaceChildren(this.chat.newest);
@@ -308,9 +312,8 @@ export class AgentScreen {
     this.problemTimer = setTimeout(() => (this.problem.hidden = true), 5000);
   }
 
-  /** A message, shown in the chat at once as it goes: sent, or held until the turn ends with a way
-   *  to send it now, which stops the turn; taken away again when it did not go. A line that answers
-   *  what the agent waits on goes as that answer. */
+  /** A message, moved into the chat at once as it goes (`Outbox`). A line that answers what the
+   *  agent waits on goes as that answer. */
   private async sendIt(text: string, photos: Picked[]): Promise<boolean> {
     if (this.typed) {
       if (photos.length) {
@@ -321,12 +324,31 @@ export class AgentScreen {
     }
     const [a, chat] = [this.agent, this.chat];
     if (!a || !chat) return false;
-    const shown = chat.sending(text, photos.map((p) => p.url));
-    const sent = await this.app.send(a, text, photos.map((p) => p.photo));
-    if (!sent) shown.failed();
-    else if (sent.held) shown.held(() => void this.stopIt());
-    else shown.sent();
-    return !!sent;
+    this.showOutgoing(this.outbox.add(a, text, photos), chat);
+    return true;
+  }
+
+  /** `item` in `chat`, as it stands now and from here on: going, sent, held until the turn ends with
+   *  a way to send it now when its agent can be stopped, or failed with a way to try again or put
+   *  it back in the box. */
+  private showOutgoing(item: Outgoing, chat: Chat): void {
+    const shown = chat.sending(item.text, item.photos.map((p) => p.url), item.at, () => this.outbox.forget(item));
+    item.shown = (stage) => {
+      if (stage.at === "going") shown.going(item.photos.length ? stage.part : 0);
+      else if (stage.at === "sent") {
+        this.outbox.forget(item);
+        shown.sent();
+      } else if (stage.at === "held") shown.held(item.agent.interrupt ? () => this.app.stop(item.agent) : undefined);
+      else shown.failed(stage.why, () => this.outbox.again(item), () => {
+        if (!this.composing.putBack(item.text, item.photos)) {
+          this.photoProblem(`A message takes at most ${PHOTOS_MAX} photos: send or remove those in the box first.`);
+          return false;
+        }
+        this.outbox.forget(item);
+        return true;
+      });
+    };
+    item.shown(item.stage);
   }
 
   private async stopIt(): Promise<void> {

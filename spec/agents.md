@@ -237,6 +237,7 @@ before the answer. Each entry is one of
 { "id": "<its id>", "at": 1790000000000, "who": "agent", "tool": { "id": "<the use>", "name": "Edit", "about": "src/nav.ts" } }
 { "id": "<its id>", "at": 1790000000000, "who": "agent", "tool": { "id": "<the use>", "name": "AskUserQuestion", "asks": [{ "question": "Which color?", "options": ["Red", "Blue"] }] } }
 { "id": "<its id>", "at": 1790000000000, "who": "tool", "result": { "of": "<the use>", "text": "<what it gave back>", "error": true } }
+{ "id": "<its id>", "at": 1790000000000, "who": "program", "notice": { "text": "Helper finished: Tidy the docs", "quiet": true, "detail": "<what it says more>" } }
 ```
 
 - The device reads them from the file as the agent's manifest maps its records
@@ -247,6 +248,13 @@ before the answer. Each entry is one of
   questions it asks the person, as `needs.md` gives them; what a tool gave back cut to
   2,000 characters, `error` only when true (left out otherwise). A line that is not a record, and
   a record or item no rule reads, say nothing.
+- A `notice` (0.38) is a line the agent's own program wrote into its file as if the person had said
+  it, in the person's words: a background task finishing, a summary of what came before. Its
+  manifest says which (`session.transcript.notices`), by the record and the whole of its text, so
+  the person's own words that mention such a thing stay theirs. `text` at most 160 characters, one
+  line; `quiet` only when true, for one that should barely register; `detail` what it says more once
+  opened, at most 4,000 characters, left out when nothing. A reader that does not know `program`
+  leaves it out. Who shows a conversation folds a run of notices into one line.
 - `cursor` is how far into the file the entries go (in bytes, at the end of a line), and `session`
   the session whose file it is: given back, they answer only what comes after the cursor, as after
   a reconnect. Without them, or for a session the agent keeps no more, it answers the last 200
