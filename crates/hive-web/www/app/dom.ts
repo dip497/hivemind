@@ -173,8 +173,9 @@ export function pill(label: string, onClick: () => void, tone = "", props: Props
   return button;
 }
 
-/** A reply box; `stoppable(on)` says whether what it talks to can be stopped now. */
-export type Composer = HTMLFormElement & { stoppable(on: boolean): void };
+/** A reply box; `stoppable(on)` says whether what it talks to can be stopped now; `putBack` puts a
+ *  message into it again, after what it holds, and says false when its photos would not fit. */
+export type Composer = HTMLFormElement & { stoppable(on: boolean): void; putBack(text: string, photos: Picked[]): boolean };
 
 /** A photo picked to go with a message: what is sent, and where its thumbnail is drawn from. */
 export interface Picked {
@@ -190,20 +191,34 @@ export interface Attaching {
   problem(why: string): void;
 }
 
+/** After sending, how long the button is not yet Stop: a second tap of a double tap stops nothing. */
+const STOP_SETTLE_MS = 800;
+
 /**
- * A reply box with a round send button, ready when there is something to send: `send` says whether
- * it went, and the box empties when it did. With `stop`, while it is stoppable and nothing is typed
- * the button stops instead (Happy's agentInputPrimaryAction.ts: typing a follow-up takes priority).
+ * A reply box with a round send button, ready when there is something to send: the box empties as
+ * it is sent, and what was in it comes back when `send` says it did not go. With `stop`, while it is
+ * stoppable and nothing is typed the button stops instead (Happy's agentInputPrimaryAction.ts:
+ * typing a follow-up takes priority).
  */
 export function composer(hint: string, send: (text: string, photos: Picked[]) => Promise<boolean>, props: Props = {}, stop?: () => void, attaching?: Attaching): Composer {
   const field = h("textarea", { rows: 1, placeholder: hint, "aria-label": hint, enterkeyhint: "send" });
   const button = h("button", { type: "submit", class: "send", "aria-label": "Send", disabled: true }, icon("send"));
+  const putBack = (text: string, photos: Picked[]): boolean => {
+    if (attaching && picked.length + photos.length > attaching.max) return false;
+    field.value = [text, field.value].filter(Boolean).join("\n");
+    picked = [...photos, ...picked];
+    drawPhotos();
+    grow();
+    ready();
+    return true;
+  };
   const form = Object.assign(h("form", { class: "composer", ...props }, field, button), { stoppable: (on: boolean) => {
     canStop = on;
     ready();
-  } });
+  }, putBack });
   let canStop = false;
   let stopping = false;
+  let settling = 0;
   let picked: Picked[] = [];
   const row = h("div", { class: "photos", "data-photos": "" });
   const drawPhotos = () => {
@@ -263,7 +278,7 @@ export function composer(hint: string, send: (text: string, photos: Picked[]) =>
   }
   const ready = () => {
     const has = field.value.trim() !== "" || picked.length > 0;
-    const now = !has && canStop && !!stop;
+    const now = !has && canStop && !!stop && !settling;
     button.classList.toggle("ready", has || now);
     button.disabled = !has && !now;
     if (now === stopping) return;
@@ -296,17 +311,24 @@ export function composer(hint: string, send: (text: string, photos: Picked[]) =>
     e.preventDefault();
     const text = field.value.trim();
     if (!text && !picked.length) return;
+    const photos = picked;
+    field.value = "";
+    picked = [];
+    drawPhotos();
+    grow();
+    clearTimeout(settling);
+    settling = setTimeout(() => {
+      settling = 0;
+      ready();
+    }, STOP_SETTLE_MS);
+    ready();
+    let went = false;
     form.inert = true;
     try {
-      if (await send(text, picked)) {
-        field.value = "";
-        picked = [];
-        drawPhotos();
-        grow();
-      }
+      went = await send(text, photos);
     } finally {
       form.inert = false;
-      ready();
+      if (!went) putBack(text, photos);
     }
   });
   return form;

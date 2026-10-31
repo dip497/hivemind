@@ -39,7 +39,7 @@
 
 /** Per-tile cap. A managed parent that never comes back to its prompt shouldn't grow
  *  an unbounded backlog; past this, the OLDEST queued message is dropped (the newest
- *  report is the one that still matters). */
+ *  report is the one that still matters), or a sender who can be told is refused. */
 const MAX_QUEUED = 32;
 
 /** Let the TUI settle after turn-end before typing into it. The prompt is redrawn on
@@ -93,6 +93,9 @@ export interface Delivery {
   atPrompt?: boolean;
   /** Paths pasted, each alone, before the text: how an agent that attaches a photo so is given one. */
   pasted?: string[];
+  /** Past the cap, refused rather than the oldest dropped: a message a sender wrote and is shown as
+   *  queued must not vanish. */
+  refuseWhenFull?: boolean;
 }
 
 export class Mailbox {
@@ -233,8 +236,8 @@ export class Mailbox {
    * Deliver `text` into a tile, typed + Enter. For a MANAGED tile (one that emits turn
    * events) it's queued and released one-per-turn when the tile is at its prompt. For a
    * tile we've never heard a turn from (hookless — codex/opencode) it's sent immediately.
-   * Returns false only when an immediate send fails (dead + unmanaged tile); a queued
-   * message returns true, because it will be delivered.
+   * Returns false when an immediate send fails (dead + unmanaged tile), or a message that may be
+   * refused finds the tile full; a queued message returns true, because it will be delivered.
    */
   deliver(ptyId: string, text: string, onSent?: () => void, o: Delivery = {}): boolean {
     // An agent that steers reads it mid-turn: typed now, into the turn that is running.
@@ -250,7 +253,11 @@ export class Mailbox {
       return ok;
     }
     const q = this.queued.get(ptyId) ?? [];
-    if (q.length >= MAX_QUEUED) q.shift(); // drop the stalest, keep the newest
+    if (q.length >= MAX_QUEUED) {
+      // The sender is told, and keeps what it wrote.
+      if (o.refuseWhenFull) return false;
+      q.shift(); // drop the stalest, keep the newest
+    }
     q.push({ text, ...(o.pasted ? { pasted: o.pasted } : {}), ...(onSent ? { onSent } : {}), ...(o.wanted ? { wanted: o.wanted } : {}) });
     this.queued.set(ptyId, q);
     this.onHeld(ptyId, q.length);

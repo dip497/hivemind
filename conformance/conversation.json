@@ -1,5 +1,5 @@
 {
- "about": "Cases every reader of an agent's session file must pass (spec/agents.md \"Conversation\"): the file's lines (a record as JSON, or a line as it is), in; the entries the person's devices are sent, out. 'claude': Claude Code's file, read as its manifest maps it (session.transcript), the records shaped as Claude Code 2.1.287 writes them (2.1.296 for a tool that asks the person questions). 'mapped': the mapping rules themselves, a mapping and records shaped as another agent might keep them. 'phone': what a phone reads of the entries a device sends it (an answer's entries, in; those it reads, out). Written by hand from the spec.",
+ "about": "Cases every reader of an agent's session file must pass (spec/agents.md \"Conversation\"): the file's lines (a record as JSON, or a line as it is), in; the entries the person's devices are sent, out. 'claude': Claude Code's file, read as its manifest maps it (session.transcript), the records shaped as Claude Code 2.1.287 writes them (2.1.296 for a tool that asks the person questions, 2.1.303 for what its program writes as if the person said it). 'mapped': the mapping rules themselves, a mapping and records shaped as another agent might keep them. 'phone': what a phone reads of the entries a device sends it (an answer's entries, in; those it reads, out). Written by hand from the spec.",
  "claude": [
   {
    "about": "the person's prompt, as text or a text block, is theirs; the agent's text block is its, in markdown; a meta record and a sidechain's say nothing",
@@ -314,6 +314,265 @@
      }
     }
    ]
+  },
+  {
+   "about": "a background task's notification is not the person's: one line in the person's words, for a command and for a helper, whatever the record's flags, a helper's result only as its detail, no id, path or token count; one that only says a helper still waits is quiet",
+   "lines": [
+    "{\"type\":\"user\",\"uuid\":\"n1\",\"timestamp\":\"2026-10-01T10:00:00.000Z\",\"message\":{\"role\":\"user\",\"content\":\"<task-notification>\\n<task-id>f00d</task-id>\\n<output-file>/tmp/invented/tasks/f00d.output</output-file>\\n<status>completed</status>\\n<summary>Background command \\\"Build the site\\\" completed (exit code 0)</summary>\\n<usage><total_tokens>12</total_tokens></usage>\\n</task-notification>\"},\"origin\":{\"kind\":\"task-notification\"}}",
+    "{\"type\":\"user\",\"uuid\":\"n2\",\"timestamp\":\"2026-10-01T10:00:00.000Z\",\"message\":{\"role\":\"user\",\"content\":\"<task-notification>\\n<task-id>f00d</task-id>\\n<output-file>/tmp/invented/tasks/f00d.output</output-file>\\n<status>completed</status>\\n<summary>Background command \\\"Run the tests\\\" failed with exit code 2</summary>\\n<usage><total_tokens>12</total_tokens></usage>\\n</task-notification>\"},\"origin\":{\"kind\":\"task-notification\"}}",
+    "{\"type\":\"user\",\"uuid\":\"n3\",\"timestamp\":\"2026-10-01T10:00:00.000Z\",\"message\":{\"role\":\"user\",\"content\":\"<task-notification>\\n<task-id>f00d</task-id>\\n<output-file>/tmp/invented/tasks/f00d.output</output-file>\\n<status>completed</status>\\n<summary>Agent \\\"Tidy the docs\\\" finished</summary>\\n<result>Tidied the docs.</result>\\n<usage><total_tokens>12</total_tokens></usage>\\n</task-notification>\"},\"origin\":{\"kind\":\"task-notification\"}}",
+    "{\"type\":\"user\",\"uuid\":\"n4\",\"timestamp\":\"2026-10-01T10:00:00.000Z\",\"message\":{\"role\":\"user\",\"content\":\"<task-notification>\\n<task-id>f00d</task-id>\\n<output-file>/tmp/invented/tasks/f00d.output</output-file>\\n<status>completed</status>\\n<summary>Agent \\\"Tidy the docs\\\" is waiting on its own background work</summary>\\n<note>Still running.</note>\\n<result>Not reported yet.</result>\\n<usage><total_tokens>12</total_tokens></usage>\\n</task-notification>\"},\"origin\":{\"kind\":\"task-notification\"}}",
+    "{\"type\":\"user\",\"uuid\":\"n5\",\"timestamp\":\"2026-10-01T10:00:00.000Z\",\"message\":{\"role\":\"user\",\"content\":\"<task-notification>\\n<task-id>f00d</task-id>\\n<output-file>/tmp/invented/tasks/f00d.output</output-file>\\n<status>completed</status>\\n<summary>Agent \\\"No origin here\\\" finished</summary>\\n<usage><total_tokens>12</total_tokens></usage>\\n</task-notification>\"}}"
+   ],
+   "entries": [
+    {
+     "id": "n1",
+     "at": 1790848800000,
+     "who": "program",
+     "notice": {
+      "text": "Background command finished: Build the site"
+     }
+    },
+    {
+     "id": "n2",
+     "at": 1790848800000,
+     "who": "program",
+     "notice": {
+      "text": "Background command failed: Run the tests"
+     }
+    },
+    {
+     "id": "n3",
+     "at": 1790848800000,
+     "who": "program",
+     "notice": {
+      "text": "Helper finished: Tidy the docs",
+      "detail": "Tidied the docs."
+     }
+    },
+    {
+     "id": "n4",
+     "at": 1790848800000,
+     "who": "program",
+     "notice": {
+      "text": "Helper is waiting on its own background work",
+      "quiet": true,
+      "detail": "Not reported yet."
+     }
+    },
+    {
+     "id": "n5",
+     "at": 1790848800000,
+     "who": "program",
+     "notice": {
+      "text": "Helper finished: No origin here"
+     }
+    }
+   ]
+  },
+  {
+   "about": "a notification queued mid-turn says the same, as the attachment it is; one with a reminder after it is still whole; one of a kind the manifest does not name says its summary",
+   "lines": [
+    "{\"type\":\"attachment\",\"uuid\":\"q1\",\"timestamp\":\"2026-10-01T10:00:00.000Z\",\"attachment\":{\"type\":\"queued_command\",\"commandMode\":\"task-notification\",\"prompt\":\"<task-notification>\\n<task-id>f00d</task-id>\\n<output-file>/tmp/invented/tasks/f00d.output</output-file>\\n<status>completed</status>\\n<summary>Background command \\\"Watch the logs\\\" completed (exit code 0)</summary>\\n<usage><total_tokens>12</total_tokens></usage>\\n</task-notification>\"}}",
+    "{\"type\":\"user\",\"uuid\":\"q2\",\"timestamp\":\"2026-10-01T10:00:00.000Z\",\"message\":{\"role\":\"user\",\"content\":\"<task-notification>\\n<task-id>f00d</task-id>\\n<output-file>/tmp/invented/tasks/f00d.output</output-file>\\n<status>completed</status>\\n<summary>Background command \\\"Lint\\\" completed (exit code 0)</summary>\\n<usage><total_tokens>12</total_tokens></usage>\\n</task-notification>\\n<system-reminder>\\nA reminder for the agent.\\n</system-reminder>\"},\"origin\":{\"kind\":\"task-notification\"}}",
+    "{\"type\":\"user\",\"uuid\":\"q3\",\"timestamp\":\"2026-10-01T10:00:00.000Z\",\"message\":{\"role\":\"user\",\"content\":\"<task-notification>\\n<task-id>f00d</task-id>\\n<output-file>/tmp/invented/tasks/f00d.output</output-file>\\n<status>completed</status>\\n<summary>Something new happened</summary>\\n<usage><total_tokens>12</total_tokens></usage>\\n</task-notification>\"},\"origin\":{\"kind\":\"task-notification\"}}"
+   ],
+   "entries": [
+    {
+     "id": "q1",
+     "at": 1790848800000,
+     "who": "program",
+     "notice": {
+      "text": "Background command finished: Watch the logs"
+     }
+    },
+    {
+     "id": "q2",
+     "at": 1790848800000,
+     "who": "program",
+     "notice": {
+      "text": "Background command finished: Lint"
+     }
+    },
+    {
+     "id": "q3",
+     "at": 1790848800000,
+     "who": "program",
+     "notice": {
+      "text": "Something new happened"
+     }
+    }
+   ]
+  },
+  {
+   "about": "the person's own text that mentions a notification stays as they wrote it: words around one, a whole one they sent (the record says it is theirs), one with words after it, and any message that begins with a tag",
+   "lines": [
+    "{\"type\":\"user\",\"uuid\":\"p1\",\"timestamp\":\"2026-10-01T10:00:00.000Z\",\"message\":{\"role\":\"user\",\"content\":\"why does <task-notification> show on my phone?\"},\"origin\":{\"kind\":\"human\"}}",
+    "{\"type\":\"user\",\"uuid\":\"p2\",\"timestamp\":\"2026-10-01T10:00:00.000Z\",\"message\":{\"role\":\"user\",\"content\":\"<task-notification>\\n<task-id>f00d</task-id>\\n<output-file>/tmp/invented/tasks/f00d.output</output-file>\\n<status>completed</status>\\n<summary>Background command \\\"Pasted\\\" completed (exit code 0)</summary>\\n<usage><total_tokens>12</total_tokens></usage>\\n</task-notification>\"},\"origin\":{\"kind\":\"human\"}}",
+    "{\"type\":\"user\",\"uuid\":\"p3\",\"timestamp\":\"2026-10-01T10:00:00.000Z\",\"message\":{\"role\":\"user\",\"content\":\"<task-notification>\\n<task-id>f00d</task-id>\\n<output-file>/tmp/invented/tasks/f00d.output</output-file>\\n<status>completed</status>\\n<summary>Background command \\\"Asked about\\\" completed (exit code 0)</summary>\\n<usage><total_tokens>12</total_tokens></usage>\\n</task-notification> what does this mean?\"}}",
+    "{\"type\":\"user\",\"uuid\":\"p4\",\"timestamp\":\"2026-10-01T10:00:00.000Z\",\"message\":{\"role\":\"user\",\"content\":\"<sub>small</sub> text\"},\"origin\":{\"kind\":\"human\"}}",
+    "{\"type\":\"user\",\"uuid\":\"p5\",\"timestamp\":\"2026-10-01T10:00:00.000Z\",\"message\":{\"role\":\"user\",\"content\":\"<command-name>/not-a-command</command-name> is how it looks\"},\"origin\":{\"kind\":\"human\"}}"
+   ],
+   "entries": [
+    {
+     "id": "p1",
+     "at": 1790848800000,
+     "who": "person",
+     "text": "why does <task-notification> show on my phone?"
+    },
+    {
+     "id": "p2",
+     "at": 1790848800000,
+     "who": "person",
+     "text": "<task-notification>\n<task-id>f00d</task-id>\n<output-file>/tmp/invented/tasks/f00d.output</output-file>\n<status>completed</status>\n<summary>Background command \"Pasted\" completed (exit code 0)</summary>\n<usage><total_tokens>12</total_tokens></usage>\n</task-notification>"
+    },
+    {
+     "id": "p3",
+     "at": 1790848800000,
+     "who": "person",
+     "text": "<task-notification>\n<task-id>f00d</task-id>\n<output-file>/tmp/invented/tasks/f00d.output</output-file>\n<status>completed</status>\n<summary>Background command \"Asked about\" completed (exit code 0)</summary>\n<usage><total_tokens>12</total_tokens></usage>\n</task-notification> what does this mean?"
+    },
+    {
+     "id": "p4",
+     "at": 1790848800000,
+     "who": "person",
+     "text": "<sub>small</sub> text"
+    },
+    {
+     "id": "p5",
+     "at": 1790848800000,
+     "who": "person",
+     "text": "<command-name>/not-a-command</command-name> is how it looks"
+    }
+   ]
+  },
+  {
+   "about": "the other text its program writes: a compaction's summary, a stop, a shell command's output, a local command's (its first line; none: nothing), and a command the person typed, which stays theirs, without the tags",
+   "lines": [
+    "{\"type\":\"user\",\"uuid\":\"c1\",\"timestamp\":\"2026-10-01T10:00:00.000Z\",\"message\":{\"role\":\"user\",\"content\":\"This session is being continued from a previous conversation.\\n\\nInvented summary.\"},\"isCompactSummary\":true,\"isVisibleInTranscriptOnly\":true}",
+    "{\"type\":\"user\",\"uuid\":\"c2\",\"timestamp\":\"2026-10-01T10:00:00.000Z\",\"message\":{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"[Request interrupted by user]\"}]}}",
+    "{\"type\":\"user\",\"uuid\":\"c3\",\"timestamp\":\"2026-10-01T10:00:00.000Z\",\"message\":{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"t1\",\"content\":\"partial\"},{\"type\":\"text\",\"text\":\"[Request interrupted by user for tool use]\"}]}}",
+    "{\"type\":\"user\",\"uuid\":\"c4\",\"timestamp\":\"2026-10-01T10:00:00.000Z\",\"message\":{\"role\":\"user\",\"content\":\"<bash-stdout>built\\n</bash-stdout><bash-stderr></bash-stderr>\"}}",
+    "{\"type\":\"user\",\"uuid\":\"c5\",\"timestamp\":\"2026-10-01T10:00:00.000Z\",\"message\":{\"role\":\"user\",\"content\":\"<local-command-stdout>\\u001b[1mSet model\\u001b[22m to a faster one</local-command-stdout>\"}}",
+    "{\"type\":\"user\",\"uuid\":\"c6\",\"timestamp\":\"2026-10-01T10:00:00.000Z\",\"message\":{\"role\":\"user\",\"content\":\"<local-command-stdout></local-command-stdout>\"}}",
+    "{\"type\":\"user\",\"uuid\":\"c7\",\"timestamp\":\"2026-10-01T10:00:00.000Z\",\"message\":{\"role\":\"user\",\"content\":\"<command-name>/review</command-name>\\n<command-message>review</command-message>\\n<command-args>the nav</command-args>\"}}",
+    "{\"type\":\"user\",\"uuid\":\"c8\",\"timestamp\":\"2026-10-01T10:00:00.000Z\",\"message\":{\"role\":\"user\",\"content\":\"<command-message>tidy</command-message>\\n<command-name>/tidy</command-name>\"},\"origin\":{\"kind\":\"human\"}}",
+    "{\"type\":\"user\",\"uuid\":\"c9\",\"timestamp\":\"2026-10-01T10:00:00.000Z\",\"message\":{\"role\":\"user\",\"content\":\"<bash-input>ls -la</bash-input>\"}}"
+   ],
+   "entries": [
+    {
+     "id": "c1",
+     "at": 1790848800000,
+     "who": "program",
+     "notice": {
+      "text": "Earlier conversation summarized to save room"
+     }
+    },
+    {
+     "id": "c2",
+     "at": 1790848800000,
+     "who": "program",
+     "notice": {
+      "text": "You stopped it"
+     }
+    },
+    {
+     "id": "c3/0",
+     "at": 1790848800000,
+     "who": "tool",
+     "result": {
+      "of": "t1",
+      "text": "partial"
+     }
+    },
+    {
+     "id": "c3/1",
+     "at": 1790848800000,
+     "who": "program",
+     "notice": {
+      "text": "You stopped it"
+     }
+    },
+    {
+     "id": "c4",
+     "at": 1790848800000,
+     "who": "program",
+     "notice": {
+      "text": "Shell command finished",
+      "detail": "built"
+     }
+    },
+    {
+     "id": "c5",
+     "at": 1790848800000,
+     "who": "program",
+     "notice": {
+      "text": "Set model to a faster one",
+      "detail": "Set model to a faster one"
+     }
+    },
+    {
+     "id": "c7",
+     "at": 1790848800000,
+     "who": "person",
+     "text": "/review the nav"
+    },
+    {
+     "id": "c8",
+     "at": 1790848800000,
+     "who": "person",
+     "text": "/tidy"
+    },
+    {
+     "id": "c9",
+     "at": 1790848800000,
+     "who": "person",
+     "text": "!ls -la"
+    }
+   ]
+  },
+  {
+   "about": "what the person pasted shows without its wrapping, words around it kept, its end named as its start is; an open tag with no such end stays as written; a message another agent sent mid-turn says nothing, as one sent while it rests; a photo sent mid-turn is the person's words",
+   "lines": [
+    "{\"type\":\"user\",\"uuid\":\"w1\",\"timestamp\":\"2026-10-01T10:00:00.000Z\",\"message\":{\"role\":\"user\",\"content\":\"<pasted_content id=\\\"ab12\\\">\\nthe log\\nline two\\n</pasted_content id=\\\"ab12\\\">\\n\\nwhat is wrong here?\"},\"origin\":{\"kind\":\"human\"}}",
+    "{\"type\":\"user\",\"uuid\":\"w2\",\"timestamp\":\"2026-10-01T10:00:00.000Z\",\"message\":{\"role\":\"user\",\"content\":\"see <pasted_content id=\\\"cd\\\">\\nfirst\\n</pasted_content id=\\\"cd\\\"> and <pasted_content id=\\\"ef\\\">\\nsecond\\n</pasted_content id=\\\"ef\\\">\"},\"origin\":{\"kind\":\"human\"}}",
+    "{\"type\":\"user\",\"uuid\":\"w3\",\"timestamp\":\"2026-10-01T10:00:00.000Z\",\"message\":{\"role\":\"user\",\"content\":\"what does <pasted_content> mean?\"},\"origin\":{\"kind\":\"human\"}}",
+    "{\"type\":\"attachment\",\"uuid\":\"w4\",\"timestamp\":\"2026-10-01T10:00:00.000Z\",\"attachment\":{\"type\":\"queued_command\",\"commandMode\":\"prompt\",\"prompt\":\"<pasted_content id=\\\"gh\\\">\\nmid-turn\\n</pasted_content id=\\\"gh\\\">\",\"origin\":{\"kind\":\"human\"}}}",
+    "{\"type\":\"attachment\",\"uuid\":\"w5\",\"timestamp\":\"2026-10-01T10:00:00.000Z\",\"attachment\":{\"type\":\"queued_command\",\"commandMode\":\"prompt\",\"prompt\":\"<cross-session-message from=\\\"x\\\">do this</cross-session-message>\",\"isMeta\":true,\"origin\":{\"kind\":\"peer\"}}}",
+    "{\"type\":\"attachment\",\"uuid\":\"w6\",\"timestamp\":\"2026-10-01T10:00:00.000Z\",\"attachment\":{\"type\":\"queued_command\",\"commandMode\":\"prompt\",\"prompt\":[{\"type\":\"text\",\"text\":\"look at this [Image #1]\"},{\"type\":\"image\",\"source\":{\"type\":\"base64\",\"data\":\"AAAA\"}}],\"origin\":{\"kind\":\"human\"}}}"
+   ],
+   "entries": [
+    {
+     "id": "w1",
+     "at": 1790848800000,
+     "who": "person",
+     "text": "the log\nline two\n\nwhat is wrong here?"
+    },
+    {
+     "id": "w2",
+     "at": 1790848800000,
+     "who": "person",
+     "text": "see first and second"
+    },
+    {
+     "id": "w3",
+     "at": 1790848800000,
+     "who": "person",
+     "text": "what does <pasted_content> mean?"
+    },
+    {
+     "id": "w4",
+     "at": 1790848800000,
+     "who": "person",
+     "text": "mid-turn"
+    },
+    {
+     "id": "w6/0",
+     "at": 1790848800000,
+     "who": "person",
+     "text": "look at this [Image #1]"
+    }
+   ]
   }
  ],
  "mapped": {
@@ -391,6 +650,95 @@
      "text": "payload.text",
      "who": "agent"
     }
+   ],
+   "notices": [
+    {
+     "require": {
+      "kind": "msg",
+      "payload.role": "user"
+     },
+     "unless": {
+      "payload.typed": true
+     },
+     "each": "payload.parts",
+     "item": {
+      "type": "input_text"
+     },
+     "text": "text",
+     "elements": [
+      "job-done"
+     ],
+     "reads": "job-done.title",
+     "detail": [
+      "job-done.log"
+     ],
+     "says": [
+      {
+       "when": "built {what} in *",
+       "say": "Finished building {what}"
+      },
+      {
+       "when": "still at it*",
+       "say": "Still at it",
+       "quiet": true
+      },
+      {
+       "say": "{job-done.title}"
+      }
+     ]
+    },
+    {
+     "require": {
+      "kind": "msg",
+      "payload.role": "user"
+     },
+     "each": "payload.parts",
+     "item": {
+      "type": "input_text"
+     },
+     "text": "text",
+     "elements": [
+      "ran"
+     ],
+     "who": "person",
+     "says": [
+      {
+       "say": "/{ran}"
+      }
+     ]
+    },
+    {
+     "require": {
+      "kind": "compact"
+     },
+     "says": [
+      {
+       "say": "Summarized"
+      }
+     ]
+    },
+    {
+     "require": {
+      "kind": "msg",
+      "payload.role": "user"
+     },
+     "each": "payload.parts",
+     "item": {
+      "type": "input_text"
+     },
+     "text": "text",
+     "elements": [
+      "empty"
+     ],
+     "says": [
+      {
+       "say": "{empty}"
+      }
+     ]
+    }
+   ],
+   "unwrap": [
+    "quoted"
    ]
   },
   "cases": [
@@ -518,12 +866,86 @@
       "text": "Plan: refactor the nav first."
      }
     ]
+   },
+   {
+    "about": "notices, as another agent's manifest may declare them: text wholly an element says its line, its detail apart, the first saying that fits, a part of when in its say; one its record says is typed is the person's; text around an element is the person's; one with who person is their words; a rule with no text reads the record; a line left empty says nothing; a wrapper comes off",
+    "lines": [
+     "{\"kind\":\"msg\",\"rid\":\"m1\",\"ts\":\"2026-10-01T10:00:00.000Z\",\"payload\":{\"role\":\"user\",\"parts\":[{\"type\":\"input_text\",\"text\":\"<job-done><title>built the site in 3s</title><log>all fine</log><id>9</id></job-done>\"}]}}",
+     "{\"kind\":\"msg\",\"rid\":\"m2\",\"ts\":\"2026-10-01T10:00:00.000Z\",\"payload\":{\"role\":\"user\",\"parts\":[{\"type\":\"input_text\",\"text\":\"<job-done><title>still at it now</title></job-done>\"}]}}",
+     "{\"kind\":\"msg\",\"rid\":\"m3\",\"ts\":\"2026-10-01T10:00:00.000Z\",\"payload\":{\"role\":\"user\",\"parts\":[{\"type\":\"input_text\",\"text\":\"<job-done><title>something else</title></job-done>\"}]}}",
+     "{\"kind\":\"msg\",\"rid\":\"m4\",\"ts\":\"2026-10-01T10:00:00.000Z\",\"payload\":{\"role\":\"user\",\"parts\":[{\"type\":\"input_text\",\"text\":\"<job-done><title>built x in 3s</title></job-done>\"}],\"typed\":true}}",
+     "{\"kind\":\"msg\",\"rid\":\"m5\",\"ts\":\"2026-10-01T10:00:00.000Z\",\"payload\":{\"role\":\"user\",\"parts\":[{\"type\":\"input_text\",\"text\":\"read <job-done><title>built x in 3s</title></job-done> please\"}]}}",
+     "{\"kind\":\"msg\",\"rid\":\"m6\",\"ts\":\"2026-10-01T10:00:00.000Z\",\"payload\":{\"role\":\"user\",\"parts\":[{\"type\":\"input_text\",\"text\":\"<ran>deploy</ran>\"}]}}",
+     "{\"kind\":\"compact\",\"rid\":\"m7\",\"ts\":\"2026-10-01T10:00:00.000Z\"}",
+     "{\"kind\":\"msg\",\"rid\":\"m8\",\"ts\":\"2026-10-01T10:00:00.000Z\",\"payload\":{\"role\":\"user\",\"parts\":[{\"type\":\"input_text\",\"text\":\"<empty></empty>\"}]}}",
+     "{\"kind\":\"msg\",\"rid\":\"m9\",\"ts\":\"2026-10-01T10:00:00.000Z\",\"payload\":{\"role\":\"user\",\"parts\":[{\"type\":\"input_text\",\"text\":\"<quoted>\\nfrom the log\\n</quoted>\\nwhy?\"}]}}"
+    ],
+    "entries": [
+     {
+      "id": "m1",
+      "at": 1790848800000,
+      "who": "program",
+      "notice": {
+       "text": "Finished building the site",
+       "detail": "all fine"
+      }
+     },
+     {
+      "id": "m2",
+      "at": 1790848800000,
+      "who": "program",
+      "notice": {
+       "text": "Still at it",
+       "quiet": true
+      }
+     },
+     {
+      "id": "m3",
+      "at": 1790848800000,
+      "who": "program",
+      "notice": {
+       "text": "something else"
+      }
+     },
+     {
+      "id": "m4",
+      "at": 1790848800000,
+      "who": "person",
+      "text": "<job-done><title>built x in 3s</title></job-done>"
+     },
+     {
+      "id": "m5",
+      "at": 1790848800000,
+      "who": "person",
+      "text": "read <job-done><title>built x in 3s</title></job-done> please"
+     },
+     {
+      "id": "m6",
+      "at": 1790848800000,
+      "who": "person",
+      "text": "/deploy"
+     },
+     {
+      "id": "m7",
+      "at": 1790848800000,
+      "who": "program",
+      "notice": {
+       "text": "Summarized"
+      }
+     },
+     {
+      "id": "m9",
+      "at": 1790848800000,
+      "who": "person",
+      "text": "from the log\nwhy?"
+     }
+    ]
    }
   ]
  },
  "phone": [
   {
-   "about": "each entry the phone can read, in the order sent: the person's or the agent's text, a tool the agent used (about left out when not said), what a tool gave back (error only as true); one that is not an object, of another who, without what its who says, or with a field of another type, is left out",
+   "about": "each entry the phone can read, in the order sent: the person's or the agent's text, a tool the agent used (about left out when not said), what a tool gave back (error only as true), a line of the agent's own program (quiet only as true); one that is not an object, of another who, without what its who says, or with a field of another type, is left out",
    "entries": [
     {
      "id": "u1",
@@ -622,6 +1044,56 @@
       "id": "t9",
       "name": "Edit"
      }
+    },
+    {
+     "id": "n1",
+     "at": 1790848800000,
+     "who": "program",
+     "notice": {
+      "text": "Helper finished: Tidy the docs",
+      "detail": "Tidied the docs."
+     }
+    },
+    {
+     "id": "n2",
+     "at": 1790848800000,
+     "who": "program",
+     "notice": {
+      "text": "Helper is waiting",
+      "quiet": true
+     }
+    },
+    {
+     "id": "n3",
+     "at": 1790848800000,
+     "who": "program",
+     "notice": {
+      "text": "Odd quiet",
+      "quiet": "yes"
+     }
+    },
+    {
+     "id": "x1",
+     "at": 1790848800000,
+     "who": "program",
+     "text": "no notice"
+    },
+    {
+     "id": "x2",
+     "at": 1790848800000,
+     "who": "program",
+     "notice": {
+      "quiet": true
+     }
+    },
+    {
+     "id": "x3",
+     "at": 1790848800000,
+     "who": "person",
+     "text": "both",
+     "notice": {
+      "text": "a notice too"
+     }
     }
    ],
    "read": [
@@ -673,6 +1145,32 @@
      "result": {
       "of": "t2",
       "text": "ok"
+     }
+    },
+    {
+     "id": "n1",
+     "at": 1790848800000,
+     "who": "program",
+     "notice": {
+      "text": "Helper finished: Tidy the docs",
+      "detail": "Tidied the docs."
+     }
+    },
+    {
+     "id": "n2",
+     "at": 1790848800000,
+     "who": "program",
+     "notice": {
+      "text": "Helper is waiting",
+      "quiet": true
+     }
+    },
+    {
+     "id": "n3",
+     "at": 1790848800000,
+     "who": "program",
+     "notice": {
+      "text": "Odd quiet"
      }
     }
    ]

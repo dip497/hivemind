@@ -385,7 +385,83 @@ session:
   transcript:
     id: uuid
     at: timestamp
-    skipWhen: { isSidechain: true, isMeta: true }
+    skipWhen: { isSidechain: true, isMeta: true, attachment.isMeta: true }
+    # A paste it keeps long, wrapped; what the person pasted shows without the tags.
+    unwrap: [pasted_content]
+    # What its own program writes into the file as if the person had said it, read from claude
+    # 2.1.258 to 2.1.310: a background task's notification (a user record when it wakes the agent, a queued
+    # attachment when it lands mid-turn; origin.kind says who wrote the record, where the file has
+    # it), a compaction's summary, a local command and its output, and a stop.
+    notices:
+    - require: { type: user, isCompactSummary: true }
+      says:
+      - say: Earlier conversation summarized to save room
+    - require: { type: user }
+      unless: { origin.kind: human }
+      text: message.content
+      elements: [task-notification, system-reminder]
+      reads: task-notification.summary
+      detail: [task-notification.result]
+      says: &background
+      - { when: 'Background command "{what}" completed*', say: 'Background command finished: {what}' }
+      - { when: 'Background command "{what}" failed*', say: 'Background command failed: {what}' }
+      - { when: 'Background command "{what}" was stopped*', say: 'Background command stopped: {what}' }
+      - { when: "Background shell command didn't finish*", say: Background command did not finish before the last session ended }
+      - { when: 'Background agent "{what}" didn''t finish*', say: 'Helper did not finish before the last session ended: {what}' }
+      - { when: 'Agent "{what}" is waiting on its own background work*', say: Helper is waiting on its own background work, quiet: true }
+      - { when: 'Agent "{what}" finished*', say: 'Helper finished: {what}' }
+      - { when: 'Agent "{what}" completed*', say: 'Helper finished: {what}' }
+      - { when: 'Agent "{what}" failed*', say: 'Helper failed: {what}' }
+      - { when: 'Agent "{what}" was stopped*', say: 'Helper stopped: {what}' }
+      - { when: 'Agent "{what}" was resumed*', say: 'Helper resumed: {what}', quiet: true }
+      - { when: 'Dynamic workflow "{what}" completed*', say: 'Workflow finished: {what}' }
+      - { when: 'Dynamic workflow "{what}" failed*', say: 'Workflow failed: {what}' }
+      - { when: 'Monitor event: "{what}"*', say: 'Watched: {what}', quiet: true }
+      - { when: 'Monitor "{what}" stream ended*', say: 'Stopped watching: {what}', quiet: true }
+      - { when: 'Stopped watching {what}: "{name}"*', say: 'Stopped watching: {name}', quiet: true }
+      - { when: 'Task "{what}" was stopped*', say: 'Stopped: {what}' }
+      - { when: 'Goal check-in*', say: Background work still running, quiet: true }
+      - { say: '{task-notification.summary}' }
+    - require: { type: attachment, attachment.type: queued_command, attachment.commandMode: task-notification }
+      text: attachment.prompt
+      elements: [task-notification, system-reminder]
+      reads: task-notification.summary
+      detail: [task-notification.result]
+      says: *background
+    - require: { type: user }
+      text: message.content
+      elements: [command-name, command-message, command-args, skill-format]
+      who: person
+      says:
+      - say: '{command-name} {command-args}'
+    - require: { type: user }
+      unless: { origin.kind: human }
+      text: message.content
+      elements: [bash-input]
+      who: person
+      says:
+      - say: '!{bash-input}'
+    - require: { type: user }
+      unless: { origin.kind: human }
+      text: message.content
+      elements: [bash-stdout, bash-stderr]
+      detail: [bash-stdout, bash-stderr]
+      says:
+      - say: Shell command finished
+    - require: { type: user }
+      unless: { origin.kind: human }
+      text: message.content
+      elements: [local-command-stdout]
+      detail: [local-command-stdout]
+      says:
+      - say: '{local-command-stdout}'
+    - require: { type: user }
+      unless: { origin.kind: human }
+      each: message.content
+      item: { type: text }
+      text: text
+      says:
+      - { when: '[Request interrupted by user*', say: You stopped it }
     said:
     - require: { type: user }
       text: message.content
@@ -400,6 +476,12 @@ session:
     # the same way, is not the person's.
     - require: { type: attachment, attachment.type: queued_command, attachment.commandMode: prompt }
       text: attachment.prompt
+      who: person
+    # One with a photo keeps its words in a block of its list.
+    - require: { type: attachment, attachment.type: queued_command, attachment.commandMode: prompt }
+      each: attachment.prompt
+      item: { type: text }
+      text: text
       who: person
     - require: { type: user }
       each: message.content

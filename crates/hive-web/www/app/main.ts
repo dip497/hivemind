@@ -81,7 +81,7 @@ const app: App = {
     else location.hash = "home";
   },
   answer: (agent, reply) => act(() => phone!.answer(agent, reply), NOTICES.answered),
-  send: (agent, text, photos) => act(() => phone!.send(agent, text, photos), NOTICES.notRunning),
+  send: async (agent, text, photos, going) => reached().send(agent, text, photos, going),
   stop: (agent) => act(() => phone!.stop(agent), NOTICES.notStopped),
   close: (agent) => act(() => phone!.close(agent), NOTICES.closed),
   notes: (agent) => phone ? phone.notes(agent).catch(() => []) : Promise.resolve([]),

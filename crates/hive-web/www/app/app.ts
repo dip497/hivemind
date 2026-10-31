@@ -11,8 +11,9 @@ export interface App {
   back(): void;
   /** Whether it landed; null when the computer did not say. */
   answer(agent: Agent, reply: Reply): Promise<boolean | null>;
-  /** Whether it went, and whether it is held until the agent's turn ends. */
-  send(agent: Agent, text: string, photos?: Photo[]): Promise<Sent | false>;
+  /** Whether it went, and whether it is held until the agent's turn ends; `going` is told how much
+   *  has gone, of 1, as it goes. Throws why, when it could not go. */
+  send(agent: Agent, text: string, photos: Photo[], going: (part: number) => void): Promise<Sent | false>;
   stop(agent: Agent): Promise<boolean>;
   close(agent: Agent): Promise<boolean>;
   conversation(agent: Agent, said: (p: Piece) => void, ended: (why: string) => void): () => void;

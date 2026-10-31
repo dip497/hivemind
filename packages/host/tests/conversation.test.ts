@@ -411,6 +411,16 @@ test("what an agent last said is its own words, read as text: what the person wr
   assert.equal((await lastSaidSince(at, BOTH)).line, "Yes, upgrade prod to v1.106.2. now - a_b_c 2*3*4");
 });
 
+test("a notice is no one's last words, and does not end what an agent waits on: its program writes one while a tool it used still runs", async () => {
+  const mapping = await claudeMapping();
+  const at = "2026-10-01T10:00:00.000Z";
+  const use = JSON.stringify({ type: "assistant", uuid: "a1", timestamp: at, message: { content: [{ type: "tool_use", id: "t1", name: "Bash", input: { command: "make" } }] } });
+  const notice = JSON.stringify({ type: "attachment", uuid: "q1", timestamp: at, attachment: { type: "queued_command", commandMode: "task-notification", prompt: "<task-notification><summary>Background command \"Lint\" completed (exit code 0)</summary></task-notification>" } });
+  const file = sessionFile(`${use}\n${notice}\n`);
+  assert.deepEqual(pendingTool(file, mapping), { name: "Bash", about: "make" });
+  assert.equal((await lastSaidSince(file, mapping)).line, "Bash · make");
+});
+
 test("from a cursor more than 1 MiB behind, what an agent last said is read from the end of its file, never the whole gap: its last words, and none from megabytes back", async () => {
   const AGENT: AgentTranscript = { id: "uuid", at: "timestamp", said: [{ require: { type: "assistant" }, text: "message.content", who: "agent" }] };
   let n = 0;

@@ -23,6 +23,19 @@ const plane = (o: Partial<ControlPlaneOptions> = {}) => new ControlPlane({
   ...o,
 } as unknown as ControlPlaneOptions);
 
+test("past the most a tile holds, a message whose sender is told is refused and the oldest stays; one whose sender is not told replaces the oldest", () => {
+  const typed: string[] = [];
+  const p = plane({ signalsTurns: () => true, write: () => true });
+  p.event("agent.screen", { tileId: "hm:t1", state: "working" });
+  for (let n = 0; n < 32; n++) assert.equal(p.mailbox.deliver("hm:t1", `m${n}`, undefined, { refuseWhenFull: true }), true);
+  assert.equal(p.mailbox.deliver("hm:t1", "one too many", () => typed.push("one too many"), { refuseWhenFull: true }), false);
+  assert.equal(p.mailbox.pending("hm:t1"), 32);
+  assert.equal(p.mailbox.deliver("hm:t1", "a report"), true);
+  assert.equal(p.mailbox.pending("hm:t1"), 32);
+  assert.deepEqual(typed, []);
+  p.mailbox.forget("hm:t1");
+});
+
 test("a screen reading is the agent's status, with what screen it says; one that says it as anything but text says nothing", () => {
   const p = plane();
   p.event("agent.screen", { tileId: "hm:t1", state: "permission", says: "trust" });

@@ -259,6 +259,9 @@ button { cursor: pointer; }
 .backbar .sub .dot[data-state="working"] { width: 10px; height: 10px; }
 .backbar .sub .dot:is([data-state="idle"], [data-state="done"]) { display: none; }
 .chat { flex: 1; overflow-y: auto; padding: 12px 16px; display: flex; flex-direction: column; gap: 8px; }
+/* What floats over its foot does not hide what can be tapped there. */
+#app:has(> .notice:not([hidden])) .chat { padding-bottom: 96px; }
+#app:has([data-message][data-has-photos]) > .notice { bottom: calc(148px + env(safe-area-inset-bottom)); }
 /* A turn begins with the person: 20 px between turns, 8 within one. */
 .chat > .said-person, .chat > .said-person + * { margin-top: 12px; }
 .said-person {
@@ -269,6 +272,12 @@ button { cursor: pointer; }
 /* Sent from here, not yet in the agent's session file: what became of it, under it. */
 .chat > .pending { margin-top: 12px; align-self: stretch; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
 .pending[data-pending="going"] > .said-person { opacity: 0.7; }
+.pending[data-pending="going"] > .photos { opacity: 0.7; }
+.pending[data-pending="failed"] > .said-person { outline: 1px solid var(--err); }
+.pending[data-pending="failed"] .pending-state { color: var(--err); flex-wrap: wrap; justify-content: flex-end; }
+.pending[data-pending="failed"] .pending-state > span { flex-basis: 100%; text-align: end; }
+.pending-bar { display: block; width: 120px; height: 2px; border-radius: 1px; background: linear-gradient(to right, var(--text2) calc(var(--part, 0) * 100%), var(--line) 0); }
+.pending-bar[hidden] { display: none; }
 .pending-state { display: flex; align-items: center; gap: 8px; margin: 0; font: 400 13px/18px var(--sans); color: var(--text2); }
 .said-agent { display: flex; flex-direction: column; gap: 8px; font-size: 16px; line-height: 24px; overflow-wrap: anywhere; }
 /* What an agent says, drawn from its markdown (markdown.ts). */
@@ -295,6 +304,20 @@ button { cursor: pointer; }
 .md th, .md td { border: 1px solid var(--line); padding: 4px 8px; text-align: start; vertical-align: top; }
 .md th { background: var(--panel); font-weight: 600; }
 /* A tool used: one quiet line, red only when it failed; tools used one after another, one fold. */
+/* What the agent's own program wrote: quieter than a tool, and one line for a run of them. */
+.said-program > p { margin: 0; min-height: 24px; padding: 2px 0; display: flex; align-items: center; }
+.said-program > button, .said-programs > button {
+  display: flex; align-items: center; width: 100%; gap: 6px; min-height: 24px; padding: 2px 0;
+  border: 0; background: transparent; text-align: left;
+}
+.said-program .label, .said-programs > button .label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 400 13px/18px var(--sans); color: var(--text3); }
+.said-program[data-quiet] .label, .said-programs[data-quiet] > button .label { font-size: 12px; opacity: 0.6; }
+.said-program .chev, .said-programs > button .chev { flex: none; width: 14px; height: 14px; color: var(--text3); transition: transform 120ms ease; }
+.said-program[data-open] > button .chev, .said-programs[data-open] > button .chev { transform: rotate(90deg); }
+.said-programs-list { display: flex; flex-direction: column; padding-left: 12px; border-left: 1px solid var(--line); }
+.said-programs-list[hidden] { display: none; }
+.said-program-detail { display: flex; flex-direction: column; gap: 6px; padding: 4px 0 8px; font-size: 14px; line-height: 20px; color: var(--text2); overflow-wrap: anywhere; }
+.said-program-detail[hidden] { display: none; }
 .tool > button, .tools > button {
   display: flex; align-items: center; width: 100%; gap: 6px; min-height: 32px; padding: 4px 0;
   border: 0; background: transparent; text-align: left;
