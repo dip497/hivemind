@@ -28,7 +28,8 @@ import { enterPairing, offeringNearby, pairAnnouncement, parseCode, parsePairLin
 import { askToForget, heldWorkspaces, tellGuestOf, tellPhones } from "@hivemind/host/peer-links";
 import { HostRecords, type Hosted } from "@hivemind/workspace-host/host-records";
 import { Hosting } from "@hivemind/host/hosting";
-import type { LayersShown } from "@hivemind/host/home";
+import { homeLook, type LayersShown } from "@hivemind/host/home";
+import { lookForGuests, wallpaperShown } from "@hivemind/core/settings-schema";
 import { People } from "@hivemind/host/people";
 import { handle, handleEffect, on } from "./app-ipc.js";
 import { connectPageLink, pageHash, phonePageAt, SHIPPED_PAGE } from "./phone-page.js";
@@ -36,7 +37,7 @@ import { hostIntents } from "./audit.js";
 import { displayName, machineIdentity, takePerson } from "./identity.js";
 import { idOf, revokeDevice, workspaceSeed, type Seed } from "@hivemind/workspace-host/identity";
 import { OwedRevocations } from "@hivemind/workspace-host/revocations";
-import { getSettings } from "./settings-store.js";
+import { getSettings, onSettingsChange } from "./settings-store.js";
 import { broadcast, userWindow } from "./windows.js";
 import { onWorkspaceChange, sharedStore, workspaceStore } from "./workspace-store-ipc.js";
 import { PeerLinks, type PeerLinksOptions, type ShownMachine } from "@hivemind/host/peer-links";
@@ -735,7 +736,12 @@ export function installNetworkIpc(server: WorkspaceServer, { daemon, granted, st
     onWarn: (m) => console.warn(`[peers] ${m}`),
     ...home,
     shown: (repo) => layersShown.get(repo),
+    look: () => {
+      const s = getSettings();
+      return homeLook(lookForGuests(s), wallpaperShown(s.appearance.wallpaper.kind, s.appearance.glass.enabled, !!s.appearanceExtra.theme));
+    },
   });
+  onSettingsChange(() => peers?.lookChanged());
   // The window's Layers panel shows another order, or other pins.
   on("layers:shown", (_e, repo: unknown, shown: unknown) => {
     const s = shown as Partial<LayersShown> | null;

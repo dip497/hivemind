@@ -1,4 +1,4 @@
-# Home (0.4)
+# Home (0.5)
 
 What the person's phone shows first (`docs/design/phone-browser-2026-10-03.md` §11.2): every
 workspace the computer holds, its frames and its tiles, as the desktop's Layers panel lists them,
@@ -66,6 +66,26 @@ Then it sends each change as it comes, a `changes` with the sequences that moved
 stream or the connection closes: the first at once, those in the next 250 ms together at its end.
 A row is sent only when it changed, so one agent's change is one row. The computer keeps the last
 2000 changes and 256 KB of their JSON per sequence; a device further behind is sent both whole.
+
+Every answer to a follow carries `look` (0.5), how the computer looks, and a `changes` carries it
+again, alone or with rows, whenever it changed: never otherwise.
+
+```json
+{ "look": { "mode": "dark", "colors": { "bg": "#101820", "fg": "#eeeeee", "brand": "#5b6cff", … },
+    "terminal": { "background": "#101820", "foreground": "#eeeeee", "cursor": "#eeeeee",
+      "selection": "#333333", "ansi": ["#101010", … 16 in all] },
+    "wallpaper": { "kind": "image", "colour": false, "brightness": 85, "motion": true, "glass": 72,
+      "media": { "revision": "0123456789abcdef", "type": "image" } } } }
+```
+
+`colors` are the palette's tokens and the accent's `brand` and `accent`, each `#rrggbb`. The
+wallpaper is the one the computer draws: `kind` a built-in one's id (`none` when it draws none),
+`image`, `video` or a package's live wallpaper (`@owner/package/name`); `brightness` and `glass`
+(the panels' tint while glass is on, else null) in percent. A photo or video is named by
+`media.revision`, a hash of its address, never the address; its bytes come from
+`appearance.media`, a live wallpaper's files from `appearance.wallpaperFile` (`workspace-api.md`).
+A device keeps a look only when every colour is `#rrggbb`, the mode `dark` or `light`, there are 16
+terminal colours and the wallpaper is one it can read; a colour token it cannot read is left out.
 
 A device applies, in order, each change numbered after its position, and takes its position from
 the message's `seq`. A change to a row it cannot read takes the row away, as one that went.

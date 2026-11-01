@@ -415,7 +415,7 @@ fn look(bg: &str, mode: &str) -> Value {
         "colors": { "bg": bg, "fg": "#eeeeee", "brand": "#5b6cff" },
         "terminal": { "background": bg, "foreground": "#eeeeee", "cursor": "#eeeeee", "selection": "#333333",
             "ansi": vec!["#101010"; 16] },
-        "wallpaper": { "kind": "koi", "colour": true }
+        "wallpaper": { "kind": "@dip497/live-scenes/koi", "colour": true, "brightness": 85, "motion": true, "glass": 72 }
     })
 }
 
@@ -425,7 +425,7 @@ fn the_look_is_held_from_the_whole_and_from_a_change_kept_with_the_rest_and_one_
     let mut home = Home::default();
     assert!(home.apply(&whole(look("#101820", "dark"))));
     let held = home.look.clone().unwrap();
-    assert_eq!((held.mode.as_str(), held.colors["bg"].as_str(), held.wallpaper.kind.as_str()), ("dark", "#101820", "koi"));
+    assert_eq!((held.mode.as_str(), held.colors["bg"].as_str(), held.wallpaper.kind.as_str()), ("dark", "#101820", "@dip497/live-scenes/koi"));
 
     // Recoloured: a change that carries only the look.
     assert!(home.apply(&json!({ "t": "changes", "look": look("#fafafa", "light") })));
@@ -446,6 +446,18 @@ fn the_look_is_held_from_the_whole_and_from_a_change_kept_with_the_rest_and_one_
     short["terminal"]["ansi"] = json!(["#000000"]);
     assert!(!home.apply(&json!({ "t": "changes", "look": short })));
     assert_eq!(home.look.as_ref().unwrap().colors["bg"], "#fafafa");
+    // A photo named by its revision is taken; one named by anything else, or a wallpaper that is
+    // not a word nor a package's, is not.
+    let mut photo = look("#fafafa", "light");
+    photo["wallpaper"]["kind"] = json!("image");
+    photo["wallpaper"]["media"] = json!({ "revision": "0123456789abcdef", "type": "image" });
+    assert!(home.apply(&json!({ "t": "changes", "look": photo.clone() })));
+    assert_eq!(home.look.as_ref().unwrap().wallpaper.media.as_ref().unwrap().revision, "0123456789abcdef");
+    photo["wallpaper"]["media"]["revision"] = json!("hivemedia://media/x.png");
+    assert!(!home.apply(&json!({ "t": "changes", "look": photo })));
+    let mut far = look("#fafafa", "light");
+    far["wallpaper"]["kind"] = json!("../../etc");
+    assert!(!home.apply(&json!({ "t": "changes", "look": far })));
     // A token it cannot read is left out; the rest is taken.
     let mut odd = look("#123456", "dark");
     odd["colors"]["bg2"] = json!("red");

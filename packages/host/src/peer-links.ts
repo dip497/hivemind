@@ -51,7 +51,7 @@ import { serveList } from "@hivemind/workspace-host/list-sync";
 import type { WorkspaceStore } from "@hivemind/workspace-host/store";
 import { frameWorktrees } from "./frames.js";
 import { servePeer, type TextChannel } from "@hivemind/workspace-api/peers";
-import type { Connection, WorkspaceServer } from "@hivemind/workspace-api/server";
+import type { WorkspaceServer } from "@hivemind/workspace-api/server";
 import { toBareId } from "@hivemind/workspace-api/tile-id";
 import type { Moved } from "@hivemind/workspace-host/doc-sync";
 import type { Hosting } from "./hosting.js";
@@ -65,8 +65,7 @@ import { boardStructure } from "./board-structure.js";
 import type { Links } from "@hivemind/workspace-api/agents";
 import type { ViewFrameMachine } from "@hivemind/view-sdk/protocol";
 import type { HomeLook, HomeMessage } from "@hivemind/workspace-api/home";
-import { sharedAppearance } from "@hivemind/core/settings-schema";
-import { HomeFeed, homeLines, homeLook, homeRows, type LayersShown } from "./home.js";
+import { HomeFeed, homeLines, homeRows, type LayersShown } from "./home.js";
 import type { KnownMachines } from "@hivemind/core/remote-uri";
 import type { PairedWith } from "@hivemind/workspace-host/pairing";
 import type { GuestOf } from "@hivemind/workspace-host/devices";
@@ -95,6 +94,8 @@ const PHONE_MAY = new Set([
   "agent.answer", "agent.send", "terminal.write", "terminal.keyboard.ask", "terminal.ack", "terminal.fit", "terminal.photo",
   "agent.startable", "agent.places", "agent.folders", "agent.start", "agent.interrupt", "agent.close", "agent.diff", "agent.commands", "agent.conversation", "agent.tool", "agent.approval",
   "view.list", "view.file", "view.open", "view.post", "view.screen", "view.close", "widget.press",
+  // The computer's wallpaper, its photo or video and its live wallpaper's files, as Home names it.
+  "appearance.media", "appearance.wallpaperFile",
   // Someone asking to join, answered from the notice that told it (spec/push.md "Join").
   "people.answer",
   // The notes left on pages, listed, sent to an agent and closed or reopened; and what an agent asks
@@ -235,6 +236,9 @@ export interface PeerLinksOptions {
   /** Each tile's last line (`TileLines`): what it last said, or its screen last showed; told while
    *  Home is followed, so every tile's is kept. */
   lines?: Pick<TileLines, "get" | "followAll">;
+  /** How this computer looks, for the person's devices (`homeLook`); worked out again only after
+   *  `lookChanged`. None: Home says nothing of it. */
+  look?(): HomeLook;
 }
 
 interface Served { workspace: string; person: string; link: Link; stop(): void }
@@ -370,28 +374,17 @@ export class PeerLinks {
   private held: { changed: boolean } | null = null;
   /** Home, made once a device first follows it. */
   private home: HomeFeed | null = null;
-  /** How this computer looks, as its guests are shown it (`appearance.get`); null till it answers. */
-  private look: HomeLook | null = null;
 
   constructor(private readonly o: PeerLinksOptions) {
     // The list changes with the boards here, and with each status and plan the workspace API
-    // tells its clients of: heard as one of them. So does the look Home sends.
+    // tells its clients of: heard as one of them, which never calls.
     const agentsFollowed = () => this.agentsChanged();
     o.changes(agentsFollowed);
-    const self: Connection = {
-      actor: { kind: "person" },
-      send: (e) => {
-        if (e.event === "status.changed") this.agentsChanged();
-        if (e.event === "appearance.changed") this.looked(e.params[0]);
-      },
-      closed: new AbortController().signal,
-    };
-    o.server.connect(self);
-    void o.server.answer("appearance.get", [], self).then((a) => { if ("result" in a) this.looked(a.result); });
+    o.server.connect({ actor: { kind: "person" }, send: (e) => { if (e.event === "status.changed") this.agentsChanged(); }, closed: new AbortController().signal });
   }
 
-  private looked(appearance: unknown): void {
-    this.look = homeLook(sharedAppearance(appearance));
+  /** How this computer looks may have changed: Home tells the person's devices, once it did. */
+  lookChanged(): void {
     this.home?.lookChanged();
   }
 
@@ -538,7 +531,7 @@ export class PeerLinks {
     // Home follows every tile before it is first worked out: a tile whose agent's words were never
     // read, or reported since, is read as Home asks for its line, and told once it is.
     this.o.lines?.followAll(true);
-    const home = (this.home ??= new HomeFeed({ rows: () => this.homeRows(), lines: () => this.homeLines(), look: () => this.look }));
+    const home = (this.home ??= new HomeFeed({ rows: () => this.homeRows(), lines: () => this.homeLines(), look: () => this.o.look?.() ?? null }));
     // Where the follower is in each of Home's two feeds, as it was last sent them, and whether it
     // missed a change for want of room: then it is sent nothing until room returns, and then what
     // came after where it is.

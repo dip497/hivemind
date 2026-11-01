@@ -80,16 +80,39 @@ export interface KeyedSnapshot<T> {
   rows: Array<[string, T]>;
 }
 
-/** How the computer looks, for the phone to look the same (0.5): its theme's colours, each
- *  `#rrggbb`, its terminal's, and its wallpaper. Never a file of the computer's. */
+/** How the computer looks, for the person's phone to look the same (0.5): its theme's colours,
+ *  each `#rrggbb`, its terminal's, and its wallpaper as it draws it. */
 export interface HomeLook {
   mode: "dark" | "light";
   /** The palette's tokens, and the accent's `brand` and `accent`. */
   colors: Record<string, string>;
   /** `background`, `foreground`, `cursor`, `selection`, then `ansi`: the 16 in xterm's order. */
   terminal: { background: string; foreground: string; cursor: string; selection: string; ansi: string[] };
-  /** A built-in wallpaper's id (`none` for none), and whether a live one is in its own colours. */
-  wallpaper: { kind: string; colour: boolean };
+  wallpaper: HomeWallpaper;
+}
+
+/** The wallpaper the computer draws: a built-in one's id (`none` when it draws none), `image`,
+ *  `video`, or a package's live wallpaper (`@owner/package/name`). */
+export interface HomeWallpaper {
+  kind: string;
+  /** A live wallpaper in its own colours, not the theme's. */
+  colour: boolean;
+  /** A photo's or video's brightness, in percent (40–110). */
+  brightness: number;
+  /** Whether it moves. */
+  motion: boolean;
+  /** The panels' tint over it, in percent, while glass is on; else null. */
+  glass: number | null;
+  /** A photo's or video's file (`appearance.media`), named by a hash of its address. */
+  media?: { revision: string; type: "image" | "video" };
+}
+
+/** A piece of the wallpaper's photo or video (`appearance.media`): its bytes from the offset asked
+ *  for, as base64, its type, and the whole file's size in bytes. */
+export interface WallpaperMediaPiece {
+  data: string;
+  type: string;
+  size: number;
 }
 
 /** What the `home` stream answers: both sequences whole, or what came after the positions given;

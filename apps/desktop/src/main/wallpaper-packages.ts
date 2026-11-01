@@ -51,3 +51,25 @@ export async function listWallpaperPackages(): Promise<WallpaperPackageInfo[]> {
   serveWallpapers(served);
   return out;
 }
+
+/** The installed live wallpaper `id`, when its package is on: its folder and its entry. */
+export async function liveWallpaperFiles(id: string): Promise<{ dir: string; entry: string } | null> {
+  const w = (await listInstalledWallpapers()).find((x) => x.id === id);
+  return w?.manifest && w.package.on ? { dir: w.dir, entry: w.manifest.entry } : null;
+}
+
+/** The file a wallpaper's address names, only inside the folders the app keeps wallpapers in
+ *  beside `settingsFile` (`hivemedia://media/<file>`, and an older build's `hm-media://`). */
+export function wallpaperMediaFile(src: string, settingsFile: string): string | null {
+  try {
+    const u = new URL(src);
+    const [dir, abs] = u.protocol === "hivemedia:" && u.host === "media"
+      ? [path.join(path.dirname(settingsFile), "media"), path.resolve(path.dirname(settingsFile), "media", decodeURIComponent(u.pathname.replace(/^\/+/, "")))]
+      : u.protocol === "hm-media:"
+        ? [path.join(path.dirname(settingsFile), "wallpapers"), path.resolve(decodeURIComponent(u.pathname.replace(/^\/+/, "")))]
+        : [null, null];
+    return dir && abs && abs.startsWith(dir + path.sep) ? abs : null;
+  } catch {
+    return null;
+  }
+}

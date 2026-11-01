@@ -15,6 +15,7 @@ import type { HomeLook, HomeMessage, HomeRow, HomeTile } from "@hivemind/workspa
 import { accentOf } from "@hivemind/core/appearance-extra";
 import { cssColorToHex } from "@hivemind/core/css-color";
 import { PALETTE_KEYS, type SharedAppearance } from "@hivemind/core/settings-schema";
+import { wallpaperMedia } from "./appearance.js";
 import { isTerminalKind, type KeptCore } from "@hivemind/workspace-doc/shapes";
 import { KeyedFeed } from "./keyed-feed.js";
 import { heldBoards, type HeldBoard } from "./needs.js";
@@ -121,9 +122,10 @@ export function homeLines(held: HeldBoard[], line: (tile: string) => string | un
   return lines;
 }
 
-/** How the computer looks, as Home sends it (`HomeLook`): what a guest is shown of it
- *  (`sharedAppearance`, no file of the computer's), every colour `#rrggbb`. */
-export function homeLook(a: SharedAppearance): HomeLook {
+/** How the computer looks, as Home sends the person's devices (`HomeLook`): its appearance `a`,
+ *  every colour `#rrggbb`, and its wallpaper as it draws it (`shown`, `wallpaperShown`), a photo or
+ *  video named by a hash of its address, never the address. */
+export function homeLook(a: SharedAppearance, shown: boolean): HomeLook {
   const hex = (v: string, or: string) => cssColorToHex(v, or);
   const accent = accentOf(a, a.accentCustom ? { accent: a.accentCustom } : null);
   const colors: Record<string, string> = {};
@@ -131,6 +133,9 @@ export function homeLook(a: SharedAppearance): HomeLook {
   colors.brand = hex(accent.brand, colors.fg!);
   colors.accent = hex(accent.accent, colors.brand);
   const t = a.terminal;
+  const media = shown ? wallpaperMedia(a) : null;
+  // A photo or video not yet picked draws nothing, as on the computer.
+  const kind = !shown || ((a.wallpaper.kind === "image" || a.wallpaper.kind === "video") && !media) ? "none" : a.wallpaper.kind;
   return {
     mode: a.mode,
     colors,
@@ -139,7 +144,14 @@ export function homeLook(a: SharedAppearance): HomeLook {
       cursor: hex(t.cursor, colors.fg!), selection: hex(t.selection, colors.select!),
       ansi: t.ansi.slice(0, 16).map((c) => hex(c, colors.fg!)),
     },
-    wallpaper: { kind: a.wallpaper.kind, colour: a.wallpaper.colour },
+    wallpaper: {
+      kind,
+      colour: a.wallpaper.colour,
+      brightness: Math.round(a.wallpaper.brightness * 100),
+      motion: a.glass.animate,
+      glass: a.glass.enabled ? Math.round(a.glass.opacity * 100) : null,
+      ...(media ? { media: { revision: media.revision, type: media.type } } : {}),
+    },
   };
 }
 

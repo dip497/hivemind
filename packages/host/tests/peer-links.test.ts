@@ -29,8 +29,9 @@ import { Terminals, type SessionOutput } from "../src/terminals.ts";
 import type { WaitingStatus } from "../src/needs.ts";
 import type { LayersShown } from "../src/home.ts";
 import type { HomeMessage } from "@hivemind/workspace-api/home";
-import { appearance } from "../src/appearance.ts";
-import { DEFAULT_APPEARANCE, PRESETS, type SharedAppearance } from "@hivemind/core/settings-schema";
+import { appearance, MEDIA_PIECE, type AppearanceOptions } from "../src/appearance.ts";
+import { homeLook } from "../src/home.ts";
+import { DEFAULT_APPEARANCE, PRESETS, wallpaperShown, type SharedAppearance } from "@hivemind/core/settings-schema";
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "hm-peer-links-"));
 after(() => fs.rmSync(tmp, { recursive: true, force: true }));
@@ -143,7 +144,7 @@ function linkPair(device: string, computer: string) {
 /** The person's computer, holding the workspace `api`, with their phone and laptop paired. */
 /** The person's computer, holding the workspace `api` with two agents' tiles. `lines`: each tile's
  *  last line, in place of a map the test sets. */
-function computer(o: { lines?: Pick<TileLines, "get" | "followAll">; look?: SharedAppearance } = {}) {
+function computer(o: { lines?: Pick<TileLines, "get" | "followAll">; look?: SharedAppearance; files?: Pick<AppearanceOptions, "mediaFile" | "liveWallpaper" | "sdk"> } = {}) {
   const dir = path.join(tmp, String(made++));
   const repo = path.join(dir, "api");
   const person = newSeed();
@@ -204,11 +205,9 @@ function computer(o: { lines?: Pick<TileLines, "get" | "followAll">; look?: Shar
       ])),
     },
   };
-  // How this computer looks, told to its guests as its settings change (`appearance.ts`).
+  // How this computer looks (`appearance.ts`), its wallpaper's files among what it keeps.
   let look = o.look;
-  let recoloured: ((a: SharedAppearance) => void) | null = null;
-  const looks = look ? [appearance({ current: () => look!, onChange: (l) => { recoloured = l; }, server: () => server })] : [];
-  const recolour = (a: SharedAppearance) => { look = a; recoloured?.(a); };
+  const looks = look ? [appearance({ current: () => look!, onChange: () => {}, server: () => server, ...o.files })] : [];
   const server = new WorkspaceServer([...workspaceDomains, terminals, ...looks], new Intents(new AuditLog({ file: path.join(dir, "audit.jsonl") })));
   // The agent of t1 waits on the person; t2's works.
   let statuses: WaitingStatus[] = [
@@ -259,7 +258,10 @@ function computer(o: { lines?: Pick<TileLines, "get" | "followAll">; look?: Shar
     profile: async () => ({ name: "Priya", color: "#3b82f6" }),
     shown: (at) => shown.get(at),
     lines: o.lines ?? { get: (tile) => lines.get(tile), followAll: () => {} },
+    ...(look ? { look: () => homeLook(look!, wallpaperShown(look!.wallpaper.kind, look!.glass.enabled, false)) } : {}),
   });
+  /** The computer's settings change to look like `a`. */
+  const recolour = (a: SharedAppearance) => { look = a; links.lookChanged(); };
   /** `device` connects: what it hears on each stream, and its end of the link; and a stream of its
    *  own, opened beside them (`open`): what is sent on it, what it hears, and its end. */
   const connect = (device: string) => {
@@ -679,9 +681,11 @@ test("an owner's device whose link has no room is sent no list of agents, howeve
   assert.deepEqual(lists(phone)[1], lists(laptop).at(-1));
 });
 
-test("the phone following Home is told how the computer looks, every colour in hex and no file of its own; and the look again, alone, when the computer is recoloured", async () => {
-  const dusk = { ...DEFAULT_APPEARANCE, wallpaper: { ...DEFAULT_APPEARANCE.wallpaper, kind: "image" as const, imageSrc: "hivemedia://media/secret.png" } };
-  const c = computer({ look: dusk });
+/** A computer whose wallpaper is a photo it keeps, `secret.png`, behind glass. */
+const withPhoto = { ...DEFAULT_APPEARANCE, glass: { ...DEFAULT_APPEARANCE.glass, enabled: true }, wallpaper: { ...DEFAULT_APPEARANCE.wallpaper, kind: "image" as const, imageSrc: "hivemedia://media/secret.png" } };
+
+test("the phone following Home is told how the computer looks, every colour in hex and its photo by a revision, never its address; and the look again, alone, when the computer is recoloured", async () => {
+  const c = computer({ look: withPhoto });
   const phone = c.connect(c.phone);
   const heard = () => phone.heard.get("home")!.map((m) => JSON.parse(m) as HomeMessage);
   phone.send("home", { t: "follow" });
@@ -692,24 +696,86 @@ test("the phone following Home is told how the computer looks, every colour in h
   assert.deepEqual(hexes.filter((h) => !/^#[0-9a-f]{6}$/.test(h)), []);
   assert.equal(first.terminal.ansi.length, 16);
   assert.ok(first.colors.brand && first.colors.bg && first.colors.fg);
-  // A picture is a file on the computer: the phone is told the default wallpaper, never its path.
-  assert.equal(first.wallpaper.kind, DEFAULT_APPEARANCE.wallpaper.kind);
+  assert.equal(first.wallpaper.kind, "image");
+  assert.match(first.wallpaper.media!.revision, /^[0-9a-f]{16}$/);
   assert.ok(!JSON.stringify(heard()[0]).includes("secret"));
 
-  const light = PRESETS["catppuccin-latte"]!;
-  c.recolour({ ...dusk, mode: light.mode, palette: light.palette, terminal: light.terminal, wallpaper: { ...dusk.wallpaper, kind: "koi", colour: true } });
+  // Glass off: the computer draws no photo, so neither does the phone.
+  c.recolour({ ...withPhoto, glass: { ...withPhoto.glass, enabled: false } });
   await until(() => heard().length === 2);
-  const [again] = heard().slice(1);
-  assert.deepEqual(Object.keys(again!).sort(), ["look", "t"]);
-  assert.equal(again!.look!.mode, "light");
-  assert.notEqual(again!.look!.colors.bg, first.colors.bg);
-  assert.deepEqual(again!.look!.wallpaper, { kind: "koi", colour: true });
+  assert.deepEqual(heard()[1]!.look!.wallpaper, { kind: "none", colour: false, brightness: Math.round(withPhoto.wallpaper.brightness * 100), motion: withPhoto.glass.animate, glass: null });
+
+  const light = PRESETS["catppuccin-latte"]!;
+  c.recolour({ ...withPhoto, mode: light.mode, palette: light.palette, terminal: light.terminal, wallpaper: { ...withPhoto.wallpaper, kind: "@dip497/live-scenes/koi", colour: true } });
+  await until(() => heard().length === 3);
+  const again = heard()[2]!;
+  assert.deepEqual(Object.keys(again).sort(), ["look", "t"]);
+  assert.equal(again.look!.mode, "light");
+  assert.notEqual(again.look!.colors.bg, first.colors.bg);
+  assert.equal(again.look!.wallpaper.kind, "@dip497/live-scenes/koi");
+  assert.equal(again.look!.wallpaper.media, undefined);
+  // Told the same look again, Home says nothing.
+  c.links.lookChanged();
+  await wait(300);
+  assert.equal(heard().length, 3);
 
   // A device that starts following then is told the look as it is now.
   const later = c.connect(c.phone);
   later.send("home", { t: "follow" });
   await until(() => later.heard.get("home")!.length === 1);
-  assert.deepEqual((JSON.parse(later.heard.get("home")![0]!) as HomeMessage).look, again!.look);
+  assert.deepEqual((JSON.parse(later.heard.get("home")![0]!) as HomeMessage).look, again.look);
+});
+
+test("the owner's phone is given the wallpaper's photo in pieces and its live wallpaper's files under the views' policy; an old revision, a file outside the wallpaper and a guest are refused", async () => {
+  const dir = fs.mkdtempSync(path.join(tmp, "look-"));
+  const photo = path.join(dir, "secret.png");
+  const bytes = Buffer.alloc(MEDIA_PIECE * 2 + 1234);
+  for (let i = 0; i < bytes.length; i++) bytes[i] = (i * 31) & 0xff;
+  fs.writeFileSync(photo, bytes);
+  const wallpaper = path.join(dir, "koi");
+  fs.mkdirSync(path.join(wallpaper, "dist"), { recursive: true });
+  fs.writeFileSync(path.join(wallpaper, "dist", "main.js"), "draw();");
+  fs.writeFileSync(path.join(dir, "outside.js"), "not its own");
+  const files = {
+    mediaFile: (src: string) => (src === withPhoto.wallpaper.imageSrc ? photo : null),
+    liveWallpaper: async (id: string) => (id === "@dip497/live-scenes/koi" ? { dir: wallpaper, entry: "dist/main.js" } : null),
+    sdk: async () => "export const sdk = 1;",
+  };
+  const c = computer({ look: withPhoto, files });
+  const phone = c.connect(c.phone);
+  const api = phone.open("api");
+  api.send({ t: "open", workspace: c.workspace });
+  let id = 0;
+  const ask = async (method: string, params: unknown[]) => {
+    const n = ++id;
+    api.send({ id: n, method, params });
+    await until(() => api.heard.some((f) => (JSON.parse(f) as { id?: number }).id === n));
+    return JSON.parse(api.heard.find((f) => (JSON.parse(f) as { id?: number }).id === n)!) as { result?: Record<string, unknown>; error?: { code: string } };
+  };
+  const revision = homeLook(withPhoto, true).wallpaper.media!.revision;
+  const pieces: Buffer[] = [];
+  for (let at = 0; at < bytes.length; ) {
+    const r = (await ask("appearance.media", [revision, at])).result!;
+    assert.equal(r.size, bytes.length);
+    assert.equal(r.type, "image/png");
+    pieces.push(Buffer.from(r.data as string, "base64"));
+    at += pieces.at(-1)!.length;
+  }
+  assert.equal(pieces.length, 3);
+  assert.ok(Buffer.concat(pieces).equals(bytes));
+  assert.equal((await ask("appearance.media", ["0123456789abcdef", 0])).error?.code, "NOT_FOUND");
+
+  c.recolour({ ...withPhoto, wallpaper: { ...withPhoto.wallpaper, kind: "@dip497/live-scenes/koi" } });
+  const page = (await ask("appearance.wallpaperFile", ["__entry.html"])).result!;
+  assert.match(Buffer.from(page.data as string, "base64").toString(), /src="\.\/dist\/main\.js"/);
+  assert.match(page.csp as string, /connect-src 'none'/);
+  assert.equal(Buffer.from((await ask("appearance.wallpaperFile", ["dist/main.js"])).result!.data as string, "base64").toString(), "draw();");
+  assert.ok((await ask("appearance.wallpaperFile", ["../outside.js"])).error);
+
+  // A guest of a workspace here asks the same, and is refused both.
+  const guest = await guestWindows({ looks: { look: withPhoto, files } });
+  assert.equal((await guest.ask("appearance.media", [revision, 0])).error?.code, "FORBIDDEN");
+  assert.equal((await guest.ask("appearance.wallpaperFile", ["dist/main.js"])).error?.code, "FORBIDDEN");
 });
 
 test("an owner's device whose link has no room is sent nothing of Home, and once room returns, what came after where it was, in one message; then each change as before", async () => {
@@ -851,7 +917,7 @@ test("while a phone follows Home, every agent's words are read, unwatched and wi
  *  terminal, each with an `api` stream of its own for terminals, on her one connection, as her app
  *  opens them. `early`: the first window asks before her app's hello on `sync` arrives, as one may
  *  just after it dials. */
-async function guestWindows({ early = false } = {}) {
+async function guestWindows({ early = false, looks }: { early?: boolean; looks?: { look: SharedAppearance; files: Pick<AppearanceOptions, "mediaFile" | "liveWallpaper" | "sdk"> } } = {}) {
   const dir = path.join(tmp, String(made++));
   const repo = path.join(dir, "api");
   const person = newSeed();
@@ -876,7 +942,8 @@ async function guestWindows({ early = false } = {}) {
     },
   });
   const tileLines = new TileLines({ server: () => server });
-  const server = new WorkspaceServer([...workspaceDomains, terminals.domain, tileLines.domain], intents);
+  const appearances = looks ? [appearance({ current: () => looks.look, onChange: () => {}, server: () => server, ...looks.files })] : [];
+  const server = new WorkspaceServer([...workspaceDomains, terminals.domain, tileLines.domain, ...appearances], intents);
   const links = new PeerLinks({ store, changes: () => () => {}, lists, server, machines: { self: () => ({ device: idOf(newSeed()), name: "desk" }), mine: () => undefined, whose: () => undefined, saved: () => undefined } });
   const [computerEnd, herComputer] = linkPair(hers, idOf(newSeed()));
   links.serve(computerEnd);
@@ -918,7 +985,15 @@ async function guestWindows({ early = false } = {}) {
   await until(() => a.answered());
   b.open();
   await until(() => b.shown().includes("screen"));
-  return { a, b, herApp, letGo, server, tileLines, print: (data: string) => session!.data(data) };
+  let asked = 100;
+  /** Her app asks `method`: what it is answered. */
+  const ask = async (method: string, params: unknown[]) => {
+    const n = ++asked;
+    herApp.api.send(JSON.stringify({ id: n, method, params }));
+    await until(() => herApp.heard.some((m) => m.id === n));
+    return herApp.heard.find((m) => m.id === n) as { result?: unknown; error?: { code: string } };
+  };
+  return { a, b, herApp, letGo, server, tileLines, ask, print: (data: string) => session!.data(data) };
 }
 
 test("a guest's app hears what happens in the workspace once, on its own stream, and her windows only their terminals", async () => {

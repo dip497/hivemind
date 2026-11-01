@@ -37,7 +37,8 @@ import { readSettings, settingsPath } from "@hivemind/core/settings";
 import { listToolPackages } from "@hivemind/core/tool-packages";
 import { recordsFile } from "@hivemind/core/installed-packages";
 import { appearance } from "./appearance.js";
-import { DEFAULT_APPEARANCE, lookForGuests, type Appearance, type SharedAppearance, type Settings } from "@hivemind/core/settings-schema";
+import { homeLook } from "./home.js";
+import { DEFAULT_APPEARANCE, lookForGuests, wallpaperShown, type Appearance, type SharedAppearance, type Settings } from "@hivemind/core/settings-schema";
 import { AccessLists } from "@hivemind/workspace-host/access";
 import { Devices, type PairedDevice } from "@hivemind/workspace-host/devices";
 import { formatPairLink, pairAnnouncement, PairingOffer, type Pairing, type PairingDevice } from "@hivemind/workspace-host/pairing";
@@ -534,6 +535,11 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     // Home's rows: the links between agents, and what each tile last said or showed.
     links: () => control.links(),
     lines: tileLines,
+    // How this host looks, as its settings say; nothing changes them while it runs.
+    look: () => {
+      const a = appearanceNow();
+      return homeLook(a, wallpaperShown(a.wallpaper.kind, a.glass.enabled, false));
+    },
     // Where each of the person's phones is told what happens here.
     subscribe: (device, sub) => pushSubscriptions.set(device, sub),
     // The phones one of the person's computers paired with are the person's here too
