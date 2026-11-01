@@ -24,7 +24,9 @@ live wallpaper. The Android and iOS apps are not part of this round.
 |---|---|---|
 | A photo picked on this computer (1200×1920 JPEG) | 544 KB | 1 |
 | A video picked here (WebM) / (MOV) | 3.9 MB / 38.7 MB | 4 / 39 |
-| Koi Pond (`@dip497/live-scenes/koi`): entry, SDK, font | 49 KB + SDK + 22 KB | 4 |
+| Koi Pond (`@dip497/live-scenes/koi`): its page, the SDK (76.5 KB), `main.js` (49 KB), its font (22 KB) | 148 KB | 4 |
+| The look, in Home | 684 bytes | once, and on change |
+| The page's own code for all this (minified) | 12.9 KB of 157.6 KB | |
 
 A photo is sent as it is. A 390×844 phone at 3× is 1170×2532 device pixels; a landscape photo
 cover-fit there is drawn 2532 px tall, so a 4032×3024 camera photo is already drawn at 0.84× and a
@@ -40,12 +42,15 @@ cover-fit there is drawn 2532 px tall, so a 4032×3024 camera photo is already d
   `WallpaperLink` (protocol 1, message rate, malformed messages). A view and a live wallpaper never
   run at once: while a view is shown, the wallpaper is gone.
 - Cost: viewport pixel ratio at most 2, `mode: still` with `prefers-reduced-motion`, `hold` while
-  the page is hidden, the SDK's 30 frames a second at most. The page takes the frame away once it
-  is hidden for 30 s.
+  the page is hidden or a conversation, terminal or start screen covers it, the SDK's 30 frames a
+  second at most. The page takes the frame away once it is hidden for 30 s. Measured with Koi Pond
+  in headless Chromium under xvfb (software raster), the page's main thread busy: 24% unthrottled;
+  on a CPU slowed 4× (Playwright, CDP), 81% running, 1.2% still, 1.3% with Mono instead.
 - Readability: the desktop's rules. Cards (rows) take the widget card's 97% tint, bars the Layers
   panel's clamp(68%, tint, 92%) with the blur, and with reduced transparency or more contrast both
   are solid. A photo or video gets the desktop's brightness layer and vignette. Terminal and
-  conversation screens stay solid.
+  conversation screens stay solid. The list sits on the panel's glass and the wallpaper shows in
+  full below it, as on the canvas between tiles.
 
 ## Guest rule
 
@@ -56,10 +61,13 @@ computer's look, which holds nothing of the host's but what `appearance.get` giv
 ## Ceilings
 
 - A file over 96 MiB is not sent; the phone shows the scene the desktop falls back to.
+- A video is held whole in the phone's memory on its way to the cache: about three copies of it
+  at once, some 120 MB for a 39 MB video.
 - A video the phone cannot decode (HEVC on Android) falls back to Aurora, as on the desktop.
 - On the phone the live wallpaper's frame is same-origin with its shell on the views' origin (a
   service worker cannot serve an opaque-origin frame), where the desktop gives it an opaque origin.
   The origin is wiped before it starts and holds nothing of the page's.
 - The CPU watchdog (60% of a core for 6 s) is the desktop's main process; a browser page cannot
   measure a frame's CPU, so the phone has only the frame cap and the 30 s hidden rule.
-- Not measured on a real phone or GPU.
+- Not measured on a real phone or GPU: the numbers above are a laptop's, slowed 4×. A scene as
+  busy as Koi Pond costs a slow phone most of a core while it runs on Home.
