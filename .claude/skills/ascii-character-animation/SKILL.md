@@ -21,9 +21,10 @@ For a Hivemind live wallpaper, the contract (what the scene is told, the clock, 
 
 ## 1. The cell grid
 
-Everything sits on a grid of whole cells, like a terminal's. Nothing is drawn between cells:
-a creature moves a whole cell at a time, which is what makes it read as character art and not as
-a blurry picture with letters on it.
+Everything sits on a grid of whole cells, like a terminal's. A creature moves a whole cell at a
+time, which is what makes it read as character art and not as a blurry picture with letters on
+it. Its outline is finer than the cells: each cell has six parts, two across by three down, and an
+edge cell fills only the parts the body covers.
 
 ```ts
 const clamp = (v: number, lo: number, hi: number) => (v < lo ? lo : v > hi ? hi : v);
@@ -37,35 +38,62 @@ g.font = `600 ${Math.round(ch * 0.74)}px ${mono}, monospace`;
 g.textAlign = "center";
 g.textBaseline = "middle";
 
-/** One cell: a block of colour, and a character on it. */
-function cell(c: number, r: number, block: string | null, ink: string, glyph: string) {
-  const x = c * cw, y = r * ch;
-  if (block) { g.fillStyle = block; g.fillRect(x + 1, y + 1, cw - 1, ch - 1); }  // a 1px seam
-  if (glyph) { g.fillStyle = ink; g.fillText(glyph, x + cw / 2, y + ch / 2 + 1); }
+// A cell's six parts: part k is column k % 2, row k >> 1. Sample a body at each one's middle.
+const PART_X = [0.25, 0.75, 0.25, 0.75, 0.25, 0.75], PART_Y = [1 / 6, 1 / 6, 0.5, 0.5, 5 / 6, 5 / 6];
+const WHOLE = 63;
+
+/** Fill the parts of cell (c, r) in `mask`, each edge on a device pixel: cells meet with no seam. */
+function fillParts(c: number, r: number, mask: number) {
+  const X = (u: number) => Math.round(u * cw * dpr) / dpr, Y = (v: number) => Math.round(v * ch * dpr) / dpr;
+  if (mask === WHOLE) return g.fillRect(X(c), Y(r), X(c + 1) - X(c), Y(r + 1) - Y(r));
+  for (let row = 0; row < 3; row++) {
+    const two = (mask >> (row * 2)) & 3;
+    if (!two) continue;
+    const [x0, x1] = two === 3 ? [c, c + 1] : two === 1 ? [c, c + 0.5] : [c + 0.5, c + 1];
+    g.fillRect(X(x0), Y(r + row / 3), X(x1) - X(x0), Y(r + (row + 1) / 3) - Y(r + row / 3));
+  }
+}
+
+/** One cell: a block of colour over the parts it covers, and on a whole cell a character. */
+function cell(c: number, r: number, mask: number, block: string, ink: string, glyph: string) {
+  g.fillStyle = block; fillParts(c, r, mask);
+  if (mask === WHOLE && glyph !== " ") { g.fillStyle = ink; g.fillText(glyph, (c + 0.5) * cw, (r + 0.5) * ch + 1); }
 }
 ```
 
 - A monospace face, semibold (600): thin weights vanish at 7 to 13 px. Always give the font list
   a `monospace` fallback; the person's font may not be there.
-- The 1px seam round each block keeps the grid visible inside a body: it reads as made of cells.
+- **No seam, no grid.** Blocks meet edge to edge, snapped to device pixels, so a body reads as one
+  lit form. A 1px seam round each block, and a faint grid over the ground, drew lines over the
+  whole window that read as a screen's, not the water's, and people said so: Hivemind's scenes
+  dropped both, and a test now fails if the open water shows a line where cells meet.
+- **An outline in parts.** Sample an edge cell at its six parts' middles and fill those on the
+  body. The silhouette is two to three times finer than the cells and still on their grid. A cell
+  whose middle is deeper inside than its parts reach (`hypot(cw / 4, ch / 3)`, and a pixel) is
+  whole without sampling them. A cell the body covers one part of is drawn fainter: the outline's
+  last step into the water.
 - Width from the window's shorter side, clamped: a shark is some 48 cells long on any window.
   Taken from the width alone, a wide window drew it coarser.
 - Cells are not square. Distances in cells weigh rows by about 1.4
   (`Math.hypot(dc, dr * 1.4)`), or circles come out tall.
-- A faint grid over the ground (a tone of 0.055 toward the text on a dark page, 0.015 on a light
-  one, where ink shows more) makes the empty water read as part of the same picture.
 
 ## 2. Tone: from a glyph ramp, and from colour
 
 A cell has two tones: its block and its character. Light comes from both.
 
-- **The glyph ramp.** Order characters by how much of the cell they cover, and pick by shade.
-  Shoal's skin is `":;t%SX8#@"`: sparse glyphs on bright skin, dense ones in shadow, so the
-  texture deepens the shading instead of fighting it. Fins take `"%;tS:"`, a dorsal ridge catching
-  the light `"@8%"`, markings `"#%@"`, an eye `"o"`.
-- **Edges are their own ramp.** Where a body only partly covers a cell, draw a light glyph alone,
-  no block: one of `":;"` for a cell at least half covered, one of `` ".',`" `` for less. That is
-  the anti-aliasing; it makes the silhouette soft and round.
+- **The block carries the light; the character is its grain.** Shade the block from the light
+  (section 5), and put on it a character only a step darker (about a fifth of the ramp on dark
+  ground; darker ink, about a sixth more, on light). A character cut in at full contrast turns a
+  body into a page of letters.
+- **The grain ramp.** Order characters by how much of the cell they cover, and pick by shade:
+  Shoal's skin is `" .:;+*%#"`, sparse on bright skin, denser into shadow, so the grain deepens the
+  shading instead of fighting it. **No letters.** The old ramp `":;t%SX8#@"` read as text
+  (`SXtS8`), and people saw letter soup, not a shark.
+- **Lines mean a direction.** A dorsal fin standing off the back is a line along the spine (`- \ |
+  /` by the spine's angle there); a fin's rays run across it; markings are `#` and `%` in their
+  own dark; an eye is one dark part inside the head, never an `o` off its edge.
+- **Edges carry no character.** An edge cell is its parts alone: a character there stands off the
+  body.
 - **Tone from colour.** Work out the steps between two colours once (65 is plenty) and pick by
   index each frame. A frame that builds colour strings is slow, and a frame that picks from 65
   strings is not.
@@ -80,27 +108,33 @@ function hash3(x: number, y: number, z: number) {
   h = Math.imul(h ^ (h >>> 13), 1274126177);
   return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
 }
-const SKIN = ":;t%SX8#@";
+const SKIN = " .:;+*%#";
 const key = (hash3(Math.round(s * 52), Math.round(v / (cw * 0.9)), body.id) * 4294967295) >>> 0;
 const jitter = ((key >>> 4) % 3) - 1;            // a little variety, fixed to the skin
-const glyph = SKIN[clamp(Math.floor((1 - shade) * 8.99) + jitter, 0, SKIN.length - 1)]!;
+const glyph = SKIN[clamp(Math.floor((1 - shade) * SKIN.length) + jitter, 0, SKIN.length - 1)]!;
 ```
 
-- **Shimmer, sparingly.** Re-roll a few glints on a slow, staggered clock
-  (`hash3(key, Math.floor(t * 2.4 + (key % 997) / 97), 7) < 0.05`) and flicker each cell's shade by
-  ±3% six times a second: the hide looks alive without boiling.
+- **Never shimmer.** Real things move; light does not boil. No glints re-rolled on a clock, no
+  shade flickering per cell, no twinkle, no breathing glow. A body changes only as it swims. (The
+  first scenes shimmered; it read as noise.)
 
 ## 3. Block cells, not line glyphs
 
 Line glyphs (`| / \ - _`) are one pixel wide at these sizes. Behind a window of terminal text they
-read as faint scratches, and a shape made of them reads as a diagram, not a thing.
+read as faint scratches, and a shape made of them reads as a diagram, not a thing. A column of
+`| / \` for grass or `| { } ( )` for a tentacle reads as a barcode.
 
 - **Draw bodies in block cells:** a filled block with a character on it. Shoal's reef began as
   line-art coral and became block cells, each a block of its colour half faded into the water with
   its character on it, as the sharks are. Only then did the reef read at a glance.
-- **Keep line glyphs for what is thin in life:** a weed's blade (its foot a block, the rest bare
-  characters), a reed, a tentacle, a lily pad's veins, a wing. Pick each one along the way the
-  thing runs:
+- **Draw what is thin in life as fine lines,** antialiased, in the palette's colours: a blade of
+  seagrass or grass, a reed, kelp's stalk and blades, a coral's branches, a fan's rays, a tentacle,
+  a lily pad's veins, a ring on the water, a small fish seen from above (a sliver along its way).
+  A blade is a ribbon through the cells it rises through, `bend` (its sway before rounding to the
+  cells) giving each point's place, thinning from its root to its tip, one `fill()` per colour.
+  Keep characters where they are the thing itself: a polyp `o` at a branch's tip, a float `o` on
+  kelp, a starfish `*` on the sand.
+- A line glyph still serves inside a body, where it means a direction:
 
 ```ts
 /** A line along (dx, dy), as a character. */
@@ -216,12 +250,11 @@ const tone = (ramp: string[], t: number) => ramp[clamp(Math.round(t * 64), 0, 64
 ```
 
 - **On a dark page, light on dark.** A body cell is a lit block (an 18% to 80% step toward the
-  text) with a dark character cut into it; an edge is a light character alone; a glint is a
-  character at full text.
+  text) with its grain a fifth of the ramp darker on it; an edge is its parts in the body's own
+  tone.
 - **On a light page, ink on paper.** Not the dark version inverted, which leaves pale creatures
   that vanish into the page. The more of the creature, the darker its block (2% plus up to 88% of
-  the way to the text), its character darker still (24% more), a glint lighter; an edge a faint
-  block (5% to 17%) under a slightly darker character, so it fades into the page.
+  the way to the text), its grain a little darker still (15% more); an edge its parts, as on dark.
 - **A cast, not a colour.** Give each kind a slight lean toward a channel (weights such as
   `[0.92, 0.97, 1.05]` for a grey-blue shark, `[1.02, 0.95, 0.84]` for a brownish one, used at
   60%), enough to read grey-blue or grey-brown. On a light page use
@@ -285,8 +318,8 @@ function mix(a: Rgb, b: Rgb, t: number): Rgb {
 - A creature's ramp runs from its **shadow** (dark water's shade, or on light water the water
   itself) to its kind's colour at full light. Fish, wake dots and flashes run from the middle of
   the water to their colour.
-- Ground as a gradient of three stops top to bottom, a soft glow where the light comes in, and the
-  grid over it at a few percent.
+- Ground as a gradient of three stops top to bottom and a soft glow where the light comes in.
+  Nothing over it: no grid.
 - Keep chroma modest on large areas (water: 0.03 to 0.07) and spend it on small things (coral,
   koi patches, firefly lights: 0.1 to 0.19).
 
@@ -327,15 +360,24 @@ A frame is a stack. Paint each layer only as often as it changes, and copy it in
 
 | Layer | Painted | In Hivemind's scenes |
 |---|---|---|
-| The ground: gradient, glow, grid | once per size and look, into an offscreen canvas | every scene |
-| Still scenery | once per grid, look and tile layout, into a layer the height it needs | Shoal's reef, Fireflies' grass |
+| The ground: gradient, glow | once per size and look, into an offscreen canvas | every scene |
+| Still scenery | once per grid, look and tile layout, into a layer the height it needs | Shoal's reef, Koi Pond's mud, Fireflies' sky, stars, far grass and turf |
+| Slow scenery | a piece at a time, one piece a frame | Fireflies' near grass: a strip in six pieces, so each blade sways at 5 Hz, its tip moving under a pixel between; a piece at once when a firefly lands in it |
 | Slow light | a few times a second (every 0.25 s), over a copy of the ground | Shoal's and Jellyfish's light shafts: a few copies of one soft sprite, sheared to slant, swaying |
 | Sprites | once per look, drawn scaled each frame | a glow (a radial gradient in a 64 px canvas), a lily pad (redrawn only when it turns a step) |
-| Moving scenery | each frame, a few cells | swaying weed and reeds, ripples, marine snow, stars twinkling |
+| Moving scenery | each frame, as lines, one fill a colour | seagrass, kelp and reeds swaying, rings on the water, marine snow |
 | Creatures | each frame | the agents' creatures, their wakes and the small fish |
 | Soft layer | each frame, only the span it covers | what shows under frosted tiles |
 | Flashes | each frame, last | a bite, a flash, a firework: over everything |
 
+- **See-through.** A jelly's bell is filled from alpha ramps worked out once per look, so the water,
+  the shafts and its own arms show through it. Fill it in runs of one tone along each row of parts,
+  and sort the runs by tone so each style is set once: unsorted, a frame made some 2000 style
+  changes. Turn a leaning bell by its tilt; a shear made it a parallelogram.
+- **Time the raster too.** A draw timed on its script alone leaves out the rasterizing the browser
+  does after; a scene that draws into an offscreen layer and composites it in the same frame pays
+  that inside the timer, and looks slower than one that draws everything live. Read a pixel
+  (`getImageData(0, 0, 1, 1)`) after the draw to count both.
 - Glow: draw a sprite scaled round the creature with `globalCompositeOperation = "lighter"` on a
   dark ground (light adds), and plain at about 60% on a light one (it tints).
 - A field that diffuses (a wake: each cell takes a blur of its four neighbours and decays,
@@ -500,8 +542,9 @@ function timed(draw: (dt: number) => void) {
 }
 ```
 
-For scale, Hivemind's scenes, median per frame in headless Chromium, 1× / 2×: Fireflies 1.1 / 2.2
-ms, Jellyfish 1.9 / 3.4, Koi Pond 3.3 / 4.7, Shoal 5.6 / 8.0. **A headless browser renders in
+For scale, the Live scenes' draws, median per frame in headless Chromium, 1440×900 at 1× /
+1280×800 at 2×, the script alone: Fireflies 1.7 / 2.7 ms (2.5 / 5.9 with its raster counted),
+Jellyfish 1.9 / 1.8, Koi Pond 3.9 / 4.0, Shoal 5.5 / 6.3. **A headless browser renders in
 software**, with no GPU: it overstates the cost, and its frame rates mean nothing. Compare a
 change with what came before it, on the same machine, the same way, and say how.
 
