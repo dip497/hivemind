@@ -54,9 +54,11 @@ const READABLE = 12;
 const EVERY_MS = 16;
 const FONT = '"JetBrains Mono", ui-monospace, Menlo, monospace';
 
-// The desktop's default terminal colours (its Signal theme), as the Android app draws them.
-const FG = "#e6e7e9";
-const BG = "#1a1c1f";
+// The desktop's default terminal colours (its Signal theme), as the Android app draws them, till
+// the computer says its own (`setTerminalColours`).
+let FG = "#e6e7e9";
+let BG = "#1a1c1f";
+let CURSOR = FG;
 const NAMED = [
   "#2a2d32", "#c8756a", "#8fb39a", "#d9b26b", "#7d9bc4", "#a894c4", "#7fb3b8", "#d5d8dc",
   "#5a5f66", "#dc8b80", "#a6c8af", "#e6c688", "#98b2d6", "#bdabd6", "#98c8cc", "#f0f1f3",
@@ -69,6 +71,18 @@ const PALETTE = (() => {
   for (let i = 0; i < 24; i++) table.push(`#${hex(8 + 10 * i).repeat(3)}`);
   return table;
 })();
+/** The terminals shown, drawn again when the colours change. */
+const shownViews = new Set<TerminalView>();
+
+/** Draw terminals in the computer's terminal colours: its background, text, cursor and 16 ANSI
+ *  colours, each `#rrggbb`. */
+export function setTerminalColours(t: { background: string; foreground: string; cursor: string; ansi: string[] }): void {
+  if (t.ansi.length !== 16 || (BG === t.background && FG === t.foreground && CURSOR === t.cursor && t.ansi.every((c, i) => PALETTE[i] === c))) return;
+  [BG, FG, CURSOR] = [t.background, t.foreground, t.cursor];
+  t.ansi.forEach((c, i) => (PALETTE[i] = c));
+  document.documentElement.style.setProperty("--term-bg", BG);
+  for (const view of shownViews) view.recolour();
+}
 const RGB = new Map<number, string>();
 
 /** The colour a run's `fg` or `bg` names (top byte 0: the default; 1: a palette index; 2: RGB). */
@@ -216,6 +230,8 @@ export class TerminalView {
   /** Draw `source` from now on, from nothing; null: draw nothing. */
   private draws(source: TermSource | null): void {
     this.source = source;
+    if (source) shownViews.add(this);
+    else shownViews.delete(this);
     this.revision = 0;
     this.lines = [];
     this.firstLine = 0;
@@ -232,6 +248,11 @@ export class TerminalView {
     this.fit();
     this.draw();
     this.changed();
+  }
+
+  /** The colours changed: drawn again in them. */
+  recolour(): void {
+    this.draw();
   }
 
   /** The core's screen may have changed: taken and drawn at the next frame. */
@@ -366,7 +387,7 @@ export class TerminalView {
       ctx.globalAlpha = 1;
       if (this.cursor.visible && this.cursor.line === at) {
         ctx.globalAlpha = 0.55;
-        ctx.fillStyle = FG;
+        ctx.fillStyle = CURSOR;
         ctx.fillRect(this.cursor.col * w - this.across, y, w, lh);
         ctx.globalAlpha = 1;
       }

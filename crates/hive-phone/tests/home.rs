@@ -407,3 +407,78 @@ fn sorted_by_name_or_activity_a_frames_tiles_come_in_that_order_in_the_tree() {
     assert_eq!(order("name"), ["Alpha", "Mid", "Zed"]);
     assert_eq!(order("activity"), ["Alpha", "Zed", "Mid"]);
 }
+
+/// How a computer looks, as Home 0.5 sends it.
+fn look(bg: &str, mode: &str) -> Value {
+    json!({
+        "mode": mode,
+        "colors": { "bg": bg, "fg": "#eeeeee", "brand": "#5b6cff" },
+        "terminal": { "background": bg, "foreground": "#eeeeee", "cursor": "#eeeeee", "selection": "#333333",
+            "ansi": vec!["#101010"; 16] },
+        "wallpaper": { "kind": "@dip497/live-scenes/koi", "colour": true, "brightness": 85, "motion": true, "glass": 72 }
+    })
+}
+
+#[test]
+fn the_look_is_held_from_the_whole_and_from_a_change_kept_with_the_rest_and_one_that_is_not_hex_is_not_taken(
+) {
+    let whole = |look: Value| json!({ "t": "home", "layout": { "seq": 1, "rows": [] }, "lines": { "seq": 0, "rows": [] }, "look": look });
+    let mut home = Home::default();
+    assert!(home.apply(&whole(look("#101820", "dark"))));
+    let held = home.look.clone().unwrap();
+    assert_eq!(
+        (
+            held.mode.as_str(),
+            held.colors["bg"].as_str(),
+            held.wallpaper.kind.as_str()
+        ),
+        ("dark", "#101820", "@dip497/live-scenes/koi")
+    );
+
+    // Recoloured: a change that carries only the look.
+    assert!(home.apply(&json!({ "t": "changes", "look": look("#fafafa", "light") })));
+    assert_eq!(home.look.as_ref().unwrap().mode, "light");
+    // The same look again changes nothing.
+    assert!(!home.apply(&json!({ "t": "changes", "look": look("#fafafa", "light") })));
+
+    // Kept, it comes back with the rows.
+    let kept: Home = serde_json::from_value(serde_json::to_value(&home).unwrap()).unwrap();
+    assert_eq!(kept.look, home.look);
+
+    // A colour that is not `#rrggbb`, a mode it does not know, or too few terminal colours: not taken.
+    let mut bad = look("url(x)", "dark");
+    assert!(!home.apply(&json!({ "t": "changes", "look": bad.clone() })));
+    bad = look("#000000", "dusk");
+    assert!(!home.apply(&json!({ "t": "changes", "look": bad })));
+    let mut short = look("#000000", "dark");
+    short["terminal"]["ansi"] = json!(["#000000"]);
+    assert!(!home.apply(&json!({ "t": "changes", "look": short })));
+    assert_eq!(home.look.as_ref().unwrap().colors["bg"], "#fafafa");
+    // A photo named by its revision is taken; one named by anything else, or a wallpaper that is
+    // not a word nor a package's, is not.
+    let mut photo = look("#fafafa", "light");
+    photo["wallpaper"]["kind"] = json!("image");
+    photo["wallpaper"]["media"] = json!({ "revision": "0123456789abcdef", "type": "image" });
+    assert!(home.apply(&json!({ "t": "changes", "look": photo.clone() })));
+    assert_eq!(
+        home.look
+            .as_ref()
+            .unwrap()
+            .wallpaper
+            .media
+            .as_ref()
+            .unwrap()
+            .revision,
+        "0123456789abcdef"
+    );
+    photo["wallpaper"]["media"]["revision"] = json!("hivemedia://media/x.png");
+    assert!(!home.apply(&json!({ "t": "changes", "look": photo })));
+    let mut far = look("#fafafa", "light");
+    far["wallpaper"]["kind"] = json!("../../etc");
+    assert!(!home.apply(&json!({ "t": "changes", "look": far })));
+    // A token it cannot read is left out; the rest is taken.
+    let mut odd = look("#123456", "dark");
+    odd["colors"]["bg2"] = json!("red");
+    assert!(home.apply(&json!({ "t": "changes", "look": odd })));
+    assert!(!home.look.as_ref().unwrap().colors.contains_key("bg2"));
+}

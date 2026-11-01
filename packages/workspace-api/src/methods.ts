@@ -22,6 +22,7 @@ import type { BoardEdit, BoardObject, CoreLayout, ViewLayout } from "@hivemind/w
 import type { LegacyLayout, WorkspaceChange } from "@hivemind/workspace-host/layout";
 import type { Participant, PresenceState } from "@hivemind/workspace-host/presence";
 import type { SharedAppearance } from "@hivemind/core/settings-schema";
+import type { WallpaperMediaPiece } from "./home.js";
 import type { WidgetPackage } from "@hivemind/core/widget-format";
 import type { RecentSound, SoundMoment, SoundResult } from "./notifications.js";
 
@@ -333,6 +334,11 @@ export interface WorkspaceMethods {
   /** (0.17) The host's look, as a guest shows its workspaces: nothing on the host's disk. (0.35)
    *  With its custom accent's colours (`accentCustom`), which win over `accent` while set. */
   "appearance.get": () => SharedAppearance;
+  /** (0.38) The owner's alone: a piece of the wallpaper's photo or video, from `offset`, while its
+   *  revision (Home's `look.wallpaper.media`) is `revision`. */
+  "appearance.media": (revision: string, offset: number) => WallpaperMediaPiece;
+  /** (0.38) The owner's alone: the file `path` of the live wallpaper drawn now, as `view.file`. */
+  "appearance.wallpaperFile": (path: string) => ViewFile;
 }
 
 /** What a client tells a host and asks no answer to: a host never answers a notice. */

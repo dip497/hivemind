@@ -91,7 +91,7 @@ import { answerAsk, askPerson, askState, endAsksOf, goAhead, waitingAsks, type A
 import { driveSockPath, readOrCreateToken } from "@hivemind/agent-host/hooks/token";
 import { ApiError, isErrorCode } from "@hivemind/workspace-api/protocol";
 import { appViewsDir, handleViewProtocol, listViewPackages, startViewWatchdog, VIEW_SCHEME_PRIVILEGES, viewSdk } from "./view-packages.js";
-import { listWallpaperPackages } from "./wallpaper-packages.js";
+import { listWallpaperPackages, liveWallpaperFiles, wallpaperMediaFile } from "./wallpaper-packages.js";
 import { installSettingsIpc, reloadSettings, getSettings as getAppSettings, onSettingsChange, settingsFile, settingsBusy, settingsSettled } from "./settings-store.js";
 import { followWindowLook, initialWindowBackground } from "./window-look.js";
 import { flushWorkspaceStore, installWorkspaceStoreIpc, storeFor, workspaceStore } from "./workspace-store-ipc.js";
@@ -1815,7 +1815,11 @@ const workspaceServer: WorkspaceServer = new WorkspaceServer([
   presence(() => workspaceServer, () => machineIdentity().personId),
   widgetDomain,
   // How this host looks to its guests, as its theme changes.
-  appearance({ current: () => lookForGuests(getAppSettings()), onChange: (l) => { onSettingsChange((s) => l(lookForGuests(s))); }, server: () => workspaceServer }),
+  appearance({
+    current: () => lookForGuests(getAppSettings()), onChange: (l) => { onSettingsChange((s) => l(lookForGuests(s))); }, server: () => workspaceServer,
+    // The owner's phone is given the wallpaper's photo or video, and the live wallpaper's files.
+    mediaFile: (src) => wallpaperMediaFile(src, settingsFile()), liveWallpaper: liveWallpaperFiles, sdk: viewSdk,
+  }),
   peopleHere.domain,
   grantsDomain({
     serving: () => driveServing,

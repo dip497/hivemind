@@ -15,7 +15,7 @@
  */
 import { useSyncExternalStore } from "react";
 import {
-  ACCENTS, ANCHORS, PALETTE_KEYS, WALLPAPERS, flattenAppearance, getPath, guestTheme, isPluginWallpaper, nestAppearance,
+  ACCENTS, ANCHORS, PALETTE_KEYS, WALLPAPERS, flattenAppearance, getPath, guestTheme, isPluginWallpaper, nestAppearance, wallpaperShown,
   type AccentId, type Appearance, type FlatTheme, type MediaAnchor, type MediaFit, type MediaLayer, type ThemePreset, type WallpaperId,
 } from "@hivemind/core/settings-schema";
 import { accentOf, presetPaths, withPreset, type AccentColors, type FontFaces } from "@hivemind/core/appearance-extra";
@@ -84,9 +84,7 @@ export function isWallpaperActive(): boolean { return fullWallpaper; }
 /** Whether the wallpaper is drawn: behind glass, which is the person's, or a theme's without it.
  *  A theme's wallpaper is part of its look, so it shows whether or not glass is on. */
 export function wallpaperDrawn(t: Pick<ThemeState, "glass" | "wallpaper" | "themeId"> = state): boolean {
-  // A live scene, the app's or a package's, shows without glass too: it pictures the agents between
-  // the tools. With glass, its creatures show through the frosted panels (live/LiveWallpaper.tsx).
-  return t.wallpaper !== "none" && (t.glass || !!t.themeId || isPluginWallpaper(t.wallpaper));
+  return wallpaperShown(t.wallpaper, t.glass, !!t.themeId);
 }
 /** Glass as it applies right now. */
 export function effectiveGlass(t: ThemeState = state): boolean {

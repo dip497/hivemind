@@ -1,4 +1,5 @@
-# The build needs hive-net's crate, and for the phone page hive-phone's, hive-web's, their workspace and the crates it vendors, the pairing
+# The build needs hive-net's crate, and for the phone page hive-phone's, hive-web's, their workspace and the crates it vendors, the
+# workspace sources the page's live wallpaper type-checks against, the pairing
 # words they read, the Rust the repository pins and the lockfile and catalog naming the page's tools;
 # nothing built here.
 *
@@ -12,6 +13,19 @@
 !spec
 !pnpm-lock.yaml
 !pnpm-workspace.yaml
+!packages/agent-host/package.json
+!packages/agent-host/src
+!packages/hive-agents/package.json
+!packages/hive-agents/src
+!packages/hive-view-sdk/package.json
+!packages/hive-view-sdk/src
+!packages/view-host/package.json
+!packages/view-host/src
+!packages/workspace-doc/package.json
+!packages/workspace-doc/src
+!apps/desktop/src/renderer/src/agent-status-bus.ts
+!apps/desktop/src/renderer/src/live/roster.ts
+!apps/desktop/src/renderer/src/live/scene.ts
 crates/target
 crates/*/target
 crates/hive-web/www/js

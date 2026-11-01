@@ -19,6 +19,11 @@ COPY crates/hive-net/ crates/hive-net/
 COPY crates/hive-phone/ crates/hive-phone/
 COPY crates/hive-web/ crates/hive-web/
 COPY crates/vendor/ crates/vendor/
+# The workspace sources the page's live wallpaper reads, linked where pnpm would link them.
+COPY packages/ packages/
+COPY apps/ apps/
+RUN mkdir -p node_modules/@hivemind && for p in agent-host:agent-host agents:hive-agents view-sdk:hive-view-sdk view-host:view-host workspace-doc:workspace-doc; do \
+    ln -s ../../packages/${p#*:} node_modules/@hivemind/${p%%:*}; done
 # Only www/ is kept, as for the build above: not the target dir, the tools, the crates or the Rust.
 RUN tools=$(crates/hive-web/tools.sh /tools) && eval "$tools" && crates/hive-web/build.sh \
   && rm -rf /src/crates/target /tools /root/.cargo/registry /root/.rustup/toolchains \

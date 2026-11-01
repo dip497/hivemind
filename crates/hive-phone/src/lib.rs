@@ -4,6 +4,7 @@
 //! app, and is their device from then on (M5).
 
 pub mod agents;
+pub mod browser_asks;
 pub mod connect;
 #[cfg(not(target_family = "wasm"))]
 pub mod connections;
@@ -20,7 +21,6 @@ pub mod mark;
 pub mod markdown;
 pub mod needs;
 pub mod network;
-pub mod browser_asks;
 pub mod notes;
 #[cfg(not(target_family = "wasm"))]
 pub mod pacing;

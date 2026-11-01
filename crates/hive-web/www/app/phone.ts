@@ -7,7 +7,7 @@ import init, { Device, type Host, Homes, Term, type ViewSession, connectWith, de
 import type { Filter } from "./home.js";
 import type { Account, Computer } from "./accounts.js";
 import { deviceKey, get } from "./store.js";
-import type { Agent, BrowserAsk, Folders, Held, Offered, Others, Overview, PageNote, Paired, Photo, Piece, Places, Reply, Screen, Sent, Shown, SlashCommand, Start, Unfolded, ViewFile } from "./types.js";
+import type { Agent, BrowserAsk, Folders, Held, HeldLook, Offered, Others, Overview, PageNote, Paired, Photo, Piece, Places, Reply, Screen, Sent, Shown, SlashCommand, Start, Unfolded, ViewFile } from "./types.js";
 import { message } from "./words.js";
 
 /** What connecting shows, step by step (pair.ts). */
@@ -172,6 +172,26 @@ export class Phone {
   /** The agents across the computers, and what waits on the person. */
   overview(): Overview {
     return this.homes.overview(this.named()) as Overview;
+  }
+
+  /** A number that changes whenever a computer's look does. */
+  lookChanges(): number {
+    return this.homes.lookChanges();
+  }
+
+  /** How the first computer that says so looks, and a workspace it holds to ask its files through. */
+  look(): HeldLook | null {
+    return (this.homes.look(this.named()) as HeldLook | null) ?? null;
+  }
+
+  /** A file of the live wallpaper `device` draws now. */
+  async wallpaperFile(device: string, workspace: string, path: string): Promise<ViewFile> {
+    return (await this.on(device).wallpaperFile(workspace, path)) as ViewFile;
+  }
+
+  /** The photo or video `device` draws while its revision is `revision`; `got` told how much came. */
+  async wallpaperMedia(device: string, workspace: string, revision: string, got: (at: number, of: number) => void): Promise<{ data: Uint8Array; type: string }> {
+    return (await this.on(device).wallpaperMedia(workspace, revision, got)) as { data: Uint8Array; type: string };
   }
 
   /** What this browser holds of Home, to keep. */

@@ -16,7 +16,12 @@ pub async fn asks(connection: &Connection, workspace: &str) -> Result<Value> {
 }
 
 /// Say `answer` (`yes`, `always`, `no` or `done`) to question `ask`. Whether it was still waiting.
-pub async fn answer(connection: &Connection, workspace: &str, ask: u64, answer: &str) -> Result<bool> {
+pub async fn answer(
+    connection: &Connection,
+    workspace: &str,
+    ask: u64,
+    answer: &str,
+) -> Result<bool> {
     let mut w = Workspace::open(connection, workspace).await?;
     let said = w.call("browser.answer", json!([ask, answer])).await?;
     Ok(said.get("answered").and_then(Value::as_bool) == Some(true))

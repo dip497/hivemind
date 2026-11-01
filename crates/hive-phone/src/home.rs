@@ -224,13 +224,122 @@ pub struct At {
     pub lines: u64,
 }
 
-/// What the phone holds of Home: each row and each tile's last line by its key, and how far it has
-/// followed. Kept as it is, it is followed on from where it was.
+/// How the computer looks (0.5), for the phone to look the same: its colours by token, each
+/// `#rrggbb`, its terminal's, and its wallpaper as it draws it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Look {
+    pub mode: String,
+    pub colors: BTreeMap<String, String>,
+    pub terminal: TerminalLook,
+    pub wallpaper: WallpaperLook,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TerminalLook {
+    pub background: String,
+    pub foreground: String,
+    pub cursor: String,
+    pub selection: String,
+    pub ansi: Vec<String>,
+}
+
+/// The wallpaper: a built-in one's id (`none` for none), `image`, `video`, or a package's live
+/// wallpaper (`@owner/package/name`); a photo's or video's brightness and the panels' tint over it,
+/// in percent; and its file, by revision.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WallpaperLook {
+    pub kind: String,
+    pub colour: bool,
+    pub brightness: u8,
+    pub motion: bool,
+    pub glass: Option<u8>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub media: Option<Media>,
+}
+
+/// A photo's or video's file, named by a hash of its address on the computer.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Media {
+    pub revision: String,
+    #[serde(rename = "type")]
+    pub kind: String,
+}
+
+const fn is_hex(s: &str) -> bool {
+    let b = s.as_bytes();
+    if b.len() != 7 || b[0] != b'#' {
+        return false;
+    }
+    let mut i = 1;
+    while i < 7 {
+        if !b[i].is_ascii_hexdigit() {
+            return false;
+        }
+        i += 1;
+    }
+    true
+}
+
+fn is_word(s: &str, most: usize) -> bool {
+    !s.is_empty()
+        && s.len() <= most
+        && s.bytes()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == b'-')
+}
+
+/// A wallpaper's kind: a word, or a package's live wallpaper, `@owner/package/name`.
+fn is_wallpaper(s: &str) -> bool {
+    match s
+        .strip_prefix('@')
+        .map(|rest| rest.split('/').collect::<Vec<_>>())
+    {
+        Some(parts) => parts.len() == 3 && parts.iter().all(|p| is_word(p, 64)),
+        None => is_word(s, 32),
+    }
+}
+
+fn wallpaper_ok(w: &WallpaperLook) -> bool {
+    let media_ok = w.media.as_ref().is_none_or(|m| {
+        m.revision.len() == 16
+            && m.revision.bytes().all(|c| c.is_ascii_hexdigit())
+            && (m.kind == "image" || m.kind == "video")
+    });
+    is_wallpaper(&w.kind)
+        && (40..=110).contains(&w.brightness)
+        && w.glass.is_none_or(|g| g <= 100)
+        && media_ok
+}
+
+/// A look read as the phone holds it: none unless every colour is `#rrggbb`, the mode `dark` or
+/// `light`, there are the 16 terminal colours and the wallpaper is one it can read. A colour token
+/// it cannot read is left out.
+fn look_of(value: &Value) -> Option<Look> {
+    let mut look: Look = serde_json::from_value(value.clone()).ok()?;
+    look.colors.retain(|k, v| is_word(k, 16) && is_hex(v));
+    let t = &look.terminal;
+    let terminal_ok = [&t.background, &t.foreground, &t.cursor, &t.selection]
+        .iter()
+        .all(|c| is_hex(c))
+        && t.ansi.len() == 16
+        && t.ansi.iter().all(|c| is_hex(c));
+    let ok = (look.mode == "dark" || look.mode == "light")
+        && terminal_ok
+        && wallpaper_ok(&look.wallpaper);
+    ok.then_some(look)
+}
+
+/// What the phone holds of Home: each row and each tile's last line by its key, how far it has
+/// followed, and how the computer looks. Kept as it is, it is followed on from where it was.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Home {
     pub at: Option<At>,
     pub rows: BTreeMap<String, Row>,
     pub lines: BTreeMap<String, String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub look: Option<Look>,
+    /// How many times the look changed while held: a screen asks for it again only then.
+    #[serde(skip)]
+    pub looked: u64,
 }
 
 /// A row read as the phone holds it; none for one it cannot read.
@@ -296,37 +405,47 @@ impl Home {
     /// ignored.
     pub fn apply(&mut self, message: &Value) -> bool {
         let before = (self.at, self.rows.len(), self.lines.len());
-        match message.get("t").and_then(Value::as_str) {
-            Some("home") => {
-                let line = |v: &Value| v.as_str().map(str::to_string);
-                let (Some((layout, rows)), Some((lines, said))) = (
-                    message.get("layout").and_then(|v| snapshot_of(v, row_of)),
-                    message.get("lines").and_then(|v| snapshot_of(v, line)),
-                ) else {
-                    return false;
-                };
-                self.rows = rows.into_iter().collect();
-                self.lines = said.into_iter().collect();
-                self.at = Some(At { layout, lines });
+        let looked = match message.get("look").and_then(look_of) {
+            Some(look) if self.look.as_ref() != Some(&look) => {
+                self.look = Some(look);
+                self.looked += 1;
                 true
             }
-            Some("changes") => {
-                let Some(mut at) = self.at else { return false };
-                let rows = self.rows.clone();
-                let lines = self.lines.clone();
-                if let Some(v) = message.get("layout") {
-                    at.layout =
-                        changes_into(v, at.layout, &mut self.rows, row_of).unwrap_or(at.layout);
-                }
-                if let Some(v) = message.get("lines") {
-                    let line = |v: &Value| v.as_str().map(str::to_string);
-                    at.lines = changes_into(v, at.lines, &mut self.lines, line).unwrap_or(at.lines);
-                }
-                self.at = Some(at);
-                rows != self.rows || lines != self.lines || before.0 != self.at
-            }
             _ => false,
-        }
+        };
+        looked
+            | match message.get("t").and_then(Value::as_str) {
+                Some("home") => {
+                    let line = |v: &Value| v.as_str().map(str::to_string);
+                    let (Some((layout, rows)), Some((lines, said))) = (
+                        message.get("layout").and_then(|v| snapshot_of(v, row_of)),
+                        message.get("lines").and_then(|v| snapshot_of(v, line)),
+                    ) else {
+                        return false;
+                    };
+                    self.rows = rows.into_iter().collect();
+                    self.lines = said.into_iter().collect();
+                    self.at = Some(At { layout, lines });
+                    true
+                }
+                Some("changes") => {
+                    let Some(mut at) = self.at else { return false };
+                    let rows = self.rows.clone();
+                    let lines = self.lines.clone();
+                    if let Some(v) = message.get("layout") {
+                        at.layout =
+                            changes_into(v, at.layout, &mut self.rows, row_of).unwrap_or(at.layout);
+                    }
+                    if let Some(v) = message.get("lines") {
+                        let line = |v: &Value| v.as_str().map(str::to_string);
+                        at.lines =
+                            changes_into(v, at.lines, &mut self.lines, line).unwrap_or(at.lines);
+                    }
+                    self.at = Some(at);
+                    rows != self.rows || lines != self.lines || before.0 != self.at
+                }
+                _ => false,
+            }
     }
 
     fn tiles(&self) -> impl Iterator<Item = (&String, &TileRow)> {

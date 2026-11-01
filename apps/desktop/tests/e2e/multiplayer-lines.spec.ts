@@ -1,7 +1,7 @@
 // The last line in a guest's window (docs/design/last-line-2026-10-23.md §5): a guest who may only
-// view the host's workspace sees, under the host's shell's name in their Layers panel, what that
-// shell last printed, as the host's own row does, from the host's TileLines over the guest's
-// window's own stream; printed again, the guest's row follows it. And how busy that shell's output
+// view the host's workspace sees, in the hover card of the host's shell's row in their Layers panel,
+// what that shell last printed, as the host's own card does, from the host's TileLines over the
+// guest's window's own stream; printed again, the guest's card follows it. And how busy that shell's output
 // is (`terminal.watchActivity`): a guest's window that watches it is told its level by the host, and
 // once it watches nothing the host is told so (`[]`) and tells it nothing more.
 import { test, expect, type ElectronApplication, type Page } from "@playwright/test";
@@ -20,9 +20,16 @@ test.afterEach(async () => {
   fs.rmSync(root, { recursive: true, force: true });
 });
 
-const line = (w: Page) => w.locator('aside[aria-label="Layers"] [data-layer-tile] [data-layer-line]').first();
+/** The last line in the hover card of the first shell row, the card opened afresh; null when it has none. */
+const line = async (w: Page): Promise<string | null> => {
+  await w.mouse.move(0, 0);
+  await w.locator('aside[aria-label="Layers"] [data-layer-tile]').first().hover();
+  await expect(w.locator("[data-layers-card]")).toBeVisible();
+  const card = w.locator("[data-layers-card-line]");
+  return (await card.count()) ? card.first().textContent() : null;
+};
 
-test("a guest's Layers row says what the host's shell last printed, and follows it", async () => {
+test("a guest's Layers card says what the host's shell last printed, and follows it", async () => {
   test.skip(!hiveNetBuilt(), "build hive-net first: cargo build in crates/hive-net");
   const { host, guest } = await sharedWorkspace(root, apps, "view");
   const terminal = host.locator(".react-flow__node-terminal").first();
@@ -30,13 +37,15 @@ test("a guest's Layers row says what the host's shell last printed, and follows 
   await terminal.locator(".xterm-screen").click();
   // Typed until the shell is up to run it: running it twice changes nothing.
   await expect.poll(async () => {
+    await terminal.locator(".xterm-screen").click();
     await host.keyboard.type("echo $((200+14)) tests passed\n");
-    return (await line(host).count()) ? line(host).textContent() : null;
+    return line(host);
   }, { timeout: 30_000, intervals: [2_500] }).toBe("214 tests passed");
-  await expect(line(guest)).toHaveText("214 tests passed", { timeout: 15_000 });
+  await expect.poll(() => line(guest), { timeout: 15_000 }).toBe("214 tests passed");
 
+  await terminal.locator(".xterm-screen").click();
   await host.keyboard.type("echo $((6*7)) files changed\n");
-  await expect(line(guest)).toHaveText("42 files changed", { timeout: 15_000 });
+  await expect.poll(() => line(guest), { timeout: 15_000 }).toBe("42 files changed");
 });
 
 test("a guest's window that watches the host's shell is told how busy it is, and once it watches nothing, nothing more", async () => {

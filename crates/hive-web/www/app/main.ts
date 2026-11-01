@@ -15,6 +15,7 @@ import type { Connect, Phone } from "./phone.js";
 import { KEPT as START_KEPT, StartScreen } from "./start.js";
 import { TermScreen } from "./term-screen.js";
 import { followViewport } from "./viewport.js";
+import { LookShown } from "./look.js";
 import { ViewScreen, Views } from "./views.js";
 import { get, put, remove } from "./store.js";
 import type { Overview, Shown } from "./types.js";
@@ -121,6 +122,13 @@ const app: App = {
   },
 };
 
+/** The computer's look on this page; the last one shown is shown again before anything is reached. */
+const look = new LookShown(() => phone && {
+  wallpaperFile: (device, workspace, path) => phone!.wallpaperFile(device, workspace, path),
+  wallpaperMedia: (device, workspace, revision, got) => phone!.wallpaperMedia(device, workspace, revision, got),
+});
+/** The look last asked of the phone, by how many times it had changed. */
+let lookSeen = -1;
 const home = new Home(app, () => render());
 const agent = new AgentScreen(app);
 const terminal = new TermScreen(app);
@@ -197,8 +205,15 @@ function route(): void {
   tabs.hidden = shown === "pair" || shown === "agent" || shown === "terminal" || shown === "start" || shown === "view";
   if (shown === "start" && shownBefore !== "start") void starting.open(asked.get("workspace"), asked.get("frame"));
   if (shown === "views" && shownBefore !== "views") void views.open();
-  if (shown === "view") void viewing.open(asked.get("in") ?? "", view!);
-  else viewing.close();
+  look.hide(shown === "agent" || shown === "terminal" || shown === "start");
+  // A view and a live wallpaper share the views' origin: one goes before the other comes.
+  if (shown === "view") {
+    look.cover(true);
+    void viewing.open(asked.get("in") ?? "", view!);
+  } else {
+    viewing.close();
+    look.cover(false);
+  }
   if (shown !== "pair") pairing.stopScan();
   // What an agent or terminal said is read on opening it, and on leaving it.
   const looking = tile ? tileKey(tile) : term ? `t:${asked.get("in") ?? ""}/${term}` : null;
@@ -236,6 +251,12 @@ function render(): void {
   const p = phone;
   const first = { shown: p.shown(home.filter, home.choices.view()), overview: p.overview() };
   apply(first);
+  const looked = p.lookChanges();
+  if (looked !== lookSeen) {
+    lookSeen = looked;
+    look.show(p.look());
+  }
+  look.setAgents(first.overview.agents);
   // Kept at once, then at most every 500 ms, what is held then: a busy board changes faster.
   if (saving) return;
   const keep = () => {
@@ -346,6 +367,7 @@ async function show(to: Account): Promise<void> {
   const p = await wasm.Phone.open(to, told);
   if (account !== to) return p.disconnect();
   phone = p;
+  lookSeen = -1;
   showAccounts();
   void wasm.idOf(to.computers[0]!.key).then((id) => account === to && devices.show(id, kept.accounts, p.computers(), to));
   render();

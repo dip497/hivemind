@@ -712,6 +712,12 @@ export function lookForGuests(s: Pick<Settings, "appearance" | "appearanceExtra"
   return { ...s.appearance, ...(s.appearanceExtra.accent ? { accentCustom: s.appearanceExtra.accent } : {}) };
 }
 
+/** Whether the wallpaper `kind` is drawn: behind glass, which is the person's, or a theme's without
+ *  it (a theme's wallpaper is part of its look); a live scene, a package's, shows without glass too. */
+export function wallpaperShown(kind: string, glass: boolean, themeApplied: boolean): boolean {
+  return kind !== "none" && (glass || themeApplied || isPluginWallpaper(kind));
+}
+
 /** A theme file (`hive theme export`, Copy JSON): the appearance without the media it names. */
 export type ThemeFile = Omit<Appearance, "wallpaper" | "overlayMedia"> & { wallpaper: Omit<Appearance["wallpaper"], "imageSrc" | "videoSrc">; accentCustom?: AccentColors };
 

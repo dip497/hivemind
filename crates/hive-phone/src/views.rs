@@ -119,7 +119,65 @@ pub async fn file(
     path: &str,
 ) -> Result<ViewFile> {
     let mut w = Workspace::open(connection, workspace).await?;
-    let answer = w.call("view.file", json!([view, path])).await?;
+    file_of(w.call("view.file", json!([view, path])).await?)
+}
+
+/// The file at `path` of the live wallpaper the device on `connection` draws now
+/// (`appearance.wallpaperFile`), asked through `workspace`, one it holds: served as a view's is.
+pub async fn wallpaper_file(
+    connection: &Connection,
+    workspace: &str,
+    path: &str,
+) -> Result<ViewFile> {
+    let mut w = Workspace::open(connection, workspace).await?;
+    file_of(w.call("appearance.wallpaperFile", json!([path])).await?)
+}
+
+/// The wallpaper's photo or video on the device on `connection` while its revision is `revision`
+/// (`appearance.media`), asked through `workspace` piece by piece on one stream: its bytes and type.
+/// `got` is told how many bytes of how many came so far.
+pub async fn wallpaper_media(
+    connection: &Connection,
+    workspace: &str,
+    revision: &str,
+    mut got: impl FnMut(usize, usize),
+) -> Result<(Vec<u8>, String)> {
+    let mut w = Workspace::open(connection, workspace).await?;
+    let mut bytes = Vec::new();
+    loop {
+        let answer = w
+            .call("appearance.media", json!([revision, bytes.len()]))
+            .await?;
+        let size = answer
+            .get("size")
+            .and_then(Value::as_u64)
+            .context("the device sent no size")? as usize;
+        let mime = answer
+            .get("type")
+            .and_then(Value::as_str)
+            .unwrap_or("application/octet-stream")
+            .to_string();
+        let piece = STANDARD
+            .decode(
+                answer
+                    .get("data")
+                    .and_then(Value::as_str)
+                    .context("the device sent no file")?,
+            )
+            .context("the device sent a file that is not base64")?;
+        if piece.is_empty() && bytes.len() < size {
+            bail!("the device sent less of the wallpaper than it said it had");
+        }
+        bytes.extend_from_slice(&piece);
+        got(bytes.len(), size);
+        if bytes.len() >= size {
+            bytes.truncate(size);
+            return Ok((bytes, mime));
+        }
+    }
+}
+
+fn file_of(answer: Value) -> Result<ViewFile> {
     let said = |key: &str| answer.get(key).and_then(Value::as_str);
     let data = said("data").context("the device sent no file")?;
     let bytes = STANDARD

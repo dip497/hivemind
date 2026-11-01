@@ -64,7 +64,7 @@ import { agentById } from "@hivemind/agents";
 import { boardStructure } from "./board-structure.js";
 import type { Links } from "@hivemind/workspace-api/agents";
 import type { ViewFrameMachine } from "@hivemind/view-sdk/protocol";
-import type { HomeMessage } from "@hivemind/workspace-api/home";
+import type { HomeLook, HomeMessage } from "@hivemind/workspace-api/home";
 import { HomeFeed, homeLines, homeRows, type LayersShown } from "./home.js";
 import type { KnownMachines } from "@hivemind/core/remote-uri";
 import type { PairedWith } from "@hivemind/workspace-host/pairing";
@@ -94,6 +94,8 @@ const PHONE_MAY = new Set([
   "agent.answer", "agent.send", "terminal.write", "terminal.keyboard.ask", "terminal.ack", "terminal.fit", "terminal.photo",
   "agent.startable", "agent.places", "agent.folders", "agent.start", "agent.interrupt", "agent.close", "agent.diff", "agent.commands", "agent.conversation", "agent.tool", "agent.approval",
   "view.list", "view.file", "view.open", "view.post", "view.screen", "view.close", "widget.press",
+  // The computer's wallpaper, its photo or video and its live wallpaper's files, as Home names it.
+  "appearance.media", "appearance.wallpaperFile",
   // Someone asking to join, answered from the notice that told it (spec/push.md "Join").
   "people.answer",
   // The notes left on pages, listed, sent to an agent and closed or reopened; and what an agent asks
@@ -234,6 +236,9 @@ export interface PeerLinksOptions {
   /** Each tile's last line (`TileLines`): what it last said, or its screen last showed; told while
    *  Home is followed, so every tile's is kept. */
   lines?: Pick<TileLines, "get" | "followAll">;
+  /** How this computer looks, for the person's devices (`homeLook`); worked out again only after
+   *  `lookChanged`. None: Home says nothing of it. */
+  look?(): HomeLook;
 }
 
 interface Served { workspace: string; person: string; link: Link; stop(): void }
@@ -376,6 +381,11 @@ export class PeerLinks {
     const agentsFollowed = () => this.agentsChanged();
     o.changes(agentsFollowed);
     o.server.connect({ actor: { kind: "person" }, send: (e) => { if (e.event === "status.changed") this.agentsChanged(); }, closed: new AbortController().signal });
+  }
+
+  /** How this computer looks may have changed: Home tells the person's devices, once it did. */
+  lookChanged(): void {
+    this.home?.lookChanged();
   }
 
   /** Serve the device on `link` the workspace it names, if its person may reach it. */
@@ -521,7 +531,7 @@ export class PeerLinks {
     // Home follows every tile before it is first worked out: a tile whose agent's words were never
     // read, or reported since, is read as Home asks for its line, and told once it is.
     this.o.lines?.followAll(true);
-    const home = (this.home ??= new HomeFeed({ rows: () => this.homeRows(), lines: () => this.homeLines() }));
+    const home = (this.home ??= new HomeFeed({ rows: () => this.homeRows(), lines: () => this.homeLines(), look: () => this.o.look?.() ?? null }));
     // Where the follower is in each of Home's two feeds, as it was last sent them, and whether it
     // missed a change for want of room: then it is sent nothing until room returns, and then what
     // came after where it is.
