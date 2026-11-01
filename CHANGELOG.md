@@ -9,6 +9,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+## [2026.11.0] — 2026-11-01
+
 - Added: the phone page looks like your computer: its theme, light or dark, terminal colours, and the background behind your workspace, a photo, video or live wallpaper among them. Change it on the computer and an open phone follows.
 - Fixed: **Notes on pages** on the phone page listed nothing over a real connection: the phone was not let ask for them. It can now list, send, close and reopen them, and answer a question an agent puts on a Browser tile.
 - Added: agents have a hive-browser guide for signing in without a password, leaving notes, recording proof, testing an app and checking a page; Settings says when video proof needs ffmpeg.
@@ -2236,7 +2238,8 @@ World, and sandboxed community views), and the e2e/perf harnesses gate every cha
 - **install.sh** — single script for both fresh install and in-place upgrade. Downloads prebuilt binaries from GitHub Releases by default; `--dev` flag clones and builds from source.
 - **GitHub Actions** — `release.yml` (tag-driven build + publish on `v*.*.*`), `ci.yml` (typecheck + build + unit tests on every push / PR).
 
-[Unreleased]: https://github.com/dip497/hivemind/compare/v2026.10.8...HEAD
+[Unreleased]: https://github.com/dip497/hivemind/compare/v2026.11.0...HEAD
+[2026.11.0]: https://github.com/dip497/hivemind/releases/tag/v2026.11.0
 [2026.10.8]: https://github.com/dip497/hivemind/releases/tag/v2026.10.8
 [2026.10.7]: https://github.com/dip497/hivemind/releases/tag/v2026.10.7
 [2026.10.6]: https://github.com/dip497/hivemind/releases/tag/v2026.10.6

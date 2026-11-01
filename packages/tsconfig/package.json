@@ -1,6 +1,6 @@
 {
   "name": "@hivemind/tsconfig",
-  "version": "2026.10.8",
+  "version": "2026.11.0",
   "private": true,
   "files": ["base.json"]
 }
