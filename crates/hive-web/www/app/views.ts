@@ -19,7 +19,7 @@ type Row = { workspace: string; place: string; view: Offered };
 
 /** The views' origin: this page's host, on the port its server shows them on; null when none. */
 let origin: Promise<string | null> | undefined;
-const viewsOrigin = (): Promise<string | null> =>
+export const viewsOrigin = (): Promise<string | null> =>
   (origin ??= fetch("views.json", { cache: "no-store" })
     .then((r) => r.json() as Promise<{ port: number | null }>)
     .then(({ port }) => (port ? `${location.protocol}//${location.hostname}:${port}` : null))

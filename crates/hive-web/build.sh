@@ -24,6 +24,7 @@ cargo build --release --locked --target wasm32-unknown-unknown --lib
 
 rm -rf www/js
 "${TSC:-$repo/node_modules/.bin/tsc}" -p www
+"${ESBUILD:-$repo/node_modules/.bin/esbuild}" www/app/*.ts --format=esm --target=es2022 --log-level=warning --outdir=www/js
 # One request, not one per module, each asked for only once the one importing it is read.
 "${ESBUILD:-$repo/node_modules/.bin/esbuild}" www/app/main.ts --bundle --format=esm --target=es2022 \
   --minify --log-level=warning --outfile=www/main.js

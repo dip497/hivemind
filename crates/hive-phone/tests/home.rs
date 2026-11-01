@@ -420,12 +420,20 @@ fn look(bg: &str, mode: &str) -> Value {
 }
 
 #[test]
-fn the_look_is_held_from_the_whole_and_from_a_change_kept_with_the_rest_and_one_that_is_not_hex_is_not_taken() {
+fn the_look_is_held_from_the_whole_and_from_a_change_kept_with_the_rest_and_one_that_is_not_hex_is_not_taken(
+) {
     let whole = |look: Value| json!({ "t": "home", "layout": { "seq": 1, "rows": [] }, "lines": { "seq": 0, "rows": [] }, "look": look });
     let mut home = Home::default();
     assert!(home.apply(&whole(look("#101820", "dark"))));
     let held = home.look.clone().unwrap();
-    assert_eq!((held.mode.as_str(), held.colors["bg"].as_str(), held.wallpaper.kind.as_str()), ("dark", "#101820", "@dip497/live-scenes/koi"));
+    assert_eq!(
+        (
+            held.mode.as_str(),
+            held.colors["bg"].as_str(),
+            held.wallpaper.kind.as_str()
+        ),
+        ("dark", "#101820", "@dip497/live-scenes/koi")
+    );
 
     // Recoloured: a change that carries only the look.
     assert!(home.apply(&json!({ "t": "changes", "look": look("#fafafa", "light") })));
@@ -452,7 +460,17 @@ fn the_look_is_held_from_the_whole_and_from_a_change_kept_with_the_rest_and_one_
     photo["wallpaper"]["kind"] = json!("image");
     photo["wallpaper"]["media"] = json!({ "revision": "0123456789abcdef", "type": "image" });
     assert!(home.apply(&json!({ "t": "changes", "look": photo.clone() })));
-    assert_eq!(home.look.as_ref().unwrap().wallpaper.media.as_ref().unwrap().revision, "0123456789abcdef");
+    assert_eq!(
+        home.look
+            .as_ref()
+            .unwrap()
+            .wallpaper
+            .media
+            .as_ref()
+            .unwrap()
+            .revision,
+        "0123456789abcdef"
+    );
     photo["wallpaper"]["media"]["revision"] = json!("hivemedia://media/x.png");
     assert!(!home.apply(&json!({ "t": "changes", "look": photo })));
     let mut far = look("#fafafa", "light");

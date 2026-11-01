@@ -281,12 +281,18 @@ const fn is_hex(s: &str) -> bool {
 }
 
 fn is_word(s: &str, most: usize) -> bool {
-    !s.is_empty() && s.len() <= most && s.bytes().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == b'-')
+    !s.is_empty()
+        && s.len() <= most
+        && s.bytes()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == b'-')
 }
 
 /// A wallpaper's kind: a word, or a package's live wallpaper, `@owner/package/name`.
 fn is_wallpaper(s: &str) -> bool {
-    match s.strip_prefix('@').map(|rest| rest.split('/').collect::<Vec<_>>()) {
+    match s
+        .strip_prefix('@')
+        .map(|rest| rest.split('/').collect::<Vec<_>>())
+    {
         Some(parts) => parts.len() == 3 && parts.iter().all(|p| is_word(p, 64)),
         None => is_word(s, 32),
     }
@@ -294,9 +300,14 @@ fn is_wallpaper(s: &str) -> bool {
 
 fn wallpaper_ok(w: &WallpaperLook) -> bool {
     let media_ok = w.media.as_ref().is_none_or(|m| {
-        m.revision.len() == 16 && m.revision.bytes().all(|c| c.is_ascii_hexdigit()) && (m.kind == "image" || m.kind == "video")
+        m.revision.len() == 16
+            && m.revision.bytes().all(|c| c.is_ascii_hexdigit())
+            && (m.kind == "image" || m.kind == "video")
     });
-    is_wallpaper(&w.kind) && (40..=110).contains(&w.brightness) && w.glass.is_none_or(|g| g <= 100) && media_ok
+    is_wallpaper(&w.kind)
+        && (40..=110).contains(&w.brightness)
+        && w.glass.is_none_or(|g| g <= 100)
+        && media_ok
 }
 
 /// A look read as the phone holds it: none unless every colour is `#rrggbb`, the mode `dark` or
@@ -306,10 +317,14 @@ fn look_of(value: &Value) -> Option<Look> {
     let mut look: Look = serde_json::from_value(value.clone()).ok()?;
     look.colors.retain(|k, v| is_word(k, 16) && is_hex(v));
     let t = &look.terminal;
-    let terminal_ok = [&t.background, &t.foreground, &t.cursor, &t.selection].iter().all(|c| is_hex(c))
+    let terminal_ok = [&t.background, &t.foreground, &t.cursor, &t.selection]
+        .iter()
+        .all(|c| is_hex(c))
         && t.ansi.len() == 16
         && t.ansi.iter().all(|c| is_hex(c));
-    let ok = (look.mode == "dark" || look.mode == "light") && terminal_ok && wallpaper_ok(&look.wallpaper);
+    let ok = (look.mode == "dark" || look.mode == "light")
+        && terminal_ok
+        && wallpaper_ok(&look.wallpaper);
     ok.then_some(look)
 }
 
@@ -322,6 +337,9 @@ pub struct Home {
     pub lines: BTreeMap<String, String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub look: Option<Look>,
+    /// How many times the look changed while held: a screen asks for it again only then.
+    #[serde(skip)]
+    pub looked: u64,
 }
 
 /// A row read as the phone holds it; none for one it cannot read.
@@ -390,41 +408,44 @@ impl Home {
         let looked = match message.get("look").and_then(look_of) {
             Some(look) if self.look.as_ref() != Some(&look) => {
                 self.look = Some(look);
+                self.looked += 1;
                 true
             }
             _ => false,
         };
-        looked | match message.get("t").and_then(Value::as_str) {
-            Some("home") => {
-                let line = |v: &Value| v.as_str().map(str::to_string);
-                let (Some((layout, rows)), Some((lines, said))) = (
-                    message.get("layout").and_then(|v| snapshot_of(v, row_of)),
-                    message.get("lines").and_then(|v| snapshot_of(v, line)),
-                ) else {
-                    return false;
-                };
-                self.rows = rows.into_iter().collect();
-                self.lines = said.into_iter().collect();
-                self.at = Some(At { layout, lines });
-                true
-            }
-            Some("changes") => {
-                let Some(mut at) = self.at else { return false };
-                let rows = self.rows.clone();
-                let lines = self.lines.clone();
-                if let Some(v) = message.get("layout") {
-                    at.layout =
-                        changes_into(v, at.layout, &mut self.rows, row_of).unwrap_or(at.layout);
-                }
-                if let Some(v) = message.get("lines") {
+        looked
+            | match message.get("t").and_then(Value::as_str) {
+                Some("home") => {
                     let line = |v: &Value| v.as_str().map(str::to_string);
-                    at.lines = changes_into(v, at.lines, &mut self.lines, line).unwrap_or(at.lines);
+                    let (Some((layout, rows)), Some((lines, said))) = (
+                        message.get("layout").and_then(|v| snapshot_of(v, row_of)),
+                        message.get("lines").and_then(|v| snapshot_of(v, line)),
+                    ) else {
+                        return false;
+                    };
+                    self.rows = rows.into_iter().collect();
+                    self.lines = said.into_iter().collect();
+                    self.at = Some(At { layout, lines });
+                    true
                 }
-                self.at = Some(at);
-                rows != self.rows || lines != self.lines || before.0 != self.at
+                Some("changes") => {
+                    let Some(mut at) = self.at else { return false };
+                    let rows = self.rows.clone();
+                    let lines = self.lines.clone();
+                    if let Some(v) = message.get("layout") {
+                        at.layout =
+                            changes_into(v, at.layout, &mut self.rows, row_of).unwrap_or(at.layout);
+                    }
+                    if let Some(v) = message.get("lines") {
+                        let line = |v: &Value| v.as_str().map(str::to_string);
+                        at.lines =
+                            changes_into(v, at.lines, &mut self.lines, line).unwrap_or(at.lines);
+                    }
+                    self.at = Some(at);
+                    rows != self.rows || lines != self.lines || before.0 != self.at
+                }
+                _ => false,
             }
-            _ => false,
-        }
     }
 
     fn tiles(&self) -> impl Iterator<Item = (&String, &TileRow)> {

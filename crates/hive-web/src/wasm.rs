@@ -5,11 +5,11 @@ use hive_net::{
     net::{addr_of, Reach},
 };
 use hive_phone::{
-    agents, connect, control, conversation, devices,
+    agents, browser_asks, connect, control, conversation, devices,
     failure::{Failure, Lost},
     home, homes,
     identity::DeviceCertificate,
-    browser_asks, markdown, network, notes, pairing, person,
+    markdown, network, notes, pairing, person,
     screen::{Screen, FIRST_HISTORY},
     views,
     workspace::{self, Answer, Input, Reply, Sent, Watched},
@@ -583,13 +583,24 @@ impl Host {
     /// The questions waiting on the person on Browser tiles on this computer.
     #[wasm_bindgen(js_name = browserAsks)]
     pub async fn browser_asks(&self, workspace: String) -> Result<JsValue, JsError> {
-        to_js(&browser_asks::asks(&self.connection, &workspace).await.map_err(err)?)
+        to_js(
+            &browser_asks::asks(&self.connection, &workspace)
+                .await
+                .map_err(err)?,
+        )
     }
 
     /// The person's answer to one of them: `yes`, `always`, `no` or `done`.
     #[wasm_bindgen(js_name = answerBrowserAsk)]
-    pub async fn answer_browser_ask(&self, workspace: String, ask: f64, answer: String) -> Result<bool, JsError> {
-        browser_asks::answer(&self.connection, &workspace, ask as u64, &answer).await.map_err(err)
+    pub async fn answer_browser_ask(
+        &self,
+        workspace: String,
+        ask: f64,
+        answer: String,
+    ) -> Result<bool, JsError> {
+        browser_asks::answer(&self.connection, &workspace, ask as u64, &answer)
+            .await
+            .map_err(err)
     }
 
     /// The notes on pages kept in `repo` of `workspace`: `[{id, body, status, what, url, summary?, agent?, attachments?}]`.
@@ -751,6 +762,45 @@ impl Host {
             .map_err(err)?;
         let out = to_js(&json!({ "type": file.mime, "csp": file.csp }))?;
         let data = js_sys::Uint8Array::from(&file.bytes[..]);
+        js_sys::Reflect::set(&out, &"data".into(), &data).map_err(|_| err("no object"))?;
+        Ok(out)
+    }
+
+    /// The file `path` of the live wallpaper the device draws now (`appearance.wallpaperFile`),
+    /// asked through `workspace`: `{data, type, csp}`, as `viewFile`.
+    #[wasm_bindgen(js_name = wallpaperFile)]
+    pub async fn wallpaper_file(
+        &self,
+        workspace: String,
+        path: String,
+    ) -> Result<JsValue, JsError> {
+        let file = views::wallpaper_file(&self.connection, &workspace, &path)
+            .await
+            .map_err(err)?;
+        let out = to_js(&json!({ "type": file.mime, "csp": file.csp }))?;
+        let data = js_sys::Uint8Array::from(&file.bytes[..]);
+        js_sys::Reflect::set(&out, &"data".into(), &data).map_err(|_| err("no object"))?;
+        Ok(out)
+    }
+
+    /// The device's wallpaper photo or video while its revision is `revision` (`appearance.media`),
+    /// asked through `workspace`: `{data, type}`. `got` is called with the bytes so far and the
+    /// whole.
+    #[wasm_bindgen(js_name = wallpaperMedia)]
+    pub async fn wallpaper_media(
+        &self,
+        workspace: String,
+        revision: String,
+        got: js_sys::Function,
+    ) -> Result<JsValue, JsError> {
+        let (bytes, mime) =
+            views::wallpaper_media(&self.connection, &workspace, &revision, |at, of| {
+                let _ = got.call2(&JsValue::NULL, &(at as f64).into(), &(of as f64).into());
+            })
+            .await
+            .map_err(err)?;
+        let out = to_js(&json!({ "type": mime }))?;
+        let data = js_sys::Uint8Array::from(&bytes[..]);
         js_sys::Reflect::set(&out, &"data".into(), &data).map_err(|_| err("no object"))?;
         Ok(out)
     }
@@ -1004,6 +1054,26 @@ impl Homes {
             &serde_json::to_value(homes::shown(&homes, query, machine.as_deref(), &view))
                 .map_err(err)?,
         )
+    }
+
+    /// A number that changes each time any look held changes: `look` is asked again only then.
+    #[wasm_bindgen(js_name = lookChanges)]
+    pub fn look_changes(&self) -> f64 {
+        self.homes.borrow().values().map(|h| h.looked).sum::<u64>() as f64
+    }
+
+    /// How the first of `computers` that says so looks: `{device, workspace, look}`, `workspace`
+    /// one it holds, to ask its files through; null while none has said.
+    pub fn look(&self, computers: JsValue) -> Result<JsValue, JsError> {
+        let computers = computers_of(&computers)?;
+        let held = self.homes.borrow();
+        let found = computers.iter().find_map(|c| {
+            let home = held.get(&c.device)?;
+            let look = home.look.as_ref()?;
+            let workspace = home.rows.keys().find_map(|k| k.strip_prefix("w:"));
+            Some(json!({ "device": c.device, "workspace": workspace, "look": look }))
+        });
+        to_js(&found.unwrap_or(Value::Null))
     }
 
     /// The agents across `computers`, `{agents, needs, working}`, each saying its computer.

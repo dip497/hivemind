@@ -265,3 +265,25 @@ export interface Shown {
   /** The mark of each agent a tile listed runs, by agent. */
   marks: Record<string, Mark>;
 }
+
+/** How a computer looks (spec/home.md 0.5): its colours by token, its terminal's, its wallpaper. */
+export interface Look {
+  mode: "dark" | "light";
+  colors: Record<string, string>;
+  terminal: { background: string; foreground: string; cursor: string; selection: string; ansi: string[] };
+  wallpaper: {
+    kind: string;
+    colour: boolean;
+    brightness: number;
+    motion: boolean;
+    glass: number | null;
+    media?: { revision: string; type: "image" | "video" };
+  };
+}
+
+/** The look of the computer `device`, and a workspace it holds, to ask its files through. */
+export interface HeldLook {
+  device: string;
+  workspace: string | null;
+  look: Look;
+}

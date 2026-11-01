@@ -2,6 +2,8 @@
 // §11.6): nothing of the page's is reachable from here. It frames the view's page at
 // /v/<token>/, whose files the service worker here asks the page for, through this frame; hands the
 // view the port the page gives it for each of its pages; and leaves nothing of one view to the next.
+// A live wallpaper (docs/design/phone-look-2026-11-01.md) is shown the same way, with no forms and
+// out of the keyboard's way.
 "use strict";
 
 (() => {
@@ -21,7 +23,7 @@
     if (page || e.source !== parent || host !== location.hostname || e.data?.t !== "start" || !e.ports[0]) return;
     page = e.ports[0];
     page.onmessage = (m) => told(m.data ?? {}, m.ports);
-    start(String(e.data.page)).catch((err) => page.postMessage({ t: "failed", why: String(err?.message ?? err) }));
+    start(String(e.data.page), e.data.wallpaper === true).catch((err) => page.postMessage({ t: "failed", why: String(err?.message ?? err) }));
   });
 
   function told(m, ports) {
@@ -37,7 +39,7 @@
     }
   }
 
-  async function start(entry) {
+  async function start(entry, wallpaper) {
     if (!token || !/^[\w-]{16,64}$/.test(token)) throw new Error("no token");
     await forget();
     navigator.serviceWorker.addEventListener("message", (e) => {
@@ -51,8 +53,13 @@
     const registration = await navigator.serviceWorker.register("sw.js", { scope: "./v/" });
     await activated(registration);
     frame = document.createElement("iframe");
-    // Forms fire their submit event; the view's CSP (form-action 'none') sends them nowhere.
-    frame.setAttribute("sandbox", "allow-scripts allow-same-origin allow-forms");
+    // Forms fire their submit event; the view's CSP (form-action 'none') sends them nowhere. A
+    // wallpaper draws and is told: it has no forms, and never the keyboard.
+    frame.setAttribute("sandbox", wallpaper ? "allow-scripts allow-same-origin" : "allow-scripts allow-same-origin allow-forms");
+    if (wallpaper) {
+      frame.tabIndex = -1;
+      frame.inert = true;
+    }
     frame.setAttribute("data-view", "");
     frame.addEventListener("load", () => {
       let home = false;

@@ -18,9 +18,10 @@ use hyper::{header, Method, Request, Response, StatusCode};
 pub const PREFIX: &str = "/phone";
 
 /// What the page may load and talk to: its own files, and the relays and access services its
-/// pairing link names, wherever they are.
+/// pairing link names, wherever they are; and the computer's wallpaper photo or video, which it
+/// holds as a blob (docs/design/phone-look-2026-11-01.md).
 const POLICY: &str = "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; \
-    connect-src 'self' https: wss: http: ws:; img-src 'self' data:; base-uri 'none'; \
+    connect-src 'self' https: wss: http: ws:; img-src 'self' data: blob:; media-src 'self' blob:; base-uri 'none'; \
     frame-ancestors 'none'; form-action 'none'";
 
 /// What the frame a view is shown in may do (docs/design/phone-browser-2026-10-03.md §11.6): run
