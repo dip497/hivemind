@@ -596,11 +596,13 @@ test("a computer away is shown with what it last said needed the person, and whe
   expect(backs()[0]!.since).toBeGreaterThanOrEqual(started);
   expect((await needsOf(phone)).away).toEqual([]);
 
-  // Its network gone, as while it sleeps, the phone finds it away; it wakes, back on its network,
-  // and the phone is told so.
-  execSync(`pkill -f "hive-net[ ]daemon .*--identity ${root}/desktop/"`);
+  // Its network held still, as while it sleeps, the phone finds it away; it wakes, back on its
+  // network, and the phone is told so.
+  const daemon = `"hive-net[ ]daemon .*--identity ${root}/desktop/"`;
+  execSync(`pkill -STOP -f ${daemon}`);
   await expect.poll(async () => (await needsOf(phone)).away.map((a) => a.device), { timeout: 30_000 }).toEqual([d.me.deviceId]);
   const woke = Date.now();
+  execSync(`pkill -CONT -f ${daemon}`);
   await wake();
   await expect.poll(() => backs().length, { timeout: 30_000 }).toBe(2);
   expect(backs()[1]!.since).toBeGreaterThanOrEqual(woke);
