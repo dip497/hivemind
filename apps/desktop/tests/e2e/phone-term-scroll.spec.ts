@@ -47,6 +47,7 @@ const source = {
   typeText() {}, typeKeys() {}, fit() {}, unfit() {},
   earlier: () => { window.earlier++; },
   scroll: (lines, col, row) => { if (window.takes && lines) window.scrolls.push([lines, col, row]); return window.takes; },
+  click: () => false,
 };
 const app = { terminal: (w, t, c) => { changed = c; return { source, stop: () => {} }; } };
 const view = new TerminalView();
