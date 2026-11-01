@@ -542,8 +542,9 @@ function timed(draw: (dt: number) => void) {
 }
 ```
 
-For scale, Hivemind's scenes, median per frame in headless Chromium, 1× / 2×: Fireflies 1.1 / 2.2
-ms, Jellyfish 1.9 / 3.4, Koi Pond 3.3 / 4.7, Shoal 5.6 / 8.0. **A headless browser renders in
+For scale, the Live scenes' draws, median per frame in headless Chromium, 1440×900 at 1× /
+1280×800 at 2×, the script alone: Fireflies 1.7 / 2.7 ms (2.5 / 5.9 with its raster counted),
+Jellyfish 1.9 / 1.8, Koi Pond 3.9 / 4.0, Shoal 5.5 / 6.3. **A headless browser renders in
 software**, with no GPU: it overstates the cost, and its frame rates mean nothing. Compare a
 change with what came before it, on the same machine, the same way, and say how.
 
