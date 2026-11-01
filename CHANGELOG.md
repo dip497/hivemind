@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Added: the phone page looks like your computer: its theme, light or dark, terminal colours, and the background behind your workspace, a photo, video or live wallpaper among them. Change it on the computer and an open phone follows.
 - Fixed: **Notes on pages** on the phone page listed nothing over a real connection: the phone was not let ask for them. It can now list, send, close and reopen them, and answer a question an agent puts on a Browser tile.
 - Added: agents have a hive-browser guide for signing in without a password, leaving notes, recording proof, testing an app and checking a page; Settings says when video proof needs ffmpeg.
 - Added: agents sign in on a Browser tile without seeing the password. `hive ctl browser ask` hands the page to you and the agent waits, seeing none of it; `hive ctl browser sign-in <name>` uses a sign-in you saved in Settings, after your yes on the tile, typed only on its site.

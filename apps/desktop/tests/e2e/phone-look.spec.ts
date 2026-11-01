@@ -142,6 +142,11 @@ test("an open phone page takes the computer's colours, its photo from the same f
   await page.waitForTimeout(1_000);
   expect(leaks).toEqual([]);
   await shot(page, "live-wallpaper");
+  // Covered by a solid screen, it holds; shown again, it runs.
+  await page.evaluate(() => (location.hash = "start"));
+  await expect.poll(async () => (await seen()).modes.at(-1), { timeout: 10_000 }).toBe("hold");
+  await page.evaluate(() => (location.hash = "home"));
+  await expect.poll(async () => (await seen()).modes.at(-1), { timeout: 10_000 }).toBe("run");
   // Less motion asked for: a still frame.
   await page.emulateMedia({ reducedMotion: "reduce" });
   await expect.poll(async () => (await seen()).modes.at(-1), { timeout: 10_000 }).toBe("still");
@@ -160,5 +165,30 @@ test("an open phone page takes the computer's colours, its photo from the same f
     await expect(page.locator("[data-live-wallpaper]")).toHaveAttribute("data-drawn", "1", { timeout: 30_000 });
     await page.waitForTimeout(2_000);
     await shot(page, "live-scenes-koi");
+    if (process.env.PHONE_LOOK_MEASURE) {
+      // The page's main-thread work each second, on a CPU slowed 4x, running, then still.
+      const cdp = await context.newCDPSession(page);
+      await cdp.send("Performance.enable");
+      await cdp.send("Emulation.setCPUThrottlingRate", { rate: 4 });
+      const busy = async (ms: number) => {
+        const at = async () => (await cdp.send("Performance.getMetrics")).metrics.find((m) => m.name === "TaskDuration")!.value;
+        const before = await at();
+        await page.waitForTimeout(ms);
+        return ((await at()) - before) / (ms / 1000);
+      };
+      const running = await busy(10_000);
+      await page.emulateMedia({ reducedMotion: "reduce" });
+      await page.waitForTimeout(1_000);
+      const still = await busy(10_000);
+      await page.emulateMedia({ reducedMotion: "no-preference" });
+      await set("appearance.wallpaper.kind", "mono");
+      await page.waitForTimeout(1_000);
+      const plain = await busy(10_000);
+      await cdp.send("Emulation.setCPUThrottlingRate", { rate: 1 });
+      await set("appearance.wallpaper.kind", "@dip497/live-scenes/koi");
+      await expect(page.locator("[data-live-wallpaper]")).toHaveAttribute("data-drawn", "1", { timeout: 30_000 });
+      const unthrottled = await busy(10_000);
+      console.log(`measured: koi, main-thread busy on a 4x slower CPU ${(running * 100).toFixed(1)}% running, ${(still * 100).toFixed(1)}% still, ${(plain * 100).toFixed(1)}% with Mono; unthrottled ${(unthrottled * 100).toFixed(1)}%`);
+    }
   }
 });

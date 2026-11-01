@@ -205,9 +205,15 @@ function route(): void {
   tabs.hidden = shown === "pair" || shown === "agent" || shown === "terminal" || shown === "start" || shown === "view";
   if (shown === "start" && shownBefore !== "start") void starting.open(asked.get("workspace"), asked.get("frame"));
   if (shown === "views" && shownBefore !== "views") void views.open();
-  look.cover(shown === "view");
-  if (shown === "view") void viewing.open(asked.get("in") ?? "", view!);
-  else viewing.close();
+  look.hide(shown === "agent" || shown === "terminal" || shown === "start");
+  // A view and a live wallpaper share the views' origin: one goes before the other comes.
+  if (shown === "view") {
+    look.cover(true);
+    void viewing.open(asked.get("in") ?? "", view!);
+  } else {
+    viewing.close();
+    look.cover(false);
+  }
   if (shown !== "pair") pairing.stopScan();
   // What an agent or terminal said is read on opening it, and on leaving it.
   const looking = tile ? tileKey(tile) : term ? `t:${asked.get("in") ?? ""}/${term}` : null;

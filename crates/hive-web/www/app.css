@@ -1,5 +1,6 @@
 /* The phone app's look, as docs/design/phone-look-2026-10-15.md sets it for the page, Android and
-   iOS alike: neutral greys, colour only for what waits, failed or is done, Geist and JetBrains Mono. */
+   iOS alike: neutral greys, colour only for what waits, failed or is done, Geist and JetBrains Mono;
+   the computer's own colours once it says them (look.ts). */
 
 @font-face { font-family: Geist; font-weight: 400; font-display: swap; src: url(fonts/geist-400.woff2) format("woff2"); }
 @font-face { font-family: Geist; font-weight: 500; font-display: swap; src: url(fonts/geist-500.woff2) format("woff2"); }

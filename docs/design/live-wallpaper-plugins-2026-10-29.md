@@ -20,7 +20,8 @@ should answer the pointer, not only the water.
 | How it is picked | `appearance.wallpaper.kind` takes its id. Settings ▸ Appearance lists installed ones after the built-in scenes. `hive config set appearance.wallpaper.kind '"@me/pond/pond"'` does the same. |
 | Shipped with a view | A package's `startup.wallpaper` names one of its wallpapers. The app offers it once after install, in the same offer as `startup.view` ("Bees is installed. Use its wallpaper?"), and never switches without the person. |
 | Interaction | Every scene, built in or not, answers which creature is at a point. Hovering one shows its agent's name and state (drawn by the app); clicking one goes to its agent's tile. A click on open water stays the scene's. |
-| Behind a plugin view, on the phone | Not drawn, as the built-in scenes are not: a view lays its tiles out itself, so the host does not know where they are, and the phone draws no wallpaper. |
+| Behind a plugin view | Not drawn, as the built-in scenes are not: a view lays its tiles out itself, so the host does not know where they are. |
+| On the phone | Drawn behind the phone page's screens, on the views' origin (`phone-look-2026-11-01.md`). |
 | Building one | `hive plugins new wallpaper <name>` starts a package holding a working wallpaper with a PROMPT.md carrying the whole guide; `hive plugins check` loads it against a fake host and checks it draws, answers a click and stops when held. The repo skill `hivemind-live-wallpaper` says the same for contributors. |
 
 ## The contract: wallpaper protocol 1

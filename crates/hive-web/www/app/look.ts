@@ -38,6 +38,7 @@ export class LookShown {
   private media: string | null = null;
   private agents: Agent[] = [];
   private covered = false;
+  private behind = false;
   private hiddenTimer = 0;
   private round = 0;
 
@@ -83,6 +84,13 @@ export class LookShown {
     if (covered === this.covered) return;
     this.covered = covered;
     void this.wallpaper();
+  }
+
+  /** A solid screen (a conversation, a terminal) is shown over it: it holds still, unseen. */
+  hide(hidden: boolean): void {
+    if (hidden === this.behind) return;
+    this.behind = hidden;
+    this.mode();
   }
 
   private paint(look: Look): void {
@@ -192,7 +200,7 @@ export class LookShown {
   }
 
   private liveMode(): "run" | "hold" | "still" {
-    if (document.hidden) return "hold";
+    if (document.hidden || this.behind) return "hold";
     return motionless.matches || !this.held?.look.wallpaper.motion ? "still" : "run";
   }
 
