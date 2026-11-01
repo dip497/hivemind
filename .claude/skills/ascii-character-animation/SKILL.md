@@ -361,14 +361,23 @@ A frame is a stack. Paint each layer only as often as it changes, and copy it in
 | Layer | Painted | In Hivemind's scenes |
 |---|---|---|
 | The ground: gradient, glow | once per size and look, into an offscreen canvas | every scene |
-| Still scenery | once per grid, look and tile layout, into a layer the height it needs | Shoal's reef, Fireflies' grass |
+| Still scenery | once per grid, look and tile layout, into a layer the height it needs | Shoal's reef, Koi Pond's mud, Fireflies' sky, stars, far grass and turf |
+| Slow scenery | a piece at a time, one piece a frame | Fireflies' near grass: a strip in six pieces, so each blade sways at 5 Hz, its tip moving under a pixel between; a piece at once when a firefly lands in it |
 | Slow light | a few times a second (every 0.25 s), over a copy of the ground | Shoal's and Jellyfish's light shafts: a few copies of one soft sprite, sheared to slant, swaying |
 | Sprites | once per look, drawn scaled each frame | a glow (a radial gradient in a 64 px canvas), a lily pad (redrawn only when it turns a step) |
-| Moving scenery | each frame, a few cells | swaying weed and reeds, ripples, marine snow, stars twinkling |
+| Moving scenery | each frame, as lines, one fill a colour | seagrass, kelp and reeds swaying, rings on the water, marine snow |
 | Creatures | each frame | the agents' creatures, their wakes and the small fish |
 | Soft layer | each frame, only the span it covers | what shows under frosted tiles |
 | Flashes | each frame, last | a bite, a flash, a firework: over everything |
 
+- **See-through.** A jelly's bell is filled from alpha ramps worked out once per look, so the water,
+  the shafts and its own arms show through it. Fill it in runs of one tone along each row of parts,
+  and sort the runs by tone so each style is set once: unsorted, a frame made some 2000 style
+  changes. Turn a leaning bell by its tilt; a shear made it a parallelogram.
+- **Time the raster too.** A draw timed on its script alone leaves out the rasterizing the browser
+  does after; a scene that draws into an offscreen layer and composites it in the same frame pays
+  that inside the timer, and looks slower than one that draws everything live. Read a pixel
+  (`getImageData(0, 0, 1, 1)`) after the draw to count both.
 - Glow: draw a sprite scaled round the creature with `globalCompositeOperation = "lighter"` on a
   dark ground (light adds), and plain at about 60% on a light one (it tints).
 - A field that diffuses (a wake: each cell takes a blur of its four neighbours and decays,
