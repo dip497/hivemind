@@ -229,7 +229,7 @@ jobs:
           {
             echo "hive-net=$(hash crates/hive-net conformance scripts/traffic-test.sh)"
             echo "hive-phone=$(hash crates/hive-phone crates/hive-phone-ffi crates/hive-net conformance spec scripts/phone/bindings.sh apps/ios/HivePhone/Core/Generated)"
-            echo "compose=$(hash infra crates/Cargo.toml crates/Cargo.lock crates/hive-net crates/hive-phone crates/hive-web crates/vendor spec pnpm-lock.yaml pnpm-workspace.yaml)"
+            echo "compose=$(hash infra crates/Cargo.toml crates/Cargo.lock crates/hive-net crates/hive-phone crates/hive-web crates/vendor spec pnpm-lock.yaml pnpm-workspace.yaml packages/agent-host packages/hive-agents packages/hive-view-sdk packages/view-host packages/workspace-doc apps/desktop/src/renderer/src/agent-status-bus.ts apps/desktop/src/renderer/src/live)"
           } | tee -a "$GITHUB_OUTPUT"
 
       - id: hive-net
