@@ -1,7 +1,7 @@
 # Git history — design (2026-11-02)
 
-Status: proposal. Step 3 of `code-tools-2026-11-02.md`. Inputs: how IntelliJ, Zed and git itself
-make history fast (§3, read from their sources), measurements on two repositories (§4), and the
+Status: proposal. Step 3 of `code-tools-2026-11-02.md`. Inputs: how IntelliJ, OpenIDEA, Zed and
+git itself make history fast (§3, read from their sources), measurements on two repositories (§4), and the
 app's git adapter (`packages/host/src/git-adapter.ts`), which has status, diff, stage, commit,
 push and pull, and no log or blame.
 
@@ -29,6 +29,7 @@ Developers who watch agents change code. Three questions, each answered in a mom
 | IntelliJ, file history | Streams `git log --name-status` and follows renames itself: at the commit that added the file it asks `git show --follow --name-status` for the parent's path and carries on there. | `plugins/git4idea/backend/src/history/GitFileHistory.kt` |
 | Zed, blame | One `git blame --incremental` per request, parsed as it streams (yielding every 512 lines); unsaved text passed with `--contents -` on stdin; commit messages for all the blamed commits in **one** batched call; the process killed when the request is dropped. | `crates/git/src/blame.rs` |
 | git | **Changed-path Bloom filters** in the commit-graph (`git commit-graph write --changed-paths`): `git log -- <path>` skips commits that cannot have touched the path. Reported 2–5× on git and Linux. | git `bloom.c`; [gitgitgadget/git#497](https://github.com/gitgitgadget/git/pull/497) |
+| OpenIDEA (Rust, IntelliJ's design rebuilt) | Splits by what each is best at. **Reads in gitoxide** in its own process: the log is a topological or date walk (`gix::traverse::commit::topo`) that reads git's commit-graph when there is one (`commit_graph_if_enabled`), paged by skip and limit, with author and message filters applied as it walks; a file's history is its own walk that compares the file's tree entry with each parent's, memoised per commit (no Bloom filters); a commit's files are a tree diff with renames. **Blame through the `git` binary**: `blame --porcelain --contents - <rev> -- <path>`, the editor's text on stdin, falling back to plain blame on git before 2.41, which refuses `--contents` with a revision. Inline blame is cached, refreshed 300 ms after the text stops changing, cleared on save. Graph lanes are computed in its TypeScript from the parents. | `crates/ide-vcs/src/history.rs`, `write.rs`, `blame.rs`; `src/features/vcs/inlineBlame.ts`, `graph.ts` in [l0ng-ai/openidea](https://github.com/l0ng-ai/openidea) |
 | gitoxide (Rust) | Reported faster than git at `log` (1.16× on git's repository, 1.88× on Linux) and up to 30% slower at blame with commit-graph caches; an experimental blame cache took one blame from ~300 ms to ~4 ms. | [cruessler/gix-benchmarks](https://github.com/cruessler/gix-benchmarks), [gitoxide discussion #1855](https://github.com/GitoxideLabs/gitoxide/discussions/1855) |
 
 ## 4. Measured here
@@ -102,18 +103,27 @@ Keyed by what decides the answer, so the same question is never asked twice:
 | Log page | repo, the refs' oids, page | a ref moves |
 | File history page | repo, `HEAD` oid, path, page | `HEAD` moves |
 | Blame of a committed file | repo, `HEAD` oid, path, range | `HEAD` moves |
-| Blame of the working file | repo, path, its size and mtime | the file is written |
+| Blame of the working file | repo, path, a hash of the text blamed | the text changes |
 | A commit's message and files | oid | never: a commit does not change |
 
 At most 64 entries per repository, least recently used out. A file write drops only the entries
-for the paths it names; nothing is recomputed until it is asked for again. An unsaved edit is
-not blamed until it is saved; **Blame unsaved text** (`--contents -`) is a click, not a keystroke.
+for the paths it names; nothing is recomputed until it is asked for again.
+
+Blame follows the text on screen, as OpenIDEA's does: `git blame --contents - <rev>` with the
+editor's text on stdin, so an edited line reads as not committed yet instead of pointing at the
+wrong commit. It runs 300 ms after the text stops changing, never while it changes, and only while
+Blame is shown; the one before is killed when a new one starts. On git before 2.41, which refuses
+`--contents` with a revision, the committed file is blamed and the lines the editor changed are
+marked not committed (the editor knows which), as OpenIDEA falls back.
 
 ### 5.6 Native (Rust) where it pays
 
 git is already native, and on what this needs it is fast with the commit-graph: 6–164 ms for
-first screens. gitoxide is reported faster at walking the log and slower at blame (§3) and would
-be one more native binary per release target. Not adopted now. Revisit with numbers if the full
+first screens. gitoxide is reported faster at walking the log and slower at blame (§3), and
+OpenIDEA splits along that line: gitoxide for reads, the `git` binary for blame. That split suits
+a Rust app, where gitoxide runs in the process. Here it would be a separate native binary per
+release target, which this project knows how to ship (`crates/hive-net` is one, built for four
+targets in `release.yml`), so the door is open; the measured gain is not there yet. Not adopted now. Revisit with numbers if the full
 graph (992 ms at 82,668 commits) shows up on a path the person waits on; until then it is built in
 the background behind the first block. An index like IntelliJ's waits for the same evidence: a
 repository where filtering by author or message through git is measured slow.
