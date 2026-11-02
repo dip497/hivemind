@@ -124,6 +124,7 @@ const app: App = {
 
 /** The computer's look on this page; the last one shown is shown again before anything is reached. */
 const look = new LookShown(() => phone && {
+  reached: (device) => phone!.computers().some((c) => c.device === device && c.live),
   wallpaperFile: (device, workspace, path) => phone!.wallpaperFile(device, workspace, path),
   wallpaperMedia: (device, workspace, revision, got) => phone!.wallpaperMedia(device, workspace, revision, got),
 });
@@ -261,11 +262,12 @@ function render(): void {
   if (saving) return;
   const keep = () => {
     saving = 0;
-    if (phone !== p) return;
+    const shown = phone;
+    if (!shown) return;
     savedAt = Date.now();
-    const person = p.account.person;
-    void put(`home:${person}`, p.kept());
-    void put(`first:${person}`, { shown: p.shown({ query: "", machine: null }, home.choices.view()), overview: p.overview() });
+    const person = shown.account.person;
+    void put(`home:${person}`, shown.kept());
+    void put(`first:${person}`, { shown: shown.shown({ query: "", machine: null }, home.choices.view()), overview: shown.overview() });
   };
   const wait = 500 - (Date.now() - savedAt);
   if (wait <= 0) keep();
@@ -337,6 +339,7 @@ async function drop(gone: Account): Promise<void> {
   const keys = forgetAccount(kept, gone.person);
   await save(kept);
   await Promise.all([...keys, `home:${gone.person}`, `first:${gone.person}`].map(remove));
+  await look.forgetFiles();
   const next = kept.accounts.find((a) => a.person === kept.active);
   if (next) await show(next);
   else unpaired();
@@ -350,6 +353,7 @@ function unpaired(): void {
   overview = null;
   void remove(START_KEPT);
   apply(NOTHING);
+  look.show(null);
   showUnpaired();
   home.accounts([], null, () => {});
   trouble.hidden = true;
@@ -384,6 +388,7 @@ const told = {
     if (!phone) return;
     const computers = phone.computers();
     devices.status(computers);
+    look.reached();
     live = computers.some((c) => c.live);
     const away = computers.filter((c) => c.paired && !c.live && c.error);
     trouble.hidden = live || away.length === 0;

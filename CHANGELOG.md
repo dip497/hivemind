@@ -9,6 +9,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Fixed: on the phone page, an account with no look yet no longer shows the previous account's theme and photo; each account keeps its own photo or video, so switching doesn't download it again and it shows while that computer is off; forgetting an account removes its look and files from the phone; a photo not yet on the phone, or a live wallpaper, now appears once the computer is reached instead of staying blank or on Mono after a reload or a switch.
+
 ## [2026.11.0] — 2026-11-01
 
 - Added: the phone page looks like your computer: its theme, light or dark, terminal colours, and the background behind your workspace, a photo, video or live wallpaper among them. Change it on the computer and an open phone follows.

@@ -142,6 +142,10 @@ test("an open phone page takes the computer's colours, its photo from the same f
   await page.waitForTimeout(1_000);
   expect(leaks).toEqual([]);
   await shot(page, "live-wallpaper");
+  // Loaded again, it starts again once the computer is reached.
+  await page.reload();
+  await expect(frame).toHaveAttribute("data-drawn", "1", { timeout: 30_000 });
+  await expect.poll(async () => (await seen()).look?.page, { timeout: 10_000 }).toBe("#191919");
   // Covered by a solid screen, it holds; shown again, it runs.
   await page.evaluate(() => (location.hash = "start"));
   await expect.poll(async () => (await seen()).modes.at(-1), { timeout: 10_000 }).toBe("hold");

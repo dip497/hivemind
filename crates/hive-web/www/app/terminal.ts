@@ -71,12 +71,14 @@ const PALETTE = (() => {
   for (let i = 0; i < 24; i++) table.push(`#${hex(8 + 10 * i).repeat(3)}`);
   return table;
 })();
+const OWN_COLOURS = { background: BG, foreground: FG, cursor: CURSOR, ansi: NAMED };
 /** The terminals shown, drawn again when the colours change. */
 const shownViews = new Set<TerminalView>();
 
 /** Draw terminals in the computer's terminal colours: its background, text, cursor and 16 ANSI
- *  colours, each `#rrggbb`. */
-export function setTerminalColours(t: { background: string; foreground: string; cursor: string; ansi: string[] }): void {
+ *  colours, each `#rrggbb`; null, in the page's own. */
+export function setTerminalColours(given: { background: string; foreground: string; cursor: string; ansi: string[] } | null): void {
+  const t = given ?? OWN_COLOURS;
   if (t.ansi.length !== 16 || (BG === t.background && FG === t.foreground && CURSOR === t.cursor && t.ansi.every((c, i) => PALETTE[i] === c))) return;
   [BG, FG, CURSOR] = [t.background, t.foreground, t.cursor];
   t.ansi.forEach((c, i) => (PALETTE[i] = c));
