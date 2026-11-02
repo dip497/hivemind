@@ -1,6 +1,6 @@
 # Code tools — design (2026-11-02)
 
-Status: step 1 ☑ (2026-11-02: Files and Changes as tools of their own; e2e `code-tools.spec.ts`, `control-open-tool.test.ts`), steps 2–6 ☐. Inputs: the bundled Code plugin (`packages/hive-core/src/tool-plugins.ts`,
+Status: step 1 ☑ (2026-11-02: Files and Changes as tools of their own; e2e `code-tools.spec.ts`, `control-open-tool.test.ts`), step 2 (search) postponed, step 3 designed (`git-history-2026-11-02.md`), steps 4–6 ☐. Inputs: the bundled Code plugin (`packages/hive-core/src/tool-plugins.ts`,
 `CODE_PLUGIN_ID`), its tile (`apps/desktop/src/renderer/src/tiles/code.tsx`,
 `WorkbenchTile.tsx`) and the three components it composes; the Code view
 (`dip497/hivemind-plugins/views/code`), which docks the Code tile and showed what a view cannot
@@ -132,7 +132,8 @@ release target (linux x64 and arm64, darwin arm64, win32 x64) to build, unpack a
    `search` tile (go to file and find in files in one, as VS Code's quick open and search view),
    Ctrl+P / Ctrl+Shift+F inside Code tiles, `hive code find|grep`, packaging and its release
    check, the fallback.
-3. **Git history**: blame in the editor's gutter, a file's log, stash in Changes.
+3. **Git history**: the log in Changes, a file's history, blame in the editor's gutter; designed
+   in `git-history-2026-11-02.md` (measured, and what IntelliJ, Zed and git do). Stash later.
 4. **Editor details**: `@codemirror/autocomplete` (brackets, words), outline and breadcrumbs.
 5. **Protocol 1.19** and the Code view using the split tools.
 6. **Code intelligence**: design first.
