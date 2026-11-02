@@ -8,6 +8,9 @@ export interface ToolContribution {
   readonly tileKind?: string;
   /** One tile of it per workspace: opening it again brings that one forward. */
   readonly singleton?: boolean;
+  /** What the plugin's own id opens when it has several tools (`hive ctl open-tool @owner/name`):
+   *  at most one per plugin. Without one, such an id is refused and a tool must be named. */
+  readonly main?: boolean;
 }
 /** A verb a plugin exposes to agents (as an MCP tool) and to the CLI. */
 export interface CommandContribution {
@@ -91,7 +94,7 @@ export function createToolRegistry(plugins: readonly ToolPluginContribution[]): 
         if (kindOwners.has(tileKind)) throw new Error(`Tile kind already contributed: ${tileKind}`);
         kindOwners.set(tileKind, id);
       }
-      byId.set(id, Object.freeze({ id, pluginId: plugin.id, key: contribution.key, label: contribution.label, description: contribution.description, tileKind, ...(contribution.singleton ? { singleton: true } : {}) }));
+      byId.set(id, Object.freeze({ id, pluginId: plugin.id, key: contribution.key, label: contribution.label, description: contribution.description, tileKind, ...(contribution.singleton ? { singleton: true } : {}), ...(contribution.main ? { main: true } : {}) }));
     }
     const commands = plugin.commands ?? [];
     if (commands.length > 32) throw new Error("Too many commands in a plugin");

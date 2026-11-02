@@ -27,6 +27,11 @@ Check: \`hive review list --status open\` shows only the comments you left open.
    Then pick the agent in **Send to agent**.
 6. Check: the agent receives it as its next task, starting *Address this review comment*.
 
+To see only what changed, without the editor, open **Changes** on its own: **Add ▸ Changes**, or
+`hive ctl open-tool @hivemind/code/changes`. It shows the changes of its frame's folder, and a file
+you open from it opens in that frame's editor. **Files** (`@hivemind/code/files`) is the file tree
+on its own, in the same way.
+
 Comments are kept in `.hivemind/review.json`, so an agent can also read them itself. These
 commands work with or without the app:
 

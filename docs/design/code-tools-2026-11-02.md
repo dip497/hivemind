@@ -1,6 +1,6 @@
 # Code tools — design (2026-11-02)
 
-Status: proposal. Inputs: the bundled Code plugin (`packages/hive-core/src/tool-plugins.ts`,
+Status: step 1 ☑ (2026-11-02: Files and Changes as tools of their own; e2e `code-tools.spec.ts`, `control-open-tool.test.ts`), steps 2–6 ☐. Inputs: the bundled Code plugin (`packages/hive-core/src/tool-plugins.ts`,
 `CODE_PLUGIN_ID`), its tile (`apps/desktop/src/renderer/src/tiles/code.tsx`,
 `WorkbenchTile.tsx`) and the three components it composes; the Code view
 (`dip497/hivemind-plugins/views/code`), which docks the Code tile and showed what a view cannot
@@ -47,7 +47,9 @@ The Code plugin offers each piece as a tool of its own, built from the component
 | `changes` | `changes` | `DiffTile` standalone, on the working tree | yes |
 | `search` | `search` | new: find in files and go to file (§3.2) | yes |
 
-Each is switched on or off on its own in Settings ▸ Plugins (`tileKindAvailability` already
+Code is the plugin's `main` tool: `hive ctl open-tool @hivemind/code` opens it, as it did when it
+was the plugin's only tool; the others are named (`@hivemind/code/files`). Each is switched on or
+off on its own in Settings ▸ Plugins (`tileKindAvailability` already
 gates per tool), opened from the menus that open tools, and spawnable by a view
 (`canSpawnKind`: new kinds, not aliases).
 
@@ -106,6 +108,20 @@ new is needed for that. Two additions, protocol 1.19, for the Code view:
 - `spawnTile(kind, frameId, { open: "changes" | "files" })`: which side a Code tile opens on.
 - A surface rect's `chrome: "none"` also hides a tile's own header where the tile has one
   (`embedded`), so a view that frames the tile draws the only header.
+
+### 3.5 Native (Rust) where it pays
+
+The rule: a hot path measured as slow gets a native (Rust) implementation, with the numbers
+before and after in its commit (CLAUDE.md). Not everything: each native piece is a binary per
+release target (linux x64 and arm64, darwin arm64, win32 x64) to build, unpack and check.
+
+| Path | Today | Native? |
+|---|---|---|
+| Finding files and lines | — | **Rust**: fff (§3.2) |
+| Watching the tree | chokidar (`fs-watcher.ts`, JS) | **Rust, step 2b**: fff watches the tree itself and reports `WatchEvent`s; the Code tools take their invalidations from it, and chokidar stays only for what fff does not cover. Measured at 50 repos before it replaces anything. |
+| git status, diff, blame, log | the `git` binary through `simple-git` | already native; gitoxide only if `git status` measures slow on a large repo |
+| Diffing and highlighting | `@pierre/diffs` and CodeMirror in workers | only if a large file measures slow; then a WASM build (imara-diff, tree-sitter) in the same worker |
+| Language servers | — | native already (rust-analyzer, gopls, …), started by the app |
 
 ## 4. Steps
 

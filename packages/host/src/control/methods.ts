@@ -1102,9 +1102,13 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
 
     // A tool's full id, or its package's id when that package has one tool.
     openTool: (caller, repo, tool, at) => openTool({ caller, repo, ...at }, (tools) => {
+      const exact = tools.find((t) => t.id === tool);
+      if (exact) return exact;
       const inPackage = tools.filter((t) => t.pluginId === tool);
-      if (inPackage.length > 1) throw new ApiError("BAD_REQUEST", `${tool} has ${inPackage.length} tools; name one: ${inPackage.map((t) => t.id).join(", ")}`);
-      return tools.find((t) => t.id === tool) ?? inPackage[0];
+      // A plugin of several tools opens its main one by its own id (Code, beside Files and Changes).
+      const main = inPackage.length > 1 ? inPackage.find((t) => t.main) : inPackage[0];
+      if (inPackage.length > 1 && !main) throw new ApiError("BAD_REQUEST", `${tool} has ${inPackage.length} tools; name one: ${inPackage.map((t) => t.id).join(", ")}`);
+      return main;
     }, "Unknown tool id"),
 
     connect(src, dst) {

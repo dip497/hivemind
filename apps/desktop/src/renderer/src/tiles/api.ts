@@ -33,7 +33,9 @@ export interface TileHostState {
   agentTitles: Record<string, string>;
   openFileInTile: (tileId: string, file: string) => void;
   openUrlInBrowser: (sourceTileId: string, url: string) => void;
-  openFileFromTerminal: (sourceTileId: string, path: string) => void;
+  /** Open a file in the editor of the source tile's frame, starting one there if it has none: a path a
+   *  terminal printed, a file picked in Files or in Changes, one a tool tile names. */
+  openFileFromTile: (sourceTileId: string, path: string) => void;
   closeTabInTile: (tileId: string, file: string) => void;
   renameTile: (id: string, name: string) => void;
   /** Put the agent in a tile to sleep; resolves once it sleeps, or says why it did not. */

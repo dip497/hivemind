@@ -741,7 +741,7 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
       <div className={`${embedded ? "" : "tile-drag-handle cursor-grab active:cursor-grabbing "}h-8 flex items-center gap-2 px-2.5 bg-[var(--color-bg3)] border-b border-[var(--color-line)] text-count font-mono text-[var(--color-fg2)]`}>
         {!embedded && <>
           <GripVertical size={13} className="text-[var(--color-fg3)] -ml-1 shrink-0" />
-          <span className="font-semibold text-[var(--color-fg)]">Diff</span>
+          <span className="font-semibold text-[var(--color-fg)]">Changes</span>
           <span aria-hidden className="text-[var(--color-line2)]">·</span>
           <span className="text-[var(--color-fg2)]">{repoPath.split("/").slice(-1)[0]}</span>
         </>}
@@ -1249,7 +1249,7 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
         // WorkerPoolContextProvider, so CodeView's context flows through the portal).
         return overlay ? (
           <FullscreenShell
-            title={activeFile ? (activeFile.split("/").pop() ?? "Diff") : `Diff · ${repoPath.split("/").slice(-1)[0]}`}
+            title={activeFile ? (activeFile.split("/").pop() ?? "Changes") : `Changes · ${repoPath.split("/").slice(-1)[0]}`}
             font={font}
             hostRef={overlayHostRef}
             onClose={() => setOverlay(false)}

@@ -62,7 +62,7 @@ export const terminalTile: TilePlugin<TerminalTileData> = {
       given: h.tileNames[t.id] ?? t.label,
       onRename: h.renameTile,
       onOpenInBrowser: (url: string) => h.openUrlInBrowser(t.id, url),
-      onOpenInEditor: (path: string) => h.openFileFromTerminal(t.id, path),
+      onOpenInEditor: (path: string) => h.openFileFromTile(t.id, path),
       onClose: s.onClose,
       ...s.pin,
       ...(t.sleeping ? { sleeping: true } : {}),

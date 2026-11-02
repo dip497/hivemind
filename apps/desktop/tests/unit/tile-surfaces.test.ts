@@ -17,7 +17,7 @@ function ctx(over: Partial<TileSurfaceCtx>): TileSurfaceCtx {
   return {
     repoPath: "/base/repo", root: "/base/repo/.hivemind", cwd: "/base/repo",
     tiles: [], frames: [], frameOf: {}, pinnedIds: new Set(), editorTabs: {}, browserOpenReqs: {}, tileNames: {}, agentTitles: {},
-    openFileInTile: noop, openUrlInBrowser: noop, openFileFromTerminal: noop, closeTabInTile: noop,
+    openFileInTile: noop, openUrlInBrowser: noop, openFileFromTile: noop, closeTabInTile: noop,
     closeTile: noop, renameTile: noop, onTogglePin: noop,
     ...over,
   };

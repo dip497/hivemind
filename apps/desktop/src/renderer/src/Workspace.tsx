@@ -943,7 +943,7 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
     // Depend on the stable `.mutate` refs, NOT the mutation objects — those are
     // fresh on every isPending tick and would re-render every rail consumer.
   }), [frameOpen, onCreateWorktree, onAttachWorktree, bindWorkspace, arrangeFrame, updateFrameTitle, updateFrameColor, requestDeleteFrame, unbindBranch, unbindWorkspace, repoPath, repoOfFrame, gitPushMut.mutate, gitPullMut.mutate, sleepActions]);
-  const openFileFromTerminal = useCallback((sourceTileId: string, path: string) => {
+  const openFileFromTile = useCallback((sourceTileId: string, path: string) => {
     const sourceFrameId = frameOfRef.current[sourceTileId] ?? selectedFrameIdRef.current;
     const existing = pickEditorTile(tilesRef.current, frameOfRef.current, sourceFrameId);
     if (existing) {
@@ -1257,11 +1257,11 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
   const buildSurfaces = useMemo(() => createTileSurfaceBuilder(), [persistKey, tilesVersion]);
   const surfaces = useMemo(() => buildSurfaces({
     repoPath, root, cwd, tiles, frames, frameOf, pinnedIds, editorTabs, browserOpenReqs, tileNames, agentTitles,
-    openFileInTile, openUrlInBrowser, openFileFromTerminal, closeTabInTile, closeTile, renameTile, sleepTile, wakeTile,
+    openFileInTile, openUrlInBrowser, openFileFromTile, closeTabInTile, closeTile, renameTile, sleepTile, wakeTile,
     onTogglePin: togglePin,
   }), [
     buildSurfaces, repoPath, root, cwd, tiles, frames, frameOf, pinnedIds, editorTabs, browserOpenReqs, tileNames, agentTitles,
-    openFileInTile, openUrlInBrowser, openFileFromTerminal, closeTabInTile, closeTile, renameTile, sleepTile, wakeTile, togglePin,
+    openFileInTile, openUrlInBrowser, openFileFromTile, closeTabInTile, closeTile, renameTile, sleepTile, wakeTile, togglePin,
   ]);
 
   // What the person here has selected, for the others in the workspace to see, whichever view
