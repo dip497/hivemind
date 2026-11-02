@@ -28,6 +28,8 @@ import {
   worktreeRemove,
 } from "./git-adapter.js";
 import { allInRepo, fileIn, inRepo } from "./repo-paths.js";
+import { gitBlame, gitCommitInfo, gitFileHistory, gitLog, refreshCommitGraph } from "./git-history.js";
+import type { BlameOptions, FileHistoryCursor, LogOptions } from "@hivemind/workspace-api/git";
 
 /** A hand-off is its own domain's (`hand-off.ts`): it places a tile, and needs who calls. */
 type GitMethod = Exclude<Extract<Method, `git.${string}` | `worktree.${string}`>, "git.handOff">;
@@ -63,6 +65,41 @@ function scopeOf(value: unknown): DiffScope {
   return scope as unknown as DiffScope;
 }
 
+const whole = (v: unknown, name: string, lo: number, hi: number): number => {
+  if (typeof v !== "number" || !Number.isInteger(v) || v < lo || v > hi) bad(`${name} must be a whole number from ${lo} to ${hi}`);
+  return v as number;
+};
+
+function logOptsOf(value: unknown): LogOptions {
+  if (value == null) return {};
+  const o = fields(value, "opts");
+  return {
+    ...(o.all != null ? { all: flag(o.all, "opts.all") } : {}),
+    ...(o.cursor != null ? { cursor: whole(o.cursor, "opts.cursor", 0, 10_000_000) } : {}),
+    ...(o.limit != null ? { limit: whole(o.limit, "opts.limit", 1, 1000) } : {}),
+  };
+}
+
+/** A page's `next`, handed back: a revision git reads as one (never an option), a path in the repo. */
+function cursorOf(repo: string, value: unknown): FileHistoryCursor | undefined {
+  if (value == null) return undefined;
+  const c = fields(value, "next");
+  const rev = notOption(c.rev, "next.rev");
+  if (!/^[0-9a-fA-F]{4,64}\^?$|^HEAD$/.test(rev)) bad(`next.rev is not one a page gives: ${rev}`);
+  return { rev, path: inRepo(repo, text(c.path, "next.path")), skip: whole(c.skip, "next.skip", 0, 10_000_000) };
+}
+
+function blameOptsOf(value: unknown): BlameOptions {
+  if (value == null) return {};
+  const o = fields(value, "opts");
+  return {
+    ...(o.contents != null ? { contents: written(o.contents, "opts.contents") } : {}),
+    ...(o.from != null ? { from: whole(o.from, "opts.from", 1, 10_000_000) } : {}),
+    ...(o.to != null ? { to: whole(o.to, "opts.to", 1, 10_000_000) } : {}),
+    ...(o.moved != null ? { moved: flag(o.moved, "opts.moved") } : {}),
+  };
+}
+
 function worktreeOptsOf(value: unknown): WorktreeCreateOpts {
   const opts = fields(value, "opts");
   const branch = notOption(opts.branch, "opts.branch");
@@ -93,12 +130,21 @@ export const git: Domain<GitMethod> = {
       const r = repoOf(repo);
       return gitFileContents(r, fileOf(r, file), oneOf(rev, "rev", ["HEAD", "INDEX", "WORKING"] as const));
     },
+    "git.log": (_, repo, opts) => gitLog(repoOf(repo), logOptsOf(opts)),
+    "git.fileHistory": (_, repo, file, cursor) => { const r = repoOf(repo); return gitFileHistory(r, fileOf(r, file), cursorOf(r, cursor)); },
+    "git.blame": (_, repo, file, opts) => { const r = repoOf(repo); return gitBlame(r, fileOf(r, file), blameOptsOf(opts)); },
+    "git.commitInfo": (_, repo, sha) => gitCommitInfo(repoOf(repo), notOption(sha, "sha")),
     "git.stage": (_, repo, files) => { const r = repoOf(repo); return gitStage(r, filesOf(r, files)); },
     "git.unstage": (_, repo, files) => { const r = repoOf(repo); return gitUnstage(r, filesOf(r, files)); },
     "git.discard": (_, repo, files) => { const r = repoOf(repo); return gitDiscard(r, filesOf(r, files)); },
-    "git.commit": (_, repo, message, allowEmpty) => gitCommit(repoOf(repo), text(message, "message"), flag(allowEmpty, "allowEmpty")),
+    "git.commit": async (_, repo, message, allowEmpty) => {
+      const r = repoOf(repo);
+      const done = await gitCommit(r, text(message, "message"), flag(allowEmpty, "allowEmpty"));
+      refreshCommitGraph(r);
+      return done;
+    },
     "git.push": (_, repo, setUpstream) => gitPush(repoOf(repo), flag(setUpstream, "setUpstream")),
-    "git.pull": (_, repo) => gitPull(repoOf(repo)),
+    "git.pull": async (_, repo) => { const r = repoOf(repo); await gitPull(r); refreshCommitGraph(r); },
     "git.conflictedFile": (_, repo, file) => { const r = repoOf(repo); return gitConflictedFile(r, fileOf(r, file)); },
     "git.writeResolved": (_, repo, file, contents) => { const r = repoOf(repo); return gitWriteResolved(r, fileOf(r, file), written(contents, "contents")); },
     "worktree.list": (_, repo) => worktreeList(repoOf(repo)),

@@ -1,6 +1,6 @@
 # Code tools — design (2026-11-02)
 
-Status: step 1 ☑ (2026-11-02: Files and Changes as tools of their own; e2e `code-tools.spec.ts`, `control-open-tool.test.ts`), step 2 (search) postponed, step 3 designed (`git-history-2026-11-02.md`), steps 4–6 ☐. Inputs: the bundled Code plugin (`packages/hive-core/src/tool-plugins.ts`,
+Status: step 1 ☑ (2026-11-02: Files and Changes as tools of their own; e2e `code-tools.spec.ts`, `control-open-tool.test.ts`), step 2 (search) postponed, step 3 ☑ (`git-history-2026-11-02.md`, built 2026-11-02), steps 4–6 ☐. Inputs: the bundled Code plugin (`packages/hive-core/src/tool-plugins.ts`,
 `CODE_PLUGIN_ID`), its tile (`apps/desktop/src/renderer/src/tiles/code.tsx`,
 `WorkbenchTile.tsx`) and the three components it composes; the Code view
 (`dip497/hivemind-plugins/views/code`), which docks the Code tile and showed what a view cannot

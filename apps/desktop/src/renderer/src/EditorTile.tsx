@@ -44,6 +44,8 @@ import { resolveActive } from "./editor-active";
 import { getTheme, useThemeField } from "./theme-store";
 import { htmlFileUrl, isHtmlPath } from "./browser-open";
 import { actionKey, keyLabel } from "./shortcut";
+import { toast } from "sonner";
+import { blameGutter, setBlame } from "./code/blame-gutter";
 // Lazy: marked + DOMPurify (and, on demand, mermaid) load only when the user
 // actually opens Preview — opening an editor tile pulls in zero markdown code.
 const MarkdownPreview = lazy(() =>
@@ -71,6 +73,8 @@ interface Props {
    *  (border/shadow/header). Used by WorkbenchTile, which supplies its own
    *  shell. Defaults to false so the standalone tile keeps working. */
   embedded?: boolean;
+  /** History in Changes: a file's history, or the commit a blame mark names. */
+  onShowHistory?: (req: { file?: string; sha?: string }) => void;
 }
 
 // ── theme ─────────────────────────────────────────────────────────────────
@@ -216,7 +220,7 @@ interface TabState {
   diskChanged?: boolean;
 }
 
-export function EditorTile({ repoPath, tabs, onCloseTab, onClose, activeReq, onOpenInBrowser, embedded = false }: Props) {
+export function EditorTile({ repoPath, tabs, onCloseTab, onClose, activeReq, onOpenInBrowser, embedded = false, onShowHistory }: Props) {
   // Per-tile font size (A−/A+ + Ctrl/Cmd +/−/0). The CM theme uses fontSize:
   // "inherit", so the size set on the root below flows into the editor.
   const font = useTileFont(`editor:${repoPath}`, 13);
@@ -253,6 +257,14 @@ export function EditorTile({ repoPath, tabs, onCloseTab, onClose, activeReq, onO
   // unifiedMergeView is reconfigured per tab — also a Compartment so we can
   // toggle without rebuilding state.
   const diffCompartment = useRef(new Compartment());
+  // Blame, per tab: the gutter, and a refresh 300 ms after the text stops changing while it shows.
+  const blameCompartment = useRef(new Compartment());
+  const [blameOn, setBlameOn] = useState<Record<string, boolean>>({});
+  const blameEdited = useRef<(() => void) | null>(null);
+  const showHistoryRef = useRef(onShowHistory);
+  showHistoryRef.current = onShowHistory;
+  // Bumped each time a tab's state is mounted, which drops what was configured on the one before.
+  const [mounted, setMounted] = useState(0);
   // Cache live document text per tab so switching tabs doesn't re-read disk or
   // lose unsaved edits. Keyed by repo-relative path. Updated on every doc change.
   const buffers = useRef<Map<string, string>>(new Map());
@@ -494,6 +506,8 @@ export function EditorTile({ repoPath, tabs, onCloseTab, onClose, activeReq, onO
           themeFor(getTheme().mode),
           langCompartment.current.of(lang ? lang : []),
           diffCompartment.current.of([]),
+          blameCompartment.current.of([]),
+          EditorView.updateListener.of((u) => { if (u.docChanged) blameEdited.current?.(); }),
           keymap.of([
             { key: "Mod-s", preventDefault: true, run: () => { void saveRef.current(); return true; } },
           ]),
@@ -502,6 +516,7 @@ export function EditorTile({ repoPath, tabs, onCloseTab, onClose, activeReq, onO
         ],
       });
       view.setState(state);
+      setMounted((n) => n + 1);
     };
 
     void (async () => {
@@ -568,6 +583,36 @@ export function EditorTile({ repoPath, tabs, onCloseTab, onClose, activeReq, onO
     })();
     return () => { cancelled = true; };
   }, [diffMode, active, repoPath]);
+
+  // Blame of the text on screen (git.blame with it), so an edited line reads as not committed yet
+  // instead of naming the wrong commit; again 300 ms after the text stops changing, never while it
+  // does. The host stops the one before when the next of the same file starts.
+  useEffect(() => {
+    const view = viewRef.current;
+    const path = active;
+    blameEdited.current = null;
+    if (!view || !path) return;
+    if (!blameOn[path]) {
+      view.dispatch({ effects: blameCompartment.current.reconfigure([]) });
+      return;
+    }
+    view.dispatch({ effects: blameCompartment.current.reconfigure(blameGutter((sha) => showHistoryRef.current?.({ sha }))) });
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let gone = false;
+    const ask = () => {
+      void window.hive.gitBlame(repoPath, path, { contents: view.state.doc.toString() }).then((b) => {
+        if (!gone && view === viewRef.current) view.dispatch({ effects: setBlame.of(b.hunks) });
+      }).catch((e: Error) => {
+        // Superseded by the next blame of this file: that one answers.
+        if (gone || /superseded/i.test(e.message)) return;
+        toast.error("blame failed", { description: e.message });
+        setBlameOn((m) => ({ ...m, [path]: false }));
+      });
+    };
+    ask();
+    blameEdited.current = () => { clearTimeout(timer); timer = setTimeout(ask, 300); };
+    return () => { gone = true; clearTimeout(timer); blameEdited.current = null; };
+  }, [blameOn, active, repoPath, mounted]);
 
   const activeMeta = active ? meta[active] : undefined;
   const activeDiff = active ? !!diffMode[active] : false;
@@ -683,6 +728,25 @@ export function EditorTile({ repoPath, tabs, onCloseTab, onClose, activeReq, onO
                   >
                     <ExternalLink />
                   </Button>
+                )}
+                {isActive && (
+                  <Button
+                    variant={blameOn[path] ? "default" : "ghost"}
+                    size="micro"
+                    onClick={(e) => { e.stopPropagation(); setBlameOn((m) => ({ ...m, [path]: !m[path] })); }}
+                    title={blameOn[path] ? "hide blame" : "blame: who last changed each line"}
+                    aria-label="toggle blame"
+                    aria-pressed={!!blameOn[path]}
+                  >blame</Button>
+                )}
+                {isActive && onShowHistory && (
+                  <Button
+                    variant="ghost"
+                    size="micro"
+                    onClick={(e) => { e.stopPropagation(); onShowHistory({ file: path }); }}
+                    title="this file's history"
+                    aria-label="show this file's history"
+                  >history</Button>
                 )}
                 {isActive && (
                   <Button

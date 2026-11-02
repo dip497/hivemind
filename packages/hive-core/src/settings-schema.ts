@@ -531,6 +531,13 @@ export interface AgentBrowserSettings {
   /** Browser tiles that differ from the default, which is the agents in their frame. */
   tiles: Record<string, AgentAccess>;
 }
+/** The Code tools (docs/design/git-history-2026-11-02.md). */
+export interface CodeSettings {
+  /** Keep git's commit-graph with changed-path Bloom filters in each repo the app shows history
+   *  of (`.git/objects/info/commit-graphs/`): what `git gc` writes, with the filters added, so a
+   *  file's history and the log are read several times faster on a large repo. */
+  commitGraph: boolean;
+}
 /** What quitting the app does while terminals or agents run on this computer. */
 export const QUIT_CHOICES = ["ask", "keep-running", "stop-everything"] as const;
 export type QuitChoice = (typeof QUIT_CHOICES)[number];
@@ -567,6 +574,7 @@ export interface Settings {
   browserApp: BrowserAppSettings;
   agentBrowser: AgentBrowserSettings;
   quit: QuitSettings;
+  code: CodeSettings;
   /** Toasts, OS pop-ups and sounds (`notification-settings.ts`). Before 2026-10 the app kept them
    *  in a settings.json of its data folder; migration 0006 moved them here. */
   notifications: NotificationSettings;
@@ -587,6 +595,7 @@ export const DEFAULT_SETTINGS: Settings = {
   browserApp: { enabled: false, port: 4483, names: [] },
   agentBrowser: { useTiles: true, markPageText: true, tiles: {} },
   quit: { whenRunning: "ask" },
+  code: { commitGraph: true },
   notifications: DEFAULT_NOTIFICATION_SETTINGS,
 };
 
@@ -936,6 +945,7 @@ export function mergeSettings(raw: unknown, base: Settings = DEFAULT_SETTINGS): 
     },
     profile: profileOf(p.profile, base.profile),
     network: { updateCheck: bool((isObj(p.network) ? p.network : {}).updateCheck, base.network.updateCheck) },
+    code: { commitGraph: bool((isObj(p.code) ? p.code : {}).commitGraph, base.code.commitGraph) },
     browserApp: browserAppOf(p.browserApp, base.browserApp),
     agentBrowser: {
       useTiles: bool((isObj(p.agentBrowser) ? p.agentBrowser : {}).useTiles, base.agentBrowser.useTiles),

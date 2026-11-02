@@ -156,7 +156,7 @@ export type {
   WorktreeCreateOpts,
   WorktreeEntry,
 } from "@hivemind/workspace-api/git";
-import type { DiffPayload, DiffScope, GitBranchList, GitStatusSnapshot, HandedOff, WorktreeCreateOpts, WorktreeEntry } from "@hivemind/workspace-api/git";
+import type { BlameOptions, BlamePayload, CommitInfo, DiffPayload, DiffScope, FileHistoryCursor, FileHistoryPage, GitBranchList, GitStatusSnapshot, HandedOff, LogOptions, LogPage, WorktreeCreateOpts, WorktreeEntry } from "@hivemind/workspace-api/git";
 import type { LastLines, TerminalOpts, Typist } from "@hivemind/workspace-api/terminals";
 
 // ── machines (saved ssh hosts, shared with `hive machine`) ────────────────
@@ -761,6 +761,12 @@ export interface HiveIpc {
   /** Local + remote branches for the diff tile's base/head pickers. */
   gitListBranches(repoPath: string): Promise<GitBranchList>;
   gitDiff(repoPath: string, scope: DiffScope, file?: string): Promise<DiffPayload>;
+  /** History (workspace API 0.39): the log a page at a time, a file's history through renames,
+   *  blame (of the editor's text when given), a commit's message and files. */
+  gitLog(repoPath: string, opts?: LogOptions): Promise<LogPage>;
+  gitFileHistory(repoPath: string, file: string, cursor?: FileHistoryCursor): Promise<FileHistoryPage>;
+  gitBlame(repoPath: string, file: string, opts?: BlameOptions): Promise<BlamePayload>;
+  gitCommitInfo(repoPath: string, sha: string): Promise<CommitInfo>;
   gitFileContents(
     repoPath: string,
     file: string,

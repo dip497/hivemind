@@ -1,6 +1,6 @@
 import { Files, Folder, GitCompare } from "../components/icons";
 import { EditorSkeleton, RowsSkeleton } from "../workspace/tile-skeletons";
-import type { TilePlugin, PinRect, TileKindSpec, TileBodyArgs } from "./api";
+import type { TilePlugin, PinRect, TileKindSpec, TileBodyArgs, HistoryRequest } from "./api";
 
 export type WorkbenchTileData = {
   repoPath: string;
@@ -55,6 +55,8 @@ export const codeTile: TilePlugin<WorkbenchTileData> = {
 export type FilesTileData = {
   repoPath: string;
   onOpenFile: (path: string) => void;
+  /** A file's history, in the frame's Changes. */
+  onShowHistory: (path: string) => void;
   onClose: () => void;
   pinned?: boolean;
   onTogglePin?: (id: string, rect: PinRect) => void;
@@ -69,20 +71,21 @@ export const filesTile: TilePlugin<FilesTileData> = {
   data: (t, s, h) => s.repoPath === null ? null : {
     repoPath: s.repoPath,
     onOpenFile: (file: string) => h.openFileFromTile(t.id, file),
+    onShowHistory: (file: string) => h.showHistory(t.id, { file }),
     onClose: s.onClose,
     ...s.pin,
   },
   lazy: true,
   body: () => import("../FileTreeTile").then((m) => ({
     default: ({ data }: TileBodyArgs<FilesTileData>) => (
-      <m.FileTreeTile repoPath={data.repoPath} onSelectFile={data.onOpenFile} onClose={data.onClose} pinned={data.pinned} onTogglePin={data.onTogglePin} />
+      <m.FileTreeTile repoPath={data.repoPath} onSelectFile={data.onOpenFile} onShowHistory={data.onShowHistory} onClose={data.onClose} pinned={data.pinned} onTogglePin={data.onTogglePin} />
     ),
   })),
   fallback: () => <RowsSkeleton rows={8} />,
   minSize: { width: 220, height: 240 },
 };
 
-export type ChangesTileData = FilesTileData;
+export type ChangesTileData = Omit<FilesTileData, "onShowHistory"> & { historyReq?: HistoryRequest };
 
 export const changesTile: TilePlugin<ChangesTileData> = {
   surface: "changes",
@@ -93,13 +96,14 @@ export const changesTile: TilePlugin<ChangesTileData> = {
   data: (t, s, h) => s.repoPath === null ? null : {
     repoPath: s.repoPath,
     onOpenFile: (file: string) => h.openFileFromTile(t.id, file),
+    historyReq: h.historyReqs[t.id],
     onClose: s.onClose,
     ...s.pin,
   },
   lazy: true,
   body: () => import("../DiffTile").then((m) => ({
     default: ({ data }: TileBodyArgs<ChangesTileData>) => (
-      <m.DiffTile repoPath={data.repoPath} onClose={data.onClose} pinned={data.pinned} onTogglePin={data.onTogglePin} onEditFile={data.onOpenFile} />
+      <m.DiffTile repoPath={data.repoPath} onClose={data.onClose} pinned={data.pinned} onTogglePin={data.onTogglePin} onEditFile={data.onOpenFile} historyReq={data.historyReq} />
     ),
   })),
   fallback: () => <RowsSkeleton rows={8} />,

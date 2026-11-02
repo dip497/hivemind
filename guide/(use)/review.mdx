@@ -46,6 +46,27 @@ hive review reopen <id>
 hive review watch --timeout 300     # wait for the next comment
 ```
 
+## See what changed over time
+
+**History** in Changes lists the commits, newest first, with the graph of their branches. Pick one
+to see its message and its diff.
+
+1. Open **Changes** (**Add ▸ Changes**, or the Code tile's **Changes**), and choose **history**.
+2. Pick a commit. Check: its message is above its diff.
+3. Choose **all branches** to see every branch by date, not just the one checked out.
+
+To see one file's history, right-click it in **Files** and choose **Show history**, or press
+**history** on its tab in the editor. The history goes on through the file's renames, each marked
+*from* its old name.
+
+**Blame** shows who last changed each line. Press **blame** on a tab in the editor: each run of
+lines shows its author and how long ago. Lines you have edited and not committed show as
+*not committed*. Click a line's author to open that commit in History.
+
+On a large repository, Hivemind keeps git's commit-graph file, which makes history several times
+faster. It is what `git gc` writes, kept current. To turn it off, switch off **Speed up history**
+in **Settings ▸ About**.
+
 ## Leave notes on a web page
 
 1. In a Browser tile, open the page and press the notes button in its toolbar.

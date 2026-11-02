@@ -1,6 +1,6 @@
 # Git history — design (2026-11-02)
 
-Status: proposal. Step 3 of `code-tools-2026-11-02.md`. Inputs: how IntelliJ, OpenIDEA, Zed and
+Status: built (2026-11-02): 3a–3e ☑ — host `git-history.ts` with unit tests, History in Changes with the graph, a file's history, blame in the editor, the commit-graph setting; e2e `git-history.spec.ts`. Step 3 of `code-tools-2026-11-02.md`. Inputs: how IntelliJ, OpenIDEA, Zed and
 git itself make history fast (§3, read from their sources), measurements on two repositories (§4), and the
 app's git adapter (`packages/host/src/git-adapter.ts`), which has status, diff, stage, commit,
 push and pull, and no log or blame.

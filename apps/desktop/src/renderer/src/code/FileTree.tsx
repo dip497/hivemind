@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef } from "react";
 import { FileTree as PierreFileTree, useFileTree } from "@pierre/trees/react";
 import type { ContextMenuItem, ContextMenuOpenContext, FileTreeRowDecoration } from "@pierre/trees";
 import { MenuItem } from "../components/ui/menu-item";
+import { TreeMenu } from "./tree-menu";
 import { withoutTrailingSlashes } from "@hivemind/core/remote-uri";
 
 // ── changed-files TREE ──────────────────────────────────────────────────
@@ -78,10 +79,12 @@ export function FileTree({
         const r = byPathRef.current.get(withoutTrailingSlashes(item.path));
         if (!r) return <></>;
         return (
-          <div className="min-w-[180px] bg-[var(--color-bg3)] border border-[var(--color-line2)] rounded-md shadow-2xl p-1 text-label">
-            <MenuItem size="sm" onClick={() => { onJumpRef.current(r.id); ctx.close(); }}>Jump to file</MenuItem>
-            <MenuItem size="sm" onClick={() => { onToggleRef.current(r.file); ctx.close(); }}>Toggle reviewed</MenuItem>
-          </div>
+          <TreeMenu ctx={ctx}>
+            <div className="min-w-[180px] bg-[var(--color-bg3)] border border-[var(--color-line2)] rounded-md shadow-2xl p-1 text-label">
+              <MenuItem size="sm" onClick={() => { onJumpRef.current(r.id); ctx.close(); }}>Jump to file</MenuItem>
+              <MenuItem size="sm" onClick={() => { onToggleRef.current(r.file); ctx.close(); }}>Toggle reviewed</MenuItem>
+            </div>
+          </TreeMenu>
         );
       }}
     />

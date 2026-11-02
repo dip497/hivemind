@@ -37,12 +37,20 @@ export interface TileHostState {
    *  terminal printed, a file picked in Files or in Changes, one a tool tile names. */
   openFileFromTile: (sourceTileId: string, path: string) => void;
   closeTabInTile: (tileId: string, file: string) => void;
+  /** History requests to a Changes tile, by its id: show a file's history, or a commit. */
+  historyReqs: Record<string, HistoryRequest>;
+  /** Show History in the Changes tile of the source tile's frame, starting one there if it has
+   *  none: a file's history (Files), a commit (blame). */
+  showHistory: (sourceTileId: string, req: { file?: string; sha?: string }) => void;
   renameTile: (id: string, name: string) => void;
   /** Put the agent in a tile to sleep; resolves once it sleeps, or says why it did not. */
   sleepTile: (id: string) => Promise<void>;
   /** Wake the agent asleep in a tile; rejects with why when it did not wake. */
   wakeTile: (id: string) => Promise<void>;
 }
+
+/** What a Changes tile is asked to show in History; a new `seq` is a new request. */
+export interface HistoryRequest { file?: string; sha?: string; seq: number }
 
 export interface TileKindSpec {
   size: { width: number; height: number };

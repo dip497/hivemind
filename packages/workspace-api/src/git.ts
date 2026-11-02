@@ -118,3 +118,100 @@ export interface WorktreeCreateOpts {
   /** Files/globs to copy from main worktree (e.g. .env). Read from .worktreeinclude if not given. */
   includeFiles?: string[];
 }
+
+// ── history (0.39): the log, a file's history, blame, a commit ──────────────
+
+/** One commit of the log, as much as a row of it shows. */
+export interface LogCommit {
+  oid: string;
+  parents: string[];
+  /** Author time, seconds since the epoch. */
+  time: number;
+  author: string;
+  email: string;
+  subject: string;
+  /** What points at it: `HEAD -> main`, `origin/main`, `tag: v1`. */
+  refs: string[];
+}
+
+export interface LogOptions {
+  /** Every branch, by date, as against the current one in git's own order (the default, and the
+   *  fast one: its first page is read without walking the rest). */
+  all?: boolean;
+  /** Commits to skip: the `next` of the page before. */
+  cursor?: number;
+  /** At most this many, 1 to 1000; 200 by default. */
+  limit?: number;
+}
+
+export interface LogPage { commits: LogCommit[]; next: number | null }
+
+/** Where a file's history goes on from: a revision, the path the file had there, and how many of
+ *  that stretch's commits were read already. Opaque to a caller: hand back the page's `next`. */
+export interface FileHistoryCursor { rev: string; path: string; skip: number }
+
+export interface FileHistoryEntry {
+  oid: string;
+  time: number;
+  author: string;
+  subject: string;
+  /** The path the file had in this commit. */
+  path: string;
+  /** In this commit it was renamed from this path. */
+  renamedFrom?: string;
+}
+
+export interface FileHistoryPage { entries: FileHistoryEntry[]; next: FileHistoryCursor | null }
+
+export interface BlameOptions {
+  /** The text to blame, as the editor has it: its unsaved lines read as not committed yet. */
+  contents?: string;
+  /** Lines `from` to `to` only, 1-based and inclusive: the ones on screen first. */
+  from?: number;
+  to?: number;
+  /** Follow lines moved or copied (`-M -C`): about three times the work. */
+  moved?: boolean;
+}
+
+/** A run of lines last changed by one commit. */
+export interface BlameHunk {
+  /** Null for lines not committed yet. */
+  oid: string | null;
+  /** First line, 1-based, in the text blamed. */
+  start: number;
+  lines: number;
+  author: string;
+  time: number;
+  summary: string;
+}
+
+export interface BlamePayload {
+  hunks: BlameHunk[];
+  /** The editor's text was blamed. False when it was given but git could not (before 2.41, or a
+   *  repo on another machine): the committed file was blamed instead. */
+  contents: boolean;
+}
+
+export interface CommitFile {
+  path: string;
+  /** `added`, `modified`, `deleted`, `renamed`, `copied` or `typechange`. */
+  status: string;
+  /** The path before, for a rename or copy. */
+  from?: string;
+  /** Lines added and removed; null for a binary file. */
+  add: number | null;
+  del: number | null;
+}
+
+export interface CommitInfo {
+  oid: string;
+  parents: string[];
+  author: string;
+  email: string;
+  time: number;
+  committer: string;
+  committerTime: number;
+  message: string;
+  /** Against its first parent. */
+  files: CommitFile[];
+}

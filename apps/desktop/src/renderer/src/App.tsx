@@ -3,6 +3,7 @@ import { ThemePanel } from "./ThemePanel";
 import { QuitDialog } from "./QuitDialog";
 import { WhatsNew, showWhatsNew } from "./WhatsNew";
 import { QuitSetting } from "./quit-setting";
+import { CommitGraphSetting } from "./commit-graph-setting";
 import { RecentProjects } from "./RecentProjects";
 import { WorkspaceActions } from "./multiplayer/workspace-actions";
 import { AppControls } from "./workspace/app-controls";
@@ -591,6 +592,7 @@ function SettingsModal({
           </div> : <p className="settings-note" data-update-elsewhere>Updates are made in the app on the computer it runs on.</p>}
           <UpdateCheckSwitch onTurnedOn={() => onCheck({ force: true })} />
           <QuitSetting />
+          <CommitGraphSetting />
           <div className="settings-row">
             <span className="text-[var(--color-fg2)]">License</span>
             <span className="font-mono text-[var(--color-fg2)]">MIT</span>
