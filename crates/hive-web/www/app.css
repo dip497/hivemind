@@ -409,8 +409,20 @@ button { cursor: pointer; }
 .device { padding: 14px 16px; display: flex; flex-direction: column; gap: 2px; }
 .device h3 { display: flex; align-items: center; gap: 8px; margin: 0; font: 600 16px/22px var(--sans); letter-spacing: -0.01em; }
 .device p { margin: 0; }
-.device .mono { color: var(--text3); overflow-wrap: anywhere; }
-.device .status { margin-top: 6px; }
+.device .status { font: 400 13px/18px var(--sans); white-space: normal; overflow-wrap: anywhere; }
+[data-computers] + .list { padding-top: 10px; }
+.device .status.problem { color: var(--err); }
+.device-state { font: 400 13px/18px var(--sans); color: var(--text3); }
+.device[data-computer] .device-state, .device[data-computer] .device-id { margin-left: 16px; width: calc(100% - 16px); }
+/* Too long to read at a glance: one line, the whole of it once tapped. */
+.device-id {
+  display: block; width: 100%; padding: 6px 0 0; border: 0; background: none; text-align: left; color: var(--text3);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.device-id[aria-expanded="true"] { white-space: normal; overflow-wrap: anywhere; }
+.device.account { flex-direction: row; align-items: center; gap: 12px; }
+.account-who { flex: 1; min-width: 0; }
+.devices-end { padding-top: 28px; padding-bottom: 16px; }
 /* Whether the computer is reached: green when it is, a hollow ring when not. */
 .online { flex: none; width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid var(--text3); }
 .online[data-reached] { background: var(--ok); border-color: var(--ok); }
@@ -643,6 +655,7 @@ button { cursor: pointer; }
 .wallpaper[data-scene="image"]  { --wp-base: #0f172a; }
 .wallpaper[data-scene="video"]  { --wp-base: #0b1120; }
 .wallpaper[data-scene="live"]   { --wp-base: var(--canvas); }
+.wallpaper::after { content: ""; position: absolute; inset: 0; }
 .wp-bloom { position: absolute; width: 75vmax; height: 75vmax; opacity: 0.55; will-change: transform; }
 .wp-a { background: radial-gradient(circle, var(--wp-1) 0%, color-mix(in srgb, var(--wp-1) 55%, transparent) 28%, transparent 64%); top: -22%; left: -12%; animation: wp-drift-a 34s steps(136) infinite alternate; }
 .wp-b { background: radial-gradient(circle, var(--wp-2) 0%, color-mix(in srgb, var(--wp-2) 55%, transparent) 28%, transparent 64%); bottom: -28%; right: -16%; animation: wp-drift-b 42s steps(168) infinite alternate; }
@@ -655,36 +668,39 @@ button { cursor: pointer; }
 }
 .wp-vignette { position: absolute; inset: 0; background: radial-gradient(ellipse at center, transparent 40%, var(--wp-vignette)), var(--wp-dim); }
 .wp-image, .wp-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
-.wp-image { transform-origin: center; animation: wp-kenburns 44s steps(1056) infinite alternate; }
-@keyframes wp-kenburns { from { transform: scale(1.04) translate(0, 0); } to { transform: scale(1.14) translate(-2.5%, -2%); } }
 @keyframes wp-drift-a { from { transform: translate3d(0, 0, 0) scale(1); } to { transform: translate3d(12vw, 8vh, 0) scale(1.18); } }
 @keyframes wp-drift-b { from { transform: translate3d(0, 0, 0) scale(1.1); } to { transform: translate3d(-10vw, -6vh, 0) scale(0.92); } }
 @keyframes wp-drift-c { from { transform: translate3d(0, 0, 0) scale(0.9); } to { transform: translate3d(-8vw, 10vh, 0) scale(1.2); } }
-html.wp-static .wp-bloom, html.wp-static .wp-image { animation: none; }
-@media (prefers-reduced-motion: reduce) { .wp-bloom, .wp-image { animation: none; } }
+html.wp-static .wp-bloom { animation: none; }
+@media (prefers-reduced-motion: reduce) { .wp-bloom { animation: none; } }
 :root:has(.screen[data-screen="view"]:not([hidden])) .wallpaper, :root:has(.agent-screen:not([hidden])) .wallpaper { display: none; }
 /* A live wallpaper's frame, shown once it has drawn its first frame. */
 /* Its own colour scheme, so the frame is not painted opaque when the page is dark. */
 .wp-live { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: transparent; color-scheme: normal; pointer-events: none; opacity: 0; transition: opacity 0.4s ease-out; }
 .wp-live[data-drawn] { opacity: 1; }
 
-/* What reads over it, by the desktop's rules. A list screen is the desktop's canvas: the wallpaper
-   shows where nothing is, and what it lists sits on the Layers panel's glass, the tint clamped
-   between 68% and 92% (the computer's glass tint; 92% while glass is off) with the blur, and no blur
-   over what moves every frame (a video or a live wallpaper), as the desktop drops it over video. A
-   card is a widget card, 97%. Asked for less transparency or more contrast, both are solid; a
-   conversation, a terminal and a view stay solid. */
+/* What reads over it. One sheet of the Layers panel's glass over the whole wallpaper, so a screen
+   has no edges of its own however little it lists: the tint clamped between 68% and 92% (the
+   computer's glass tint; 92% while glass is off) with the blur, and no blur over what moves every
+   frame (a video or a live wallpaper), as the desktop drops it over video. It is the wallpaper's, not
+   a screen's: blur on a scroller would hold a sheet in it to its content. Asked for less
+   transparency or more contrast, it is solid; a conversation, a terminal and a view stay solid. */
 html.wallpaper-on body { background: transparent; }
 html.wallpaper-on .screen:is(.agent-screen, .start-screen, .view-screen) { background: var(--canvas); }
-html.wallpaper-on .screen:not(.agent-screen, .start-screen, .view-screen) > :not(.sheet, .scrim),
-html.wallpaper-on .tabs {
+html.wallpaper-on .wallpaper::after {
   background: color-mix(in srgb, var(--canvas) clamp(68%, var(--glass), 92%), transparent);
   -webkit-backdrop-filter: blur(18px) saturate(130%);
   backdrop-filter: blur(18px) saturate(130%);
 }
-html.wallpaper-on.wallpaper-moving .screen > *, html.wallpaper-on.wallpaper-moving .tabs { -webkit-backdrop-filter: none; backdrop-filter: none; }
-html.wallpaper-on .card { background: color-mix(in srgb, var(--card) 97%, transparent); }
+html.wallpaper-on.wallpaper-moving .wallpaper::after { -webkit-backdrop-filter: none; backdrop-filter: none; }
+/* On the sheet: raised from it by a little, not a black box on it. */
+html.wallpaper-on .screen:not(.agent-screen, .start-screen, .view-screen) .card:not(.sheet) { background: color-mix(in srgb, var(--card) 60%, transparent); }
+html.wallpaper-on .search { background: color-mix(in srgb, var(--panel) 60%, transparent); }
+/* Stuck, a heading needs a cover over the rows under it, and that cover is a stripe on the sheet: it scrolls with them. */
+html.wallpaper-on :is(.project, .group-head) { position: static; background: transparent; }
 @media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
-  html.wallpaper-on .screen:not(.agent-screen, .start-screen, .view-screen) > :not(.sheet, .scrim), html.wallpaper-on .tabs { background: var(--canvas); }
-  html.wallpaper-on .card { background: var(--card); }
+  html.wallpaper-on .wallpaper::after { background: var(--canvas); }
+  html.wallpaper-on .screen:not(.agent-screen, .start-screen, .view-screen) .card:not(.sheet) { background: var(--card); }
+  html.wallpaper-on .search { background: var(--panel); }
+  html.wallpaper-on :is(.project, .group-head) { position: sticky; background: var(--canvas); }
 }
