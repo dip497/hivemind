@@ -10,6 +10,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 ## [Unreleased]
 
 - Changed: phone page layout. Over a wallpaper, each screen is one even sheet of glass, with no stripes or bare photo below the list; **Devices** is grouped into Computers, Other accounts and This browser, with long ids on one line until tapped and **Switch** beside the account. While a wallpaper shows, project headings scroll with their rows and a photo holds still behind the glass.
+- Fixed: a Windows computer whose ssh opens Git Bash can be added as a machine, instead of being refused as an unsupported platform.
 
 ## [2026.11.1] — 2026-11-02
 
