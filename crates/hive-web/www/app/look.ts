@@ -10,6 +10,7 @@ import { viewsOrigin } from "./views.js";
 
 /** What the look asks of the computer whose look it is. */
 export interface LookFiles {
+  reached(device: string): boolean;
   wallpaperFile(device: string, workspace: string, path: string): Promise<ViewFile>;
   wallpaperMedia(device: string, workspace: string, revision: string, got: (at: number, of: number) => void): Promise<{ data: Uint8Array; type: string }>;
 }
@@ -41,6 +42,8 @@ export class LookShown {
   private behind = false;
   private hiddenTimer = 0;
   private round = 0;
+  /** What it draws needs a computer not reached yet. */
+  private waiting = false;
 
   constructor(private readonly files: () => LookFiles | null) {
     document.body.prepend(this.layer);
@@ -54,22 +57,32 @@ export class LookShown {
 
   /** Look as `held` says, or as this page does on its own while no computer has said. */
   show(held: HeldLook | null): void {
-    if (!held) return;
     this.held = held;
-    const colours = JSON.stringify([held.look.mode, held.look.colors, held.look.terminal]);
+    const colours = held ? JSON.stringify([held.look.mode, held.look.colors, held.look.terminal]) : "";
     if (colours !== this.colours) {
       this.colours = colours;
-      this.paint(held.look);
+      this.paint(held?.look ?? null);
     }
-    const drawn = JSON.stringify([held.device, !!held.workspace, held.look.wallpaper, held.look.colors.bg, held.look.colors.fg, held.look.colors.warn, held.look.mode]);
+    const drawn = held ? JSON.stringify([held.device, !!held.workspace, held.look.wallpaper, held.look.colors.bg, held.look.colors.fg, held.look.colors.warn, held.look.mode]) : "";
     if (drawn !== this.drawn) {
       this.drawn = drawn;
       this.liveOff = null;
       void this.wallpaper();
     }
     try {
-      localStorage.setItem(KEPT, JSON.stringify(held));
+      if (held) localStorage.setItem(KEPT, JSON.stringify(held));
+      else localStorage.removeItem(KEPT);
     } catch {}
+  }
+
+  /** A computer was reached, or lost: what waited on one is drawn now if it can be. */
+  reached(): void {
+    if (this.waiting) void this.wallpaper();
+  }
+
+  /** An account is forgotten: no photo or video it sent stays in this browser. */
+  async forgetFiles(): Promise<void> {
+    if (typeof caches !== "undefined") await caches.delete(MEDIA).catch(() => {});
   }
 
   /** The agents the phone knows of, as a live wallpaper's creatures. */
@@ -93,21 +106,27 @@ export class LookShown {
     this.mode();
   }
 
-  private paint(look: Look): void {
+  private paint(look: Look | null): void {
     const root = document.documentElement;
     for (const [token, from] of TOKENS) {
-      const c = look.colors[from];
+      const c = look?.colors[from];
       if (c) root.style.setProperty(`--${token}`, c);
+      else root.style.removeProperty(`--${token}`);
     }
-    root.style.colorScheme = look.mode;
-    root.dataset.mode = look.mode;
-    for (const meta of document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]')) meta.content = look.colors.bg ?? meta.content;
-    setTerminalColours(look.terminal);
+    root.style.colorScheme = look?.mode ?? "";
+    if (look) root.dataset.mode = look.mode;
+    else delete root.dataset.mode;
+    for (const meta of document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]')) {
+      meta.dataset.own ??= meta.content;
+      meta.content = look?.colors.bg ?? meta.dataset.own;
+    }
+    setTerminalColours(look?.terminal ?? null);
   }
 
   /** Draw the wallpaper the computer draws now. */
   private async wallpaper(): Promise<void> {
     const round = ++this.round;
+    this.waiting = false;
     const held = this.held;
     const w = held?.look.wallpaper;
     const root = document.documentElement;
@@ -128,7 +147,10 @@ export class LookShown {
       if (!media || !held.workspace) return this.fallback(kind);
       const url = await this.mediaUrl(held, media.revision).catch(() => null);
       if (round !== this.round) return;
-      if (!url) return this.fallback(kind);
+      if (!url) {
+        this.waiting = !this.files()?.reached(held.device);
+        return this.fallback(kind);
+      }
       return this.showMedia(kind, url);
     }
     // A package's live wallpaper, on the page colour till it draws; turned off, it draws as Mono does.
@@ -136,10 +158,11 @@ export class LookShown {
     this.layer.replaceChildren();
     this.layer.dataset.scene = "live";
     if (this.covered || document.hidden || !held.workspace) return;
+    const files = this.files();
+    if (!files?.reached(held.device)) return void (this.waiting = true);
     const origin = await viewsOrigin();
     if (round !== this.round) return;
-    const files = this.files();
-    if (!origin || !files) return this.scene("mono");
+    if (!origin) return this.scene("mono");
     const { device, workspace } = { device: held.device, workspace: held.workspace };
     const look = held.look;
     this.live = new LiveWallpaper(
@@ -182,7 +205,7 @@ export class LookShown {
   /** The photo or video at `revision`, from this browser's keeping, else asked of the computer and kept. */
   private async mediaUrl(held: HeldLook, revision: string): Promise<string> {
     const files = this.files();
-    const key = new URL(`wallpaper/${revision}`, location.href).href;
+    const key = new URL(`wallpaper/${revision}?device=${held.device}`, location.href).href;
     const cache = typeof caches === "undefined" ? null : await caches.open(MEDIA).catch(() => null);
     let kept = await cache?.match(key);
     if (!kept) {
@@ -190,7 +213,11 @@ export class LookShown {
       const got = await files.wallpaperMedia(held.device, held.workspace, revision, () => {});
       kept = new Response(new Blob([got.data.slice()], { type: got.type }), { headers: { "content-type": got.type } });
       if (cache) {
-        for (const old of await cache.keys()) if (old.url !== key) await cache.delete(old);
+        // One file a computer, so that each account's stays while another's is shown.
+        for (const old of await cache.keys()) {
+          const of = new URL(old.url).searchParams.get("device") ?? held.device;
+          if (old.url !== key && of === held.device) await cache.delete(old);
+        }
         await cache.put(key, kept.clone()).catch(() => {});
       }
     }

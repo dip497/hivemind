@@ -45,6 +45,24 @@ function enrolAnother(link: string): string {
 /** The phone page's link from `computer`'s offer, for a browser. */
 const pageLink = (computer: Page) => offerToConnect(computer, true);
 
+/** `computer` looks `bg` behind a photo `width` pixels wide, the same file the phone is to draw. */
+async function looks(computer: Page, name: string, bg: string, width: number): Promise<void> {
+  const picture = await computer.evaluate((w) => {
+    const c = document.createElement("canvas");
+    [c.width, c.height] = [w, 400];
+    c.getContext("2d")!.fillRect(0, 0, w, 400);
+    return c.toDataURL("image/png");
+  }, width);
+  const media = path.join(root, name, "media");
+  fs.mkdirSync(media, { recursive: true });
+  fs.writeFileSync(path.join(media, "background-1.png"), Buffer.from(picture.split(",")[1]!, "base64"));
+  await computer.evaluate(async (c) => {
+    await window.hive.settingsSet("appearance.palette.bg", c);
+    await window.hive.settingsSet("appearance.wallpaper.imageSrc", "hivemedia://media/background-1.png");
+    await window.hive.settingsSet("appearance.wallpaper.kind", "image");
+  }, bg);
+}
+
 test("a phone's browser paired with one of the person's computers reaches the other as well and shows what waits on both; paired with someone else's computer too it keeps two accounts and switches between them; forgetting one leaves the other", async ({}, testInfo) => {
   test.skip(!hiveNetBuilt() || !hiveWebBuilt(), "build hive-net (cargo build in crates/hive-net) and the page (crates/hive-web/build.sh) first");
   test.setTimeout(300_000);
@@ -139,4 +157,89 @@ test("a phone's browser paired with one of the person's computers reaches the ot
   const theirs = (await page.locator("[data-id]").getAttribute("data-id"))!;
   expect(theirs).not.toBe(id);
   expect(await listed(other, theirs)).toBe(true);
+});
+
+test("each account on the phone shows its own computer's colours and photo, kept while another is shown; forgotten, none of it stays", async () => {
+  test.skip(!hiveNetBuilt() || !hiveWebBuilt(), "build hive-net (cargo build in crates/hive-net) and the page (crates/hive-web/build.sh) first");
+  test.setTimeout(300_000);
+  const net = await ownNetwork(root, procs, "closed", WWW);
+  const mine = await person(root, "desktop", repo("api"), apps);
+  expect(await mine.evaluate((l) => window.hive.useNetwork(l), net.link)).toMatchObject({ admission: "enrolled" });
+  const theirs = await person(root, "other", repo("shop"), apps);
+  expect(await theirs.evaluate((l) => window.hive.useNetwork(l), enrolAnother(net.link))).toMatchObject({ admission: "enrolled" });
+  const them = await theirs.evaluate(() => window.hive.identity());
+  await looks(mine, "desktop", "#123456", 1200);
+  await looks(theirs, "other", "#654321", 800);
+
+  browser = await chromium.launch();
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, colorScheme: "dark" });
+  const page = await context.newPage();
+  const canvas = () => page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--canvas").trim());
+  const photo = page.locator("[data-wallpaper-photo]");
+  const shows = async (bg: string, width: number) => {
+    await expect.poll(canvas, { timeout: 30_000 }).toBe(bg);
+    await expect.poll(() => photo.evaluate((i: HTMLImageElement) => i.naturalWidth).catch(() => 0), { timeout: 30_000 }).toBe(width);
+  };
+
+  await page.goto(await pageLink(mine));
+  const pageOwn = await canvas();
+  await connectPage(page, mine);
+  await mine.keyboard.press("Escape");
+  await shows("#123456", 1200);
+
+  await page.goto(await pageLink(theirs));
+  await page.reload();
+  await expect(page.locator("[data-pair-adds]")).toBeVisible({ timeout: 30_000 });
+  await connectPage(page, theirs);
+  await theirs.keyboard.press("Escape");
+  await shows("#654321", 800);
+
+  const chips = page.locator("[data-home-accounts] .chip");
+  await chips.nth(0).click();
+  await shows("#123456", 1200);
+
+  // Their computer stopped, the phone still has their look: it asks them for nothing.
+  await apps.pop()!.close();
+  await chips.nth(1).click();
+  await shows("#654321", 800);
+
+  // An account that has said nothing of how it looks, as one kept by an older page, shows none of another's.
+  await chips.nth(0).click();
+  await shows("#123456", 1200);
+  // What the page keeps of an account comes up to 500 ms after it was last shown.
+  await page.waitForTimeout(1_000);
+  await page.evaluate((key) => new Promise<void>((done, failed) => {
+    const open = indexedDB.open("hive-web", 1);
+    open.onerror = () => failed(open.error);
+    open.onsuccess = () => {
+      const store = open.result.transaction(open.result.objectStoreNames[0]!, "readwrite").objectStore(open.result.objectStoreNames[0]!);
+      const read = store.get(key);
+      read.onsuccess = () => {
+        for (const held of Object.values(read.result as Record<string, { look?: unknown }>)) delete held.look;
+        store.put(read.result, key).onsuccess = () => done();
+      };
+    };
+  }), `home:${them.personId}`);
+  await chips.nth(1).click();
+  await expect(chips.nth(1)).toHaveAttribute("aria-pressed", "true");
+  await expect.poll(canvas, { timeout: 10_000 }).toBe(pageOwn);
+  await expect(photo).toHaveCount(0);
+
+  // Forgotten: the other account's look, then, with no account left, the page's own and no file.
+  await page.locator('[data-tab="devices"]').click();
+  await page.locator("[data-forget]").click();
+  await page.locator("[data-forget-ask] [data-yes]").click();
+  await shows("#123456", 1200);
+  await page.locator('[data-tab="devices"]').click();
+  await page.locator("[data-forget]").click();
+  await page.locator("[data-forget-ask] [data-yes]").click();
+  await expect(page.locator('[data-screen="pair"]')).toBeVisible({ timeout: 30_000 });
+  const nothingStays = async () => {
+    expect(await canvas()).toBe(pageOwn);
+    await expect(photo).toHaveCount(0);
+    expect(await page.evaluate(async () => [localStorage.getItem("hivemind-look"), await caches.has("hivemind-wallpaper")])).toEqual([null, false]);
+  };
+  await nothingStays();
+  await page.reload();
+  await nothingStays();
 });
