@@ -129,6 +129,8 @@ export function parseProbe(out: string): ProbeResult {
   const uname = line("UNAME");
   if (!uname) throw new HiveError("machine_probe_failed", "remote did not answer the probe (is it a POSIX shell?)");
   const [os = "", arch = ""] = uname.split(" ");
+  // Git Bash or Cygwin as the ssh shell: Windows, which is then asked as Windows.
+  if (/^(MINGW|MSYS|CYGWIN)/.test(os)) throw new HiveError("machine_probe_failed", `remote is a POSIX shell on Windows (${uname})`);
   const platform = platformOf(os, arch);
   if (!platform) throw new HiveError("machine_unsupported", `unsupported remote platform '${uname}' — Linux, macOS or Windows on x86_64/arm64 only`);
   const hivePath = line("PATH");

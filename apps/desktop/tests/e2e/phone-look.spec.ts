@@ -35,6 +35,20 @@ test.afterEach(async () => {
 });
 
 const shot = async (page: Page, name: string) => { if (SHOTS) await page.screenshot({ path: path.join(SHOTS, `${name}.png`) }); };
+/** The largest step between neighbouring pixels down the screen's left margin, above the tabs, where only the wallpaper's cover shows. */
+const marginStep = async (page: Page) => {
+  const tabs = await page.locator(".tabs").evaluate((el) => el.getBoundingClientRect().top);
+  const picture = await page.screenshot({ type: "png", scale: "css" });
+  return page.evaluate(async ([b64, above]) => {
+    const bitmap = await createImageBitmap(new Blob([Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))], { type: "image/png" }));
+    const g = new OffscreenCanvas(bitmap.width, bitmap.height).getContext("2d")!;
+    g.drawImage(bitmap, 0, 0);
+    const px = g.getImageData(6, 0, 1, above).data;
+    let step = 0;
+    for (let i = 4; i < px.length; i += 4) for (let c = 0; c < 3; c++) step = Math.max(step, Math.abs(px[i + c]! - px[i + c - 4]!));
+    return step;
+  }, [picture.toString("base64"), Math.floor(tabs) - 2] as const);
+};
 const token = (page: Page, name: string) => page.evaluate((n) => getComputedStyle(document.documentElement).getPropertyValue(`--${n}`).trim(), name);
 
 test("an open phone page takes the computer's colours, its photo from the same file and its live wallpaper, sandboxed, as the computer changes them", async () => {
@@ -120,6 +134,12 @@ test("an open phone page takes the computer's colours, its photo from the same f
   });
   expect(await kept()).toEqual([bytes.length]);
   await shot(page, "photo");
+  // One even cover over it on every list screen: no edge between blocks, no bare photo below them.
+  expect(await marginStep(page)).toBeLessThan(12);
+  await page.locator('[data-tab="devices"]').click();
+  await shot(page, "photo-devices");
+  expect(await marginStep(page)).toBeLessThan(12);
+  await page.locator('[data-tab="home"]').click();
   // Kept: the page opened again shows it before asking the computer for it again.
   await page.reload();
   await expect(page.locator("[data-wallpaper-photo]")).toBeAttached({ timeout: 20_000 });

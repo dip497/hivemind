@@ -46,11 +46,13 @@ cover-fit there is drawn 2532 px tall, so a 4032×3024 camera photo is already d
   second at most. The page takes the frame away once it is hidden for 30 s. Measured with Koi Pond
   in headless Chromium under xvfb (software raster), the page's main thread busy: 24% unthrottled;
   on a CPU slowed 4× (Playwright, CDP), 81% running, 1.2% still, 1.3% with Mono instead.
-- Readability: the desktop's rules. Cards (rows) take the widget card's 97% tint, bars the Layers
-  panel's clamp(68%, tint, 92%) with the blur, and with reduced transparency or more contrast both
-  are solid. A photo or video gets the desktop's brightness layer and vignette. Terminal and
-  conversation screens stay solid. The list sits on the panel's glass and the wallpaper shows in
-  full below it, as on the canvas between tiles.
+- Readability: one sheet of the Layers panel's glass, clamp(68%, tint, 92%) with the blur, covers the
+  whole wallpaper, and cards sit on it at 60%; with reduced transparency or more contrast both are
+  solid. Glass per block drew a stripe at each edge and the bare photo below the last block. The tab
+  bar and open sheets are solid, since blur alone does not keep rows under them from showing, and a
+  photo holds still, as nothing sees it move through the blur. Project headings scroll with their
+  rows while a wallpaper shows. A photo or video gets the desktop's brightness layer and vignette.
+  Terminal and conversation screens stay solid.
 
 ## Guest rule
 

@@ -88,6 +88,31 @@ test("on Windows a terminal is one command line cmd and PowerShell both pass on 
   assert.equal(scriptOf(plainTerminalCommand("/C:/work", "/bin/bash", ["-il"], true)), "Set-Location -LiteralPath 'C:\\work'; & 'powershell.exe' '-NoLogo'; exit $LASTEXITCODE");
 });
 
+test("a Windows machine whose ssh opens Git Bash is asked again as Windows, and read as one", async () => {
+  const bin = fs.mkdtempSync(path.join(os.tmpdir(), "hive-win-ssh-"));
+  try {
+    fs.writeFileSync(path.join(bin, "ssh"), [
+      "#!/bin/sh",
+      'for last; do :; done',
+      'case "$last" in',
+      "  sh\\ -c*) printf 'HIVEPROBE-UNAME MINGW64_NT-10.0-26300 x86_64\\nHIVEPROBE-KIND \\n' ;;",
+      "  powershell*) printf 'HIVEPROBE-UNAME Windows AMD64\\r\\nHIVEPROBE-KIND laptop\\r\\n' ;;",
+      "  *) exit 2 ;;",
+      "esac",
+      "",
+    ].join("\n"), { mode: 0o755 });
+    const before = process.env.PATH;
+    process.env.PATH = `${bin}:${before}`;
+    try {
+      assert.deepEqual(await probeMachine(target(), {}, paths, "2026.10.8"), { platform: "windows-x64", kind: "laptop" });
+    } finally {
+      process.env.PATH = before;
+    }
+  } finally {
+    fs.rmSync(bin, { recursive: true, force: true });
+  }
+});
+
 test("a machine whose ssh is not a POSIX shell is asked again as Windows, and read as one", async () => {
   const bin = fs.mkdtempSync(path.join(os.tmpdir(), "hive-win-ssh-"));
   try {

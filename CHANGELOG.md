@@ -9,6 +9,9 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Changed: phone page layout. Over a wallpaper, each screen is one even sheet of glass, with no stripes or bare photo below the list; **Devices** is grouped into Computers, Other accounts and This browser, with long ids on one line until tapped and **Switch** beside the account. While a wallpaper shows, project headings scroll with their rows and a photo holds still behind the glass.
+- Fixed: a Windows computer whose ssh opens Git Bash can be added as a machine, instead of being refused as an unsupported platform.
+
 ## [2026.11.1] — 2026-11-02
 
 - Fixed: on the phone page, an account with no look yet no longer shows the previous account's theme and photo; each account keeps its own photo or video, so switching doesn't download it again and it shows while that computer is off; forgetting an account removes its look and files from the phone; a photo not yet on the phone, or a live wallpaper, now appears once the computer is reached instead of staying blank or on Mono after a reload or a switch.
