@@ -9,6 +9,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Fixed: after updating, the app no longer offers the version it is already running when it starts.
+
 ## [2026.11.2] — 2026-11-03
 
 - Added: **Search**: find any line in the project as you type, with match case, regular expression and fuzzy modes, and a result opens the editor at that line. **Add ▸ Search**, **Ctrl+Shift+F** in the Code tile, or `hive ctl open-tool @hivemind/code/search`. **Ctrl+P** (**⌘P**) goes to a file by part of its name, typos and all, the files you open most first. Built on fff's Rust search; where it cannot load, git's own search answers instead.

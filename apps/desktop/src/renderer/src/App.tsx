@@ -69,18 +69,12 @@ function pushRecent(path: string): string[] {
 
 /** GitHub-release update check, owned at the App level so the Settings
  *  dialog (full status) and the canvas "Update available" pill share ONE check.
- *  The fetch runs in main (renderer CSP blocks api.github.com); the last result
- *  is cached in localStorage so the affordance survives a reload, then re-checked
- *  on mount + every few hours. A failed check (offline/rate-limit) → no update. */
+ *  The fetch runs in main (renderer CSP blocks api.github.com), on mount + every
+ *  few hours. A failed check (offline/rate-limit) → no update. */
 function useUpdateCheck() {
   const [version, setVersion] = useState<string | null>(null);
   const [checking, setChecking] = useState(false);
-  const [status, setStatus] = useState<UpdateStatus | null>(() => {
-    try {
-      const raw = localStorage.getItem("hivemind:update");
-      return raw ? (JSON.parse(raw) as UpdateStatus) : null;
-    } catch { return null; }
-  });
+  const [status, setStatus] = useState<UpdateStatus | null>(null);
   // Dedupe concurrent checks (opening Settings + mount + interval can overlap)
   // and throttle: unauthenticated GitHub API is 60 req/hr/IP, so hammering it
   // on every Settings open earns a 403 that used to masquerade as "up to date".
@@ -95,13 +89,12 @@ function useUpdateCheck() {
     setChecking(true);
     try {
       const s = await window.hive.checkForUpdate();
-      // Only a COMPLETED check updates state/cache. A failed one (offline,
+      // Only a COMPLETED check updates state. A failed one (offline,
       // timeout, rate-limit) must NOT overwrite a known-good result or flip the
       // banner — we keep the last trustworthy status and just stop "Checking…".
       if (s.ok) {
         lastOkCheckRef.current = Date.now();
         setStatus(s);
-        try { localStorage.setItem("hivemind:update", JSON.stringify(s)); } catch { /* quota */ }
       }
     } catch { /* main never rejects; ignore */ }
     finally { checkingRef.current = false; setChecking(false); }
