@@ -14,6 +14,7 @@ import { Button } from "./components/ui/button";
 import { HeaderPinButton, type PinRect } from "./canvas-nodes";
 import { FileTreeTile } from "./FileTreeTile";
 import { EditorTile } from "./EditorTile";
+import type { HistoryRequest } from "./tiles/api";
 
 const DiffTile = lazy(() => import("./DiffTile").then((m) => ({ default: m.DiffTile })));
 
@@ -59,6 +60,15 @@ export function WorkbenchTile({ repoPath, tabs, onOpenFile, onOpenInBrowser, onC
   // produced no state change). A monotonic request token carries "activate this
   // path" (+ an optional `diff` flag so a Changes click opens it in inline-diff
   // mode) independently of the deduped tab list; EditorTile honors it.
+  // History in this tile's own Changes: a file's history (the tree's menu), a commit (blame).
+  const historySeq = useRef(0);
+  const [historyReq, setHistoryReq] = useState<HistoryRequest | undefined>(undefined);
+  const showHistory = (req: { file?: string; sha?: string }) => {
+    setHistoryReq({ ...req, seq: ++historySeq.current });
+    setPanel("changes");
+    setCollapsed(false);
+  };
+
   const reqSeq = useRef(0);
   const [activeReq, setActiveReq] = useState<{ path: string; seq: number; diff?: boolean } | null>(null);
   const selectFile = (path: string, opts?: { diff?: boolean }) => {
@@ -134,7 +144,7 @@ export function WorkbenchTile({ repoPath, tabs, onOpenFile, onOpenInBrowser, onC
               style={{ width: sidebarW }}
             >
               {/* Keyed on repoPath: moved into a frame of another repo, the tree starts over. */}
-              <FileTreeTile key={repoPath} repoPath={repoPath} onSelectFile={(p) => selectFile(p)} embedded />
+              <FileTreeTile key={repoPath} repoPath={repoPath} onSelectFile={(p) => selectFile(p)} onShowHistory={(file) => showHistory({ file })} embedded />
             </div>
             {/* Resize handle — a WIDE (8px) grab zone with a thin centered line. */}
             <div
@@ -168,6 +178,7 @@ export function WorkbenchTile({ repoPath, tabs, onOpenFile, onOpenInBrowser, onC
             onCloseTab={onCloseTab}
             activeReq={activeReq}
             onOpenInBrowser={onOpenInBrowser}
+            onShowHistory={showHistory}
             embedded
           />
           {/* Changes is the Diff tile itself, over the editor (kept mounted, so
@@ -175,7 +186,7 @@ export function WorkbenchTile({ repoPath, tabs, onOpenFile, onOpenInBrowser, onC
           {panel === "changes" && !collapsed && (
             <div className="absolute inset-0 z-10 bg-[var(--color-bg2)] flex flex-col">
               <Suspense fallback={null}>
-                <DiffTile repoPath={repoPath} embedded {...(compare ? { initialMode: "branch" as const, initialBase: compare.base, initialHead: compare.head } : {})} onEditFile={(f) => { setPanel("explorer"); selectFile(f, { diff: true }); }} />
+                <DiffTile repoPath={repoPath} embedded {...(compare ? { initialMode: "branch" as const, initialBase: compare.base, initialHead: compare.head } : {})} onEditFile={(f) => { setPanel("explorer"); selectFile(f, { diff: true }); }} historyReq={historyReq} />
               </Suspense>
             </div>
           )}

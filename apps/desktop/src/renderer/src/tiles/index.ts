@@ -2,13 +2,15 @@
  *  plugin does (tool-plugins.tsx). */
 import { registerTile } from "./api";
 import { terminalTile } from "./terminal";
-import { codeTile } from "./code";
+import { changesTile, codeTile, filesTile } from "./code";
 import { browserTile } from "./browser";
 import { planReviewTile } from "./plan-review";
 import { missingTile } from "./missing";
 
 registerTile(terminalTile);
 registerTile(codeTile);
+registerTile(filesTile);
+registerTile(changesTile);
 registerTile(browserTile);
 registerTile(planReviewTile);
 registerTile(missingTile);

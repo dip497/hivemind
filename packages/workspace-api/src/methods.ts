@@ -5,7 +5,7 @@
 import type { Issue, IssuePatch, IssueState, IssueSummary, LinkType, NewIssue } from "@hivemind/core/types";
 import type { LinkResult, TransferResult } from "@hivemind/core/cross-repo";
 import type { PageBox, PageComment, ReviewComment, ReviewIntent } from "@hivemind/core/review";
-import type { DiffPayload, DiffScope, GitBranchList, GitRevision, GitStatusSnapshot, HandedOff, WorktreeCreateOpts, WorktreeEntry } from "./git.js";
+import type { BlameOptions, BlamePayload, CommitInfo, DiffPayload, DiffScope, FileHistoryCursor, FileHistoryPage, GitBranchList, GitRevision, GitStatusSnapshot, HandedOff, LogOptions, LogPage, WorktreeCreateOpts, WorktreeEntry } from "./git.js";
 import type { SleepAnswer, WakeAnswer } from "./agents.js";
 import type { AgentAnswer, AgentChange, Approval, Answerer, AgentChanges, AgentEvent, AgentItem, AgentRead, AgentSessions, ConversationEntry, SlashCommand, Folders, Links, PipeChange, Places, SpawnChange, StartAgent, StartImage, Startable, StatusChange, TileOpened, ToolUse } from "./agents.js";
 import type { ActivityLevels, ExitInfo, LastLines, TerminalOpts, Typist } from "./terminals.js";
@@ -57,6 +57,14 @@ export interface WorkspaceMethods {
   "git.listBranches": (repo: string) => GitBranchList;
   "git.diff": (repo: string, scope: DiffScope, file?: string) => DiffPayload;
   "git.fileContents": (repo: string, file: string, rev: GitRevision) => string;
+  /** (0.39) The log, a page at a time: the current branch in git's order, or every branch by date. */
+  "git.log": (repo: string, opts?: LogOptions) => LogPage;
+  /** (0.39) A file's commits, newest first, through its renames. */
+  "git.fileHistory": (repo: string, file: string, cursor?: FileHistoryCursor) => FileHistoryPage;
+  /** (0.39) Who last changed each line, as runs of lines; of the editor's text when given. */
+  "git.blame": (repo: string, file: string, opts?: BlameOptions) => BlamePayload;
+  /** (0.39) A commit's message and the files it changed against its first parent. */
+  "git.commitInfo": (repo: string, sha: string) => CommitInfo;
   "git.stage": (repo: string, files: string[]) => void;
   "git.unstage": (repo: string, files: string[]) => void;
   "git.discard": (repo: string, files: string[]) => void;

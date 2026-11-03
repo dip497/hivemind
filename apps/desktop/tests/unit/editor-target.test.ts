@@ -1,7 +1,7 @@
 /**
  * Regression: opening a file from a terminal must land in an editor of the
  * SAME frame, and when that frame has none the caller has to spawn one and
- * carry the path with it (Workspace.openFileFromTerminal used to spawn a bare
+ * carry the path with it (Workspace.openFileFromTile used to spawn a bare
  * editor and drop the file).
  */
 import { test } from "node:test";

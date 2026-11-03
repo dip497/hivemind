@@ -119,7 +119,7 @@ function register(pkg: ToolPackage, off: Set<string>): void {
       pkg, tileId: t.id, kind: t.kind, name: h.tileNames[t.id] ?? t.label ?? t.kind, frameId: s.frameId,
       repoPath: s.repoPath, cwd: s.cwd, root: s.root, glyph: pkg.tiles[t.kind]?.glyph, onClose: s.onClose, ...s.pin,
       openUrl: (u) => h.openUrlInBrowser(t.id, u),
-      openFile: (f) => h.openFileFromTerminal(t.id, s.repoPath && !f.startsWith("/") ? `${s.repoPath}/${f}` : f),
+      openFile: (f) => h.openFileFromTile(t.id, s.repoPath && !f.startsWith("/") ? `${s.repoPath}/${f}` : f),
     }),
     lazy: true,
     body,

@@ -8,6 +8,9 @@
  */
 import { COMPACT_FOLDER_CSS } from "./code/FileTree";
 import { RowsSkeleton } from "./workspace/tile-skeletons";
+import { Button } from "./components/ui/button";
+import { X } from "./components/icons";
+import { HeaderPinButton, type PinRect } from "./canvas-nodes";
 import { useEffect, useMemo } from "react";
 import { FileTree, useFileTree, useFileTreeSearch } from "@pierre/trees/react";
 import type {
@@ -19,6 +22,7 @@ import type {
 } from "@pierre/trees";
 import { toast } from "sonner";
 import { MenuItem } from "./components/ui/menu-item";
+import { TreeMenu } from "./code/tree-menu";
 import { useGitListFiles, useGitStatus } from "./queries";
 import type { GitFileStatus } from "../../shared/ipc";
 
@@ -30,6 +34,12 @@ interface Props {
    *  and no internal header (the embedding host supplies its own). Defaults
    *  to false so the standalone tile keeps its full chrome. */
   embedded?: boolean;
+  /** A file's history, from its menu (in the frame's Changes, or the Code tile's own). */
+  onShowHistory?: (path: string) => void;
+  /** Standalone (the Files tool): close the tile, and its pin. */
+  onClose?: () => void;
+  pinned?: boolean;
+  onTogglePin?: (id: string, rect: PinRect) => void;
 }
 
 // hivemind → @pierre/trees status mapping. Pierre's GitStatus union doesn't
@@ -69,7 +79,7 @@ const STATUS_COLOR: Record<GitFileStatus, string> = {
   conflicted: "var(--color-err)",
 };
 
-export function FileTreeTile({ repoPath, onSelectFile, embedded = false }: Props) {
+export function FileTreeTile({ repoPath, onSelectFile, embedded = false, onClose, pinned, onTogglePin, onShowHistory }: Props) {
   const { data: paths = [], isLoading, error: listError } = useGitListFiles(repoPath);
   const { data: status } = useGitStatus(repoPath);
 
@@ -228,11 +238,19 @@ export function FileTreeTile({ repoPath, onSelectFile, embedded = false }: Props
                     {paths.length}
                   </span>
                 </div>
-                {gitStatus.length > 0 && (
-                  <span className="font-mono text-count text-[var(--color-fg2)] tabular-nums">
-                    {gitStatus.length} changed
-                  </span>
-                )}
+                <div className="flex items-center gap-1">
+                  {gitStatus.length > 0 && (
+                    <span className="font-mono text-count text-[var(--color-fg2)] tabular-nums mr-1">
+                      {gitStatus.length} changed
+                    </span>
+                  )}
+                  {onClose && <>
+                    <HeaderPinButton pinned={pinned} onToggle={onTogglePin} />
+                    <Button variant="ghost" size="icon-micro" className="nodrag" aria-label="close tile" title="close" onClick={onClose}>
+                      <X />
+                    </Button>
+                  </>}
+                </div>
               </div>
             )
           }
@@ -244,6 +262,7 @@ export function FileTreeTile({ repoPath, onSelectFile, embedded = false }: Props
               ctx={ctx}
               repoPath={repoPath}
               statusByPath={statusByPath}
+              onShowHistory={onShowHistory}
             />
           )}
         />
@@ -257,11 +276,13 @@ function CtxMenu({
   ctx,
   repoPath,
   statusByPath,
+  onShowHistory,
 }: {
   item: ContextMenuItem;
   ctx: ContextMenuOpenContext;
   repoPath: string;
   statusByPath: Map<string, { status: GitFileStatus; staged: boolean }>;
+  onShowHistory?: (path: string) => void;
 }) {
   const abs = `${repoPath}/${item.path}`;
   const st = statusByPath.get(item.path);
@@ -277,6 +298,7 @@ function CtxMenu({
   }
 
   return (
+    <TreeMenu ctx={ctx}>
     <div className="min-w-[200px] bg-[var(--color-bg3)] border border-[var(--color-line2)] rounded-md shadow-2xl p-1 text-label">
       <div className="px-2 py-1 flex items-center gap-2 border-b border-[var(--color-line)] mb-1">
         <span className="font-mono text-count text-[var(--color-fg2)] truncate flex-1">
@@ -297,7 +319,11 @@ function CtxMenu({
       {item.kind === "file" && (
         <Item label="Copy file name" hint="name" onClick={() => copy(item.name, "file name")} />
       )}
+      {item.kind === "file" && onShowHistory && (
+        <Item label="Show history" onClick={() => { ctx.close(); onShowHistory(item.path); }} />
+      )}
     </div>
+    </TreeMenu>
   );
 }
 

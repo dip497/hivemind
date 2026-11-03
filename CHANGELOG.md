@@ -9,6 +9,10 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Added: **History** in Changes: the commits newest first with their branches' graph, each commit's message and diff, and every branch when you ask. A file's **history** from Files' right-click menu or its editor tab, through its renames. **Blame** on an editor tab: who last changed each line and when, edited lines marked not committed, a click opening that commit. Fast on large repositories: Hivemind keeps git's commit-graph with Bloom filters (**Settings ▸ About ▸ Speed up history**, on by default).
+- Added: workspace API 0.39: `git.log`, `git.fileHistory`, `git.blame` and `git.commitInfo`, at the `view` role.
+- Fixed: a file tree's right-click menu on the canvas (Files, Changes' file list) opened off to the side, often outside the window.
+- Added: **Files** and **Changes**, the Code tile's file tree and its changes as tools of their own: **Add ▸ Files** or **Changes**, or `hive ctl open-tool @hivemind/code/files` and `…/changes`. Each shows its own frame's folder, and a file picked in one opens in that frame's editor. `hive ctl open-tool @hivemind/code` still opens Code.
 - Changed: phone page layout. Over a wallpaper, each screen is one even sheet of glass, with no stripes or bare photo below the list; **Devices** is grouped into Computers, Other accounts and This browser, with long ids on one line until tapped and **Switch** beside the account. While a wallpaper shows, project headings scroll with their rows and a photo holds still behind the glass.
 - Fixed: a Windows computer whose ssh opens Git Bash can be added as a machine, instead of being refused as an unsupported platform.
 

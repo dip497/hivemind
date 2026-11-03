@@ -33,6 +33,8 @@ import { useTileFont, FontStepper, handleFontKey } from "./tile-font";
 import { FullscreenShell } from "./tile-fullscreen";
 import { actionKey } from "./shortcut";
 import { DiffSurface } from "./code/DiffSurface";
+import { CommitHeader, HistoryPanel } from "./code/HistoryPanel";
+import type { HistoryRequest } from "./tiles/api";
 import {
   CodeView,
   WorkerPoolContextProvider,
@@ -85,9 +87,13 @@ interface Props {
   embedded?: boolean;
   /** Opening a file hands it to an editor instead of showing it read-only here. */
   onEditFile?: (file: string) => void;
+  /** Show History, at a file's history or a commit: from the editor's blame, from Files. A new
+   *  `seq` is a new request, even for the same file. */
+  historyReq?: HistoryRequest;
 }
 
-type Mode = "working" | "branch" | "unpushed";
+
+type Mode = "working" | "branch" | "unpushed" | "history";
 type Layout = "split" | "unified";
 type Overflow = "scroll" | "wrap";
 
@@ -121,7 +127,7 @@ function fileForLineEl(lineEl: HTMLElement | null, container: HTMLElement | null
   return file;
 }
 
-export function DiffTile({ repoPath, initialMode = "working", initialBase = "origin/main", initialHead, onClose, pinned, onTogglePin, embedded, onEditFile }: Props) {
+export function DiffTile({ repoPath, initialMode = "working", initialBase = "origin/main", initialHead, onClose, pinned, onTogglePin, embedded, onEditFile, historyReq }: Props) {
   // Per-tile font size (A−/A+ + Ctrl/Cmd +/−/0) — overrides --diffs-font-size.
   const font = useTileFont(`diff:${repoPath}`, 13);
   // Fullscreen: the Pierre CodeView is React-rendered (not an imperative node), so
@@ -136,6 +142,18 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
   const chromePx = Math.max(9, Math.round(font.size * 0.85));
   const headerH = Math.round(chromePx * 3.1);
   const [mode, setMode] = useState<Mode>(initialMode);
+  // History: the commit shown, one file's history or the whole log, and the log of every branch.
+  const [historySha, setHistorySha] = useState<string | null>(null);
+  const [historyFile, setHistoryFile] = useState<string | null>(null);
+  const [historyAll, setHistoryAll] = useState(false);
+  const lastHistoryReq = useRef(0);
+  useEffect(() => {
+    if (!historyReq || historyReq.seq === lastHistoryReq.current) return;
+    lastHistoryReq.current = historyReq.seq;
+    setMode("history");
+    setHistoryFile(historyReq.file ?? null);
+    setHistorySha(historyReq.sha ?? null);
+  }, [historyReq]);
   // Branch-compare refs (branch mode). `undefined` ⇒ auto: base resolves to
   // origin/HEAD, head defaults to the working checkout (HEAD). Set either to
   // review any two arbitrary branches — no remote PR needed.
@@ -323,6 +341,9 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
       qc.invalidateQueries({ queryKey: ["git:diff", repoPath] }, join);
       qc.invalidateQueries({ queryKey: ["git:list-files", repoPath] }, join);
       qc.invalidateQueries({ queryKey: ["git:branches", repoPath] }, join);
+      // History: answered from the host's cache while HEAD and the refs stay where they are.
+      qc.invalidateQueries({ queryKey: ["git:log", repoPath] }, join);
+      qc.invalidateQueries({ queryKey: ["git:fileHistory", repoPath] }, join);
       qc.invalidateQueries({
         predicate: (q) =>
           q.queryKey[0] === "git:file" &&
@@ -362,7 +383,11 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
   const unpushedScope: DiffScope = useMemo(() => ({ kind: "unpushed", ignoreWhitespace }), [ignoreWhitespace]);
   const unpushed = useBranchItems(repoPath, unpushedScope, mode === "unpushed");
 
-  const revItems = mode === "unpushed" ? unpushed : branch;
+  // A commit picked in History: its diff against its first parent.
+  const commitScope: DiffScope = useMemo(() => ({ kind: "commit", sha: historySha ?? "HEAD", ignoreWhitespace }), [historySha, ignoreWhitespace]);
+  const commit = useBranchItems(repoPath, commitScope, mode === "history" && !!historySha);
+
+  const revItems = mode === "unpushed" ? unpushed : mode === "history" ? commit : branch;
   const rawBaseItems = mode === "working" ? workingItems.items : revItems.items;
 
   // De-dupe by item id (`diff:<path>`). CodeView.addItem THROWS on a duplicate
@@ -715,6 +740,7 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
       // No upstream ⇒ leave enabled (every local commit counts as unpushed).
       disabled: !!status?.upstream && ahead === 0,
     },
+    { id: "history", label: "history", title: "the commits, and what each changed" },
   ];
 
   // The diff's size, on the tile and on its fullscreen body (portalled out of the tile): every other
@@ -741,7 +767,7 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
       <div className={`${embedded ? "" : "tile-drag-handle cursor-grab active:cursor-grabbing "}h-8 flex items-center gap-2 px-2.5 bg-[var(--color-bg3)] border-b border-[var(--color-line)] text-count font-mono text-[var(--color-fg2)]`}>
         {!embedded && <>
           <GripVertical size={13} className="text-[var(--color-fg3)] -ml-1 shrink-0" />
-          <span className="font-semibold text-[var(--color-fg)]">Diff</span>
+          <span className="font-semibold text-[var(--color-fg)]">Changes</span>
           <span aria-hidden className="text-[var(--color-line2)]">·</span>
           <span className="text-[var(--color-fg2)]">{repoPath.split("/").slice(-1)[0]}</span>
         </>}
@@ -1047,6 +1073,11 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
         const diffBody = (
          <>
        <div className="flex-1 min-h-0 flex overflow-hidden">
+        {mode === "history" && (
+          <HistoryPanel repoPath={repoPath} file={historyFile} onClearFile={() => { setHistoryFile(null); setHistorySha(null); }}
+            all={historyAll} onAll={(a) => { setHistoryAll(a); setHistorySha(null); }}
+            selected={historySha} onSelect={setHistorySha} width={Math.max(260, filesW + 40)} />
+        )}
         {filesOpen && fileRows.length > 0 && !activeFile && (
           <aside
             className="nodrag shrink-0 flex flex-col border-r border-[var(--color-line)] bg-[var(--color-bg2)] overflow-hidden"
@@ -1137,6 +1168,8 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
             </div>
           )}
 
+          {mode === "history" && historySha && !activeFile && <CommitHeader repoPath={repoPath} sha={historySha} />}
+
           {activeFile && (
             <div className="flex-1 min-h-0">
               <DiffSurface repoPath={repoPath} file={activeFile} onClose={() => setActiveFile(null)} />
@@ -1160,7 +1193,9 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
                 ? "✓ working tree clean"
                 : mode === "unpushed"
                   ? "✓ everything committed is pushed"
-                  : "✓ no commits on this branch beyond base"}
+                  : mode === "history"
+                    ? historySha ? "this commit changes no file's text" : "pick a commit"
+                    : "✓ no commits on this branch beyond base"}
             </div>
           )}
 
@@ -1249,7 +1284,7 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
         // WorkerPoolContextProvider, so CodeView's context flows through the portal).
         return overlay ? (
           <FullscreenShell
-            title={activeFile ? (activeFile.split("/").pop() ?? "Diff") : `Diff · ${repoPath.split("/").slice(-1)[0]}`}
+            title={activeFile ? (activeFile.split("/").pop() ?? "Changes") : `Changes · ${repoPath.split("/").slice(-1)[0]}`}
             font={font}
             hostRef={overlayHostRef}
             onClose={() => setOverlay(false)}

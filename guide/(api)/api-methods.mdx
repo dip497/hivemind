@@ -47,6 +47,10 @@ At the end, tell me how to stop the script and how to revoke the token: \`hive g
 | <a id="git-listfiles" />`git.listFiles` | `repo` | tracked and untracked files | `["/home/you/work/api"]` |
 | <a id="git-listbranches" />`git.listBranches` | `repo` | `{current, local, remote}` | `["/home/you/work/api"]` |
 | <a id="git-filecontents" />`git.fileContents` | `repo`, `file`, `rev` | a file at `HEAD`, `INDEX` or `WORKING` | `["/home/you/work/api", "README.md", "HEAD"]` |
+| <a id="git-log" />`git.log` | `repo`, `{all?, cursor?, limit?}`? | a page of commits `{oid, parents, time, author, email, subject, refs}` and `next` (0.39) | `["/home/you/work/api", {"limit": 50}]` |
+| <a id="git-filehistory" />`git.fileHistory` | `repo`, `file`, `next`? | a file's commits through its renames, 100 a page, and `next` (0.39) | `["/home/you/work/api", "src/cart.ts"]` |
+| <a id="git-blame" />`git.blame` | `repo`, `file`, `{contents?, from?, to?, moved?}`? | `{hunks, contents}`: who last changed each run of lines (0.39) | `["/home/you/work/api", "src/cart.ts", {"from": 1, "to": 80}]` |
+| <a id="git-commitinfo" />`git.commitInfo` | `repo`, `sha` | a commit's message and its files, with lines added and removed (0.39) | `["/home/you/work/api", "3f2c1a9"]` |
 | <a id="worktree-list" />`worktree.list` | `repo` | the repository's worktrees | `["/home/you/work/api"]` |
 | <a id="file-read" />`file.read` | `repo`, `file` | a file's text, inside the workspace | `["/home/you/work/api", "package.json"]` |
 | <a id="issue-list" />`issue.list` | `root` | issues; `root` is the workspace's `.hivemind` folder | `["/home/you/work/api/.hivemind"]` |

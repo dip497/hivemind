@@ -60,7 +60,10 @@ export const BUNDLED_TOOL_PLUGINS: readonly ToolPluginContribution[] = Object.fr
     id: CODE_PLUGIN_ID,
     builtin: true,
     tools: Object.freeze([
-      Object.freeze({ key: "editor", label: "Code", description: "The workspace's files and what changed in them: edit, review, and leave comments.", tileKind: "editor", singleton: true }),
+      Object.freeze({ key: "editor", label: "Code", description: "The workspace's files and what changed in them: edit, review, and leave comments.", tileKind: "editor", singleton: true, main: true }),
+      // Its pieces, each on its own: the same components the Code tile puts together.
+      Object.freeze({ key: "files", label: "Files", description: "The working tree, with what git says of each file; a file picked opens in the frame's editor.", tileKind: "files", singleton: true }),
+      Object.freeze({ key: "changes", label: "Changes", description: "What changed in the working tree or between branches: stage, discard, commit, push, and comment for an agent.", tileKind: "changes", singleton: true }),
     ]),
     // The review loop an agent cannot reach from a shell: comments live in the app.
     commands: Object.freeze([

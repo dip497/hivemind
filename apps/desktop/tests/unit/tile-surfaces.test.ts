@@ -16,8 +16,8 @@ const noop = () => {};
 function ctx(over: Partial<TileSurfaceCtx>): TileSurfaceCtx {
   return {
     repoPath: "/base/repo", root: "/base/repo/.hivemind", cwd: "/base/repo",
-    tiles: [], frames: [], frameOf: {}, pinnedIds: new Set(), editorTabs: {}, browserOpenReqs: {}, tileNames: {}, agentTitles: {},
-    openFileInTile: noop, openUrlInBrowser: noop, openFileFromTerminal: noop, closeTabInTile: noop,
+    tiles: [], frames: [], frameOf: {}, pinnedIds: new Set(), editorTabs: {}, browserOpenReqs: {}, historyReqs: {}, tileNames: {}, agentTitles: {},
+    openFileInTile: noop, openUrlInBrowser: noop, openFileFromTile: noop, showHistory: noop, closeTabInTile: noop,
     closeTile: noop, renameTile: noop, onTogglePin: noop,
     ...over,
   };
@@ -42,6 +42,11 @@ test("cache preserves untouched bodies when renaming, editing tabs, navigating, 
   assert.equal(tabs[2], first[2]);
   const navigated = build({ ...base, browserOpenReqs: { c: { url: "https://example.com", seq: 1 } } });
   assert.notEqual(navigated[2], first[2]);
+  // A History request reaches the tile it is for, and only that one (against the build before).
+  const asked = build({ ...base, browserOpenReqs: { c: { url: "https://example.com", seq: 1 } }, historyReqs: { c: { file: "src/a.ts", seq: 1 } } });
+  assert.notEqual(asked[2], navigated[2]);
+  assert.equal(asked[0], navigated[0]);
+  assert.equal(asked[1], navigated[1]);
   const pin = build({ ...base, pinnedIds: new Set(["a"]) });
   const added = build({ ...base, pinnedIds: new Set(["a"]), tiles: [...base.tiles, tile({ id: "d" })] });
   for (let i = 0; i < 3; i++) assert.equal(added[i], pin[i]);
