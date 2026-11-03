@@ -19,8 +19,9 @@ import { FullscreenShell, useReparentFullscreen } from "./tile-fullscreen";
 import { EditorState, type Extension, Compartment } from "@codemirror/state";
 import {
   EditorView, keymap, lineNumbers, highlightActiveLine, highlightActiveLineGutter,
-  drawSelection, rectangularSelection, crosshairCursor,
+  drawSelection, rectangularSelection, crosshairCursor, highlightSpecialChars, dropCursor,
 } from "@codemirror/view";
+import { autocompletion, closeBrackets, closeBracketsKeymap, completeAnyWord, completionKeymap } from "@codemirror/autocomplete";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 import { search, searchKeymap, highlightSelectionMatches } from "@codemirror/search";
 import {
@@ -29,6 +30,7 @@ import {
   indentOnInput,
   bracketMatching,
   foldGutter,
+  foldKeymap,
   type LanguageSupport,
 } from "@codemirror/language";
 import { languages } from "@codemirror/language-data";
@@ -64,7 +66,7 @@ interface Props {
   /** Activate-this-file request from the host (tree click). The `seq` makes
    *  re-selecting an already-open file a fresh request, so clicking a file that's
    *  already a tab switches back to it instead of being a no-op. */
-  activeReq?: { path: string; seq: number; diff?: boolean } | null;
+  activeReq?: { path: string; seq: number; diff?: boolean; line?: number; col?: number } | null;
   /** Open a URL in the frame's browser tile. */
   onOpenInBrowser?: (url: string) => void;
   /** Close the whole tile. Omitted when embedded (the host owns chrome). */
@@ -168,8 +170,17 @@ const highlightStyle = HighlightStyle.define([
   { tag: [t.invalid], color: "var(--color-err)" },
 ]);
 
+// What CodeMirror's own basicSetup carries, from its official packages, not written here: the
+// pieces below and closeBrackets, completion (each language's own source where it has one, else
+// the words already in the file), special characters shown, the drop cursor, and the keys for
+// brackets, completion and folding.
 const baseExtensions: Extension = [
   lineNumbers(),
+  highlightSpecialChars(),
+  dropCursor(),
+  closeBrackets(),
+  autocompletion({ activateOnTyping: true, maxRenderedOptions: 50 }),
+  EditorState.languageData.of(() => [{ autocomplete: completeAnyWord }]),
   foldGutter(),
   highlightActiveLine(),
   highlightActiveLineGutter(),
@@ -187,7 +198,7 @@ const baseExtensions: Extension = [
   search({ top: true }),
   EditorView.lineWrapping,
   // searchKeymap LAST so Mod-f / Mod-g / etc. win over any default binding.
-  keymap.of([...defaultKeymap, ...historyKeymap, ...searchKeymap, indentWithTab]),
+  keymap.of([...closeBracketsKeymap, ...completionKeymap, ...defaultKeymap, ...historyKeymap, ...searchKeymap, ...foldKeymap, indentWithTab]),
 ];
 
 /** Resolve a CodeMirror LanguageSupport for a path via @codemirror/language-data.
@@ -290,6 +301,25 @@ export function EditorTile({ repoPath, tabs, onCloseTab, onClose, activeReq, onO
   useEffect(() => {
     if (activeReq?.diff) setDiffMode((m) => (m[activeReq.path] ? m : { ...m, [activeReq.path]: true }));
   }, [activeReq]);
+
+  // A request at a line (a find result): the cursor there and the line in sight, once that tab's
+  // text is in the editor; again for the same file at another line.
+  const pendingLine = useRef<{ path: string; line: number; col: number } | null>(null);
+  useEffect(() => {
+    if (activeReq?.line) pendingLine.current = { path: activeReq.path, line: activeReq.line, col: activeReq.col ?? 0 };
+  }, [activeReq]);
+  useEffect(() => {
+    const view = viewRef.current;
+    const want = pendingLine.current;
+    if (!view || !want || want.path !== active || !meta[active]?.loaded) return;
+    const doc = view.state.doc;
+    if (doc.length === 0 && want.line > 1) return;
+    pendingLine.current = null;
+    const line = doc.line(Math.min(Math.max(1, want.line), doc.lines));
+    const at = Math.min(line.from + want.col, line.to);
+    view.dispatch({ selection: { anchor: at }, effects: EditorView.scrollIntoView(at, { y: "center" }) });
+    view.focus();
+  });
 
   // Drop cached buffers + meta + diffMode for closed tabs (avoid unbounded growth).
   useEffect(() => {

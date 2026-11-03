@@ -9,6 +9,9 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Added: **Search**: find any line in the project as you type, with match case, regular expression and fuzzy modes, and a result opens the editor at that line. **Add ▸ Search**, **Ctrl+Shift+F** in the Code tile, or `hive ctl open-tool @hivemind/code/search`. **Ctrl+P** (**⌘P**) goes to a file by part of its name, typos and all, the files you open most first. Built on fff's Rust search; where it cannot load, git's own search answers instead.
+- Added: the editor closes brackets and quotes as you open them, and offers the file's own words as you type.
+- Added: workspace API 0.40: `code.findFiles`, `code.picked` and `code.grep`, at the `view` role.
 - Added: **History** in Changes: the commits newest first with their branches' graph, each commit's message and diff, and every branch when you ask. A file's **history** from Files' right-click menu or its editor tab, through its renames. **Blame** on an editor tab: who last changed each line and when, edited lines marked not committed, a click opening that commit. Fast on large repositories: Hivemind keeps git's commit-graph with Bloom filters (**Settings ▸ About ▸ Speed up history**, on by default).
 - Added: workspace API 0.39: `git.log`, `git.fileHistory`, `git.blame` and `git.commitInfo`, at the `view` role.
 - Fixed: a file tree's right-click menu on the canvas (Files, Changes' file list) opened off to the side, often outside the window.

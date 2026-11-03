@@ -281,6 +281,15 @@ jobs:
           test -f desktop-deploy/dist-electron/linux-unpacked/resources/app.asar.unpacked/node_modules/@lydell/node-pty-linux-x64/prebuilds/linux-x64/pty.node \
             || { echo "pty.node not unpacked in the bundle - the terminal would be dead"; exit 1; }
 
+      - name: Verify the bundle has fff for this platform
+        # Find (go to file, find in files) loads fff's Rust library through ffi-rs. Missing, it
+        # still answers from git, slower, so nothing else would fail: check both binaries are here.
+        run: |
+          set -euo pipefail
+          u=desktop-deploy/dist-electron/linux-unpacked/resources/app.asar.unpacked/node_modules
+          find "$u" -path '*fff-bin-linux-x64*' -name 'libfff_c.so' | grep -q . || { echo "fff's libfff_c.so not unpacked - Find would fall back to git"; exit 1; }
+          find "$u" -path '*ffi-rs-linux-x64*' -name '*.node' | grep -q . || { echo "ffi-rs's .node not unpacked - fff could not load"; exit 1; }
+
       - name: Stage release artifacts
         id: stage
         run: |
@@ -468,6 +477,9 @@ jobs:
           # with no pty.node at all.
           pty="$app/Contents/Resources/app.asar.unpacked/node_modules/@lydell/node-pty-darwin-arm64/prebuilds/darwin-arm64/pty.node"
           test -f "$pty" || { echo "pty.node not unpacked in the bundle - the terminal would be dead"; exit 1; }
+          # Find's fff library and the ffi-rs that loads it, unpacked (see the Linux job).
+          find "$app/Contents/Resources/app.asar.unpacked/node_modules" -path '*fff-bin-darwin-arm64*' -name 'libfff_c.dylib' | grep -q . || { echo "fff's libfff_c.dylib not unpacked"; exit 1; }
+          find "$app/Contents/Resources/app.asar.unpacked/node_modules" -path '*ffi-rs-darwin-arm64*' -name '*.node' | grep -q . || { echo "ffi-rs's .node not unpacked"; exit 1; }
           for bin in release-assets/hive-darwin-arm64 \
                      "$app/Contents/MacOS/hivemind" \
                      $(find "$app" -name '*.node'); do
@@ -624,6 +636,19 @@ jobs:
           if ($missing) { throw "not unpacked in the bundle: $($missing -join ', ') - the terminal would be dead" }
           foreach ($name in @($need.Keys)) { Write-Host "ok: $($need[$name].FullName)" }
 
+
+      - name: Verify the bundle has fff for win32-x64
+        # Find's fff library and the ffi-rs that loads it (see the Linux job); missing, Find
+        # falls back to git, so nothing else would say so.
+        shell: pwsh
+        run: |
+          $u = Get-ChildItem desktop-deploy/dist-electron -Recurse -Directory -Filter app.asar.unpacked | Select-Object -First 1
+          if (-not $u) { throw "no app.asar.unpacked in the bundle" }
+          $fff = Get-ChildItem $u.FullName -Recurse -Include *.dll -ErrorAction SilentlyContinue | Where-Object { $_.FullName -match 'fff-bin-win32-x64' }
+          if (-not $fff) { throw "fff's library not unpacked - Find would fall back to git" }
+          $ffi = Get-ChildItem $u.FullName -Recurse -Filter *.node -ErrorAction SilentlyContinue | Where-Object { $_.FullName -match 'ffi-rs-win32-x64' }
+          if (-not $ffi) { throw "ffi-rs's .node not unpacked - fff could not load" }
+          Write-Host "fff: $($fff[0].Name); ffi-rs: $($ffi[0].Name)"
       - name: "Smoke: an upgrade leaves running programs running"
         # The daemon is hivemind.exe from the version that started it, and Windows will not delete
         # a running exe: install.ps1 puts each version in a folder of its own and removes one only

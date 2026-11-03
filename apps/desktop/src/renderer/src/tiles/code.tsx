@@ -1,6 +1,6 @@
-import { Files, Folder, GitCompare } from "../components/icons";
+import { Files, Folder, GitCompare, Search } from "../components/icons";
 import { EditorSkeleton, RowsSkeleton } from "../workspace/tile-skeletons";
-import type { TilePlugin, PinRect, TileKindSpec, TileBodyArgs, HistoryRequest } from "./api";
+import type { TilePlugin, PinRect, TileKindSpec, TileBodyArgs, HistoryRequest, EditorReveal } from "./api";
 
 export type WorkbenchTileData = {
   repoPath: string;
@@ -13,6 +13,8 @@ export type WorkbenchTileData = {
   onTogglePin?: (id: string, rect: PinRect) => void;
   startOnChanges?: boolean;
   compare?: { base: string; head: string };
+  /** A line to show: a find result picked in the frame's Search tile. */
+  reveal?: EditorReveal;
 };
 
 const CODE: TileKindSpec = {
@@ -40,6 +42,7 @@ export const codeTile: TilePlugin<WorkbenchTileData> = {
     ...s.pin,
     ...(t.kind === "diff" || t.compare ? { startOnChanges: true } : {}),
     ...(t.compare ? { compare: t.compare } : {}),
+    ...(h.editorReveals[t.id] ? { reveal: h.editorReveals[t.id] } : {}),
   },
   lazy: true,
   body: () => import("../WorkbenchTile").then((m) => ({ default: ({ data }: TileBodyArgs<WorkbenchTileData>) => <m.WorkbenchTile {...data} /> })),
@@ -108,4 +111,35 @@ export const changesTile: TilePlugin<ChangesTileData> = {
   })),
   fallback: () => <RowsSkeleton rows={8} />,
   minSize: { width: 480, height: 320 },
+};
+
+// Search: go to file and find in files (fff on the host, `code.findFiles` / `code.grep`), the panel the
+// Code tile shows in its rail, standalone. A result opens in the frame's editor at its line.
+
+export type SearchTileData = {
+  repoPath: string;
+  onOpenAt: (path: string, line?: number, col?: number) => void;
+  onClose: () => void;
+  pinned?: boolean;
+  onTogglePin?: (id: string, rect: PinRect) => void;
+};
+
+export const searchTile: TilePlugin<SearchTileData> = {
+  surface: "search",
+  name: "Search",
+  kinds: {
+    search: { size: { width: 520, height: 720 }, label: "Search", needsRepo: true, singleton: true, title: "Search", icon: Search, glyph: "⌕", category: "code" },
+  },
+  data: (t, s, h) => s.repoPath === null ? null : {
+    repoPath: s.repoPath,
+    onOpenAt: (file: string, line?: number, col?: number) => h.openFileFromTile(t.id, file, line ? { line, col } : undefined),
+    onClose: s.onClose,
+    ...s.pin,
+  },
+  lazy: true,
+  body: () => import("../code/SearchTile").then((m) => ({
+    default: ({ data }: TileBodyArgs<SearchTileData>) => <m.SearchTile {...data} />,
+  })),
+  fallback: () => <RowsSkeleton rows={8} />,
+  minSize: { width: 280, height: 240 },
 };

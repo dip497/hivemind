@@ -1,6 +1,6 @@
 # Code tools — design (2026-11-02)
 
-Status: step 1 ☑ (2026-11-02: Files and Changes as tools of their own; e2e `code-tools.spec.ts`, `control-open-tool.test.ts`), step 2 (search) postponed, step 3 ☑ (`git-history-2026-11-02.md`, built 2026-11-02), steps 4–6 ☐. Inputs: the bundled Code plugin (`packages/hive-core/src/tool-plugins.ts`,
+Status: step 1 ☑ (2026-11-02: Files and Changes as tools of their own; e2e `code-tools.spec.ts`, `control-open-tool.test.ts`), step 2 ☑ (2026-11-03: fff on the host, `code.findFiles`/`code.picked`/`code.grep` at API 0.40, the Search tile and the Code tile's Search panel, Ctrl+P, release checks; host tests `code-search*.test.ts`, e2e `code-search.spec.ts`), step 4 in part ☑ (closing brackets, word completion; outline and breadcrumbs ☐), step 3 ☑ (`git-history-2026-11-02.md`, built 2026-11-02), steps 4–6 ☐. Inputs: the bundled Code plugin (`packages/hive-core/src/tool-plugins.ts`,
 `CODE_PLUGIN_ID`), its tile (`apps/desktop/src/renderer/src/tiles/code.tsx`,
 `WorkbenchTile.tsx`) and the three components it composes; the Code view
 (`dip497/hivemind-plugins/views/code`), which docks the Code tile and showed what a view cannot
@@ -87,8 +87,9 @@ has plain, regex and fuzzy modes with paging. OpenCode uses it for its agent sea
 - **If it cannot load** (an unsupported platform, a missing binary): `code.findFiles` falls back
   to the `git ls-files` list with the same fuzzy scoring, and `code.grep` to `git grep`
   (`simple-git`, already a dependency). Search stays usable, slower.
-- **Agents**: `hive code find <query>` and `hive code grep <pattern>` call the same methods
-  (`--json`), so an agent searches as the person does.
+- **Agents** search with the tools in their shell (`rg`, `git grep`), faster than a round trip to
+  the app; `hive ctl open-tool @hivemind/code/search` shows the person. No `hive code` command
+  (decided 2026-11-03, as for history).
 
 ### 3.3 Later features, and what each needs
 

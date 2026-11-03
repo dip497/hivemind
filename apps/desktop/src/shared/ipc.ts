@@ -156,6 +156,7 @@ export type {
   WorktreeCreateOpts,
   WorktreeEntry,
 } from "@hivemind/workspace-api/git";
+import type { FindFilesPage, GrepMode, GrepPage } from "@hivemind/workspace-api/code";
 import type { BlameOptions, BlamePayload, CommitInfo, DiffPayload, DiffScope, FileHistoryCursor, FileHistoryPage, GitBranchList, GitStatusSnapshot, HandedOff, LogOptions, LogPage, WorktreeCreateOpts, WorktreeEntry } from "@hivemind/workspace-api/git";
 import type { LastLines, TerminalOpts, Typist } from "@hivemind/workspace-api/terminals";
 
@@ -767,6 +768,10 @@ export interface HiveIpc {
   gitFileHistory(repoPath: string, file: string, cursor?: FileHistoryCursor): Promise<FileHistoryPage>;
   gitBlame(repoPath: string, file: string, opts?: BlameOptions): Promise<BlamePayload>;
   gitCommitInfo(repoPath: string, sha: string): Promise<CommitInfo>;
+  /** Finding (workspace API 0.40): files by a fuzzy name, lines by their text, a pick remembered. */
+  codeFindFiles(repoPath: string, query: string, limit?: number): Promise<FindFilesPage>;
+  codePicked(repoPath: string, query: string, file: string): Promise<void>;
+  codeGrep(repoPath: string, query: string, opts?: { mode?: GrepMode; cursor?: number; caseSensitive?: boolean }): Promise<GrepPage>;
   gitFileContents(
     repoPath: string,
     file: string,
