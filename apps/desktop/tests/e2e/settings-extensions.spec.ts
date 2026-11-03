@@ -179,11 +179,11 @@ test("Tools: the ones that ship are on, an optional one is off, and one is switc
   // Switching one off switches off its own tools, in its record.
   const state = () => JSON.parse(fs.readFileSync(path.join(xdg, "hivemind/settings.json"), "utf8")).plugins.state["tool:@hivemind/code"];
   await tool("@hivemind/code").click();
-  const on = page.getByRole("switch", { name: "Enable Code", exact: true });
+  const on = page.getByRole("switch", { name: /^Enable Code\b/ });
   await expect(on).toHaveAttribute("aria-checked", "true");
   await on.click();
   await expect(on).toHaveAttribute("aria-checked", "false");
-  await expect.poll(state).toEqual({ options: { editor: false } });
+  await expect.poll(state).toEqual({ options: { editor: false, files: false, changes: false, search: false } });
   await settings("plugins");
   await expect(tool("@hivemind/code")).toHaveAttribute("data-state", "off");
   await tool("@hivemind/code").click();
