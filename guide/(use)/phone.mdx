@@ -71,12 +71,23 @@ Add the page to your home screen. It then opens at once, offline too, and update
 | Screen | Does |
 |---|---|
 | **Home** | What needs you first, then working agents, pinned tiles, then every project. Hold or swipe a row to **Stop** or **Close**. **+** starts an agent, with up to four photos. |
-| An agent's chat | The conversation, with each tool use folded into one line, and background updates as quiet lines that fold into a count. A message leaves the box as you send it and shows how far it got. If it fails, **Try again** or **Put back**; nothing is lost. The round button sends, or stops the agent's reply. |
+| An agent's chat | The conversation, with each tool use folded into one line, and background updates as quiet lines that fold into a count. **Load earlier messages** at the top brings older ones. A message leaves the box as you send it and shows how far it got. If it fails, **Try again** or **Put back**; nothing is lost. The round button sends, or stops the agent's reply. |
 | A question | **Allow** / **Deny**, the options to tap, or **Approve** for a plan. Or type your own answer. |
 | Terminal | Fitted to the phone, with **Esc**, **Tab**, arrows, **^C** and **Fit**. |
 | **Views** | Installed views marked for phones, including ones that show your [widgets](/widgets). |
 
 The first answer counts, from the phone or the computer.
+
+### Get a file from an agent
+
+An agent can send you a file: ask it to, for example "send me the report". It runs `hive ctl send-file report.pdf`, and the file shows in that agent's chat on your phone.
+
+- Tap **Download**, then **Save**. On a phone with a share sheet, **Save** opens it, and **Save to Files** is there. A small file is already downloaded, and a small picture shows in the chat.
+- The computer keeps a copy for 7 days, up to 1 GB in all, at most 32 MB a file and the newest 50 files per agent. If your connection drops, the download carries on from where it stopped.
+- A sent file only goes to your own paired phones, never to someone you share a workspace with. It goes without asking you first, so an agent can send you any file it can read.
+- A file downloads as it is and never opens inside the page.
+- Your phone isn't told when a file arrives: the agent says so in the chat. It reaches the phone only when you open that chat, and only while the computer is on.
+- It works for agents running on the computer you paired. An agent on another machine can't send one yet.
 
 ### Who sizes a terminal
 

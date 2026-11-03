@@ -67,10 +67,12 @@ import { workspaceDomains } from "./domains.js";
 import { HANDED_OFF, handOff } from "./hand-off.js";
 import { answers } from "./answers.js";
 import { PeerLinks, tellGuestOf } from "./peer-links.js";
-import { answerKeys, heldBoards, manifestOf, participantNamed, runsIn, sessionFolder } from "./needs.js";
+import { answerKeys, heldBoards, manifestOf, participantNamed, runsIn, sessionFolder, tileOn } from "./needs.js";
 import { agentControl } from "./agent-control.js";
 import { StartPlaces } from "./start-places.js";
 import { askingOf, conversationOf, conversations, transcriptOf } from "./conversations.js";
+import { SENT_FILES_DIR, SentFileStore, sentFiles } from "./sent-files.js";
+import { AGENT_TILE_KIND } from "@hivemind/workspace-doc/shapes";
 import { views } from "./views.js";
 import { listInstalledViews } from "@hivemind/core/views";
 import { TILE_SESSIONS_DIR } from "@hivemind/agents/node";
@@ -368,6 +370,13 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
         if (folder === null) throw new ApiError("NOT_FOUND", `no tile ${bare} is open`);
         return places.keep(folder, images, bare);
       },
+    }),
+    // The files an agent here sends the person's phone (spec/sent-files.md).
+    sentFiles({
+      store: new SentFileStore(path.join(o.dir, SENT_FILES_DIR)),
+      place: (bare) => (tileOn(heldBoards(store), bare)?.record.kind === AGENT_TILE_KIND ? runsIn(heldBoards(store), bare) : null),
+      elsewhere: (place) => isRemote(place),
+      phones: () => devices.list().filter((d) => d.kind === "phone").length,
     }),
     // What an agent here and the person say to each other, from its session file, as it is
     // written (M5, spec/agents.md "Conversation").

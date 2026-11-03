@@ -94,6 +94,26 @@ export interface Folders {
   more?: true;
 }
 
+/** A file an agent sent the person's phone (`agent.sendFile`), frozen when it was sent. */
+export interface SentFile {
+  id: string;
+  /** The agent's tile, bare. */
+  tile: string;
+  /** What it is called, with no folder. */
+  name: string;
+  size: number;
+  type: string;
+  /** When it was sent, ms since the epoch. */
+  at: number;
+}
+
+/** A piece of a file an agent sent (`agent.filePiece`): its bytes from the offset asked for, as
+ *  base64, and the whole file's size in bytes. */
+export interface SentFilePiece {
+  data: string;
+  size: number;
+}
+
 /** A photo given with a prompt: its type and its bytes in base64. */
 export interface StartImage {
   type: "image/png" | "image/jpeg" | "image/webp" | "image/gif";

@@ -90,7 +90,10 @@ const app: App = {
   notes: (agent) => phone ? phone.notes(agent).catch(() => []) : Promise.resolve([]),
   changeNote: (agent, id, to, reason) => phone ? phone.changeNote(agent, id, to, reason) : Promise.resolve(false),
   sendNotes: (agent, ids) => phone ? phone.sendNotes(agent, ids) : Promise.resolve(false),
-  conversation: (agent, said, ended) => phone?.conversation(agent, said, ended) ?? (() => {}),
+  conversation: (agent, said, ended) => phone?.conversation(agent, said, ended) ?? null,
+  sentFiles: (agent, listed) => phone?.sentFiles(agent, listed) ?? null,
+  fetchSentFile: (agent, file, from, got) => reached().fetchSentFile(agent, file, from, got),
+  earlier: (agent, session, before) => reached().earlier(agent, session, before),
   tool: (agent, use) => reached().tool(agent, use),
   commands: (agent) => reached().commands(agent),
   terminal(workspace, tile, changed, ended) {
@@ -238,6 +241,17 @@ addEventListener("hashchange", route);
 
 let saving = 0;
 let savedAt = 0;
+/** What this browser holds of the account shown, kept now. */
+function keepShown(): void {
+  clearTimeout(saving);
+  saving = 0;
+  const shown = phone;
+  if (!shown) return;
+  savedAt = Date.now();
+  const person = shown.account.person;
+  void put(`home:${person}`, shown.kept());
+  void put(`first:${person}`, { shown: shown.shown({ query: "", machine: null }, home.choices.view()), overview: shown.overview() });
+}
 function apply(first: First): void {
   overview = first.overview;
   home.show(first.shown, first.overview);
@@ -260,18 +274,9 @@ function render(): void {
   look.setAgents(first.overview.agents);
   // Kept at once, then at most every 500 ms, what is held then: a busy board changes faster.
   if (saving) return;
-  const keep = () => {
-    saving = 0;
-    const shown = phone;
-    if (!shown) return;
-    savedAt = Date.now();
-    const person = shown.account.person;
-    void put(`home:${person}`, shown.kept());
-    void put(`first:${person}`, { shown: shown.shown({ query: "", machine: null }, home.choices.view()), overview: shown.overview() });
-  };
   const wait = 500 - (Date.now() - savedAt);
-  if (wait <= 0) keep();
-  else saving = setTimeout(keep, wait);
+  if (wait <= 0) keepShown();
+  else saving = setTimeout(keepShown, wait);
 }
 
 /** Pair with the computer `link` names: under the key it knows this browser by, when it was paired
@@ -336,6 +341,13 @@ async function forget(): Promise<void> {
 
 /** Forget `gone` here, with what was kept for it, and show another account or pairing. */
 async function drop(gone: Account): Promise<void> {
+  // Nothing of it is kept again once it is forgotten.
+  if (account === gone) {
+    clearTimeout(saving);
+    saving = 0;
+    phone?.disconnect();
+    phone = null;
+  }
   const keys = forgetAccount(kept, gone.person);
   await save(kept);
   await Promise.all([...keys, `home:${gone.person}`, `first:${gone.person}`].map(remove));
@@ -362,6 +374,7 @@ function unpaired(): void {
 
 /** `to`'s account on screen, its computers dialled; the one shown before let go of. */
 async function show(to: Account): Promise<void> {
+  keepShown();
   phone?.disconnect();
   phone = null;
   account = to;

@@ -3,7 +3,7 @@
 
 import type { ViewSession } from "../pkg/hive_web.js";
 import type { TermSource } from "./terminal.js";
-import type { Agent, BrowserAsk, Folders, Held, Offered, PageNote, Photo, Piece, Places, Reply, Screen, Sent, SlashCommand, Start, Unfolded, ViewFile } from "./types.js";
+import type { Agent, BrowserAsk, EarlierPage, Folders, Held, Offered, PageNote, Photo, Piece, Places, Reply, Screen, Sent, SentFile, SlashCommand, Start, Unfolded, ViewFile } from "./types.js";
 
 export interface App {
   /** Show the agent of `tile`; Back comes back here. `started`: it was just started from here. */
@@ -16,7 +16,16 @@ export interface App {
   send(agent: Agent, text: string, photos: Photo[], going: (part: number) => void): Promise<Sent | false>;
   stop(agent: Agent): Promise<boolean>;
   close(agent: Agent): Promise<boolean>;
-  conversation(agent: Agent, said: (p: Piece) => void, ended: (why: string) => void): () => void;
+  /** Null before the phone has started. */
+  conversation(agent: Agent, said: (p: Piece) => void, ended: (why: string) => void): (() => void) | null;
+  /** Follow the files `agent` sent, the whole list each time, again after each reconnection. What
+   *  it returns stops it. Null before the phone has started. */
+  sentFiles(agent: Agent, listed: (files: SentFile[]) => void): (() => void) | null;
+  /** Fetch a file `agent` sent, from `from`: whether it came whole, false when the connection went
+   *  first. Throws why, when the computer refuses. */
+  fetchSentFile(agent: Agent, file: SentFile, from: number, got: (piece: Uint8Array) => void): Promise<boolean>;
+  /** What `agent` said in its session `session` just before byte `before`. */
+  earlier(agent: Agent, session: string, before: number): Promise<EarlierPage>;
   /** The tool use `use` of `agent`, unfolded. */
   tool(agent: Agent, use: string): Promise<Unfolded>;
   /** The slash commands `agent` takes, by name. */

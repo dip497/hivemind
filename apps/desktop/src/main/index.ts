@@ -97,7 +97,7 @@ import { followWindowLook, initialWindowBackground } from "./window-look.js";
 import { flushWorkspaceStore, installWorkspaceStoreIpc, storeFor, workspaceStore } from "./workspace-store-ipc.js";
 import { machineIdentity, suggestedName } from "./identity.js";
 import { defaultShellFor } from "@hivemind/agent-host/shell-spec";
-import { agentFeed, dialDevice, homeLinesChanged, installNetworkIpc, isYourDevice, joinLink, knownMachines, machinesToRunOn, movedAway, openJoined, peopleHere, personName, shownFrom, stopNetwork, terminalMachine } from "./network.js";
+import { agentFeed, dialDevice, homeLinesChanged, installNetworkIpc, isYourDevice, joinLink, knownMachines, machinesToRunOn, movedAway, openJoined, peopleHere, personName, phonesPaired, shownFrom, stopNetwork, terminalMachine } from "./network.js";
 import { elsewhere, mayWriteShared, onceStarted, placedRun, refusedShared, startedByOthers, wroteShared } from "./shared-workspaces.js";
 import { broadcast, openWindows, registerWindow, tabsOpen, userWindow } from "./windows.js";
 import { patchSettingsExtras } from "@hivemind/core/settings";
@@ -129,6 +129,8 @@ import { controlApi } from "@hivemind/host/control-api";
 import { views } from "@hivemind/host/views";
 import { listInstalledViews } from "@hivemind/core/views";
 import { askingOf, conversationOf, conversations, transcriptOf } from "@hivemind/host/conversations";
+import { SENT_FILES_DIR, SentFileStore, sentFiles } from "@hivemind/host/sent-files";
+import { AGENT_TILE_KIND } from "@hivemind/workspace-doc/shapes";
 import { TILE_SESSIONS_DIR } from "@hivemind/agents/node";
 import type { TerminalOpts } from "@hivemind/workspace-api/terminals";
 import { serveWorkspaceApi } from "./workspace-ipc.js";
@@ -1787,6 +1789,13 @@ const workspaceServer: WorkspaceServer = new WorkspaceServer([
       return placesHere.keep(folder, images, bare);
     },
     pageNote: pageNoteAsked,
+  }),
+  // The files an agent here sends the person's phone (spec/sent-files.md).
+  sentFiles({
+    store: new SentFileStore(path.join(app.getPath("userData"), SENT_FILES_DIR)),
+    place: (bare) => (tileOn(heldBoards(workspaceStore()), bare)?.record.kind === AGENT_TILE_KIND ? runsIn(heldBoards(workspaceStore()), bare) : null),
+    elsewhere: (place) => isRemote(place),
+    phones: phonesPaired,
   }),
   // What an agent here and the person say to each other, from its session file, as it is written
   // (M5, spec/agents.md "Conversation").

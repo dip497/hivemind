@@ -29,6 +29,7 @@ pub mod person;
 #[cfg(not(target_family = "wasm"))]
 pub mod push;
 pub mod screen;
+pub mod sent_files;
 pub mod squeeze;
 #[cfg(not(target_family = "wasm"))]
 pub mod talking;

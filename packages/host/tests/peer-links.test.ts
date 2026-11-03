@@ -30,6 +30,7 @@ import type { WaitingStatus } from "../src/needs.ts";
 import type { LayersShown } from "../src/home.ts";
 import type { HomeMessage } from "@hivemind/workspace-api/home";
 import { appearance, MEDIA_PIECE, type AppearanceOptions } from "../src/appearance.ts";
+import { SENT_FILE_PIECE, SentFileStore, sentFiles, type SentFilesOptions } from "../src/sent-files.ts";
 import { homeLook } from "../src/home.ts";
 import { DEFAULT_APPEARANCE, PRESETS, wallpaperShown, type SharedAppearance } from "@hivemind/core/settings-schema";
 
@@ -144,7 +145,7 @@ function linkPair(device: string, computer: string) {
 /** The person's computer, holding the workspace `api`, with their phone and laptop paired. */
 /** The person's computer, holding the workspace `api` with two agents' tiles. `lines`: each tile's
  *  last line, in place of a map the test sets. */
-function computer(o: { lines?: Pick<TileLines, "get" | "followAll">; look?: SharedAppearance; files?: Pick<AppearanceOptions, "mediaFile" | "liveWallpaper" | "sdk"> } = {}) {
+function computer(o: { lines?: Pick<TileLines, "get" | "followAll">; look?: SharedAppearance; files?: Pick<AppearanceOptions, "mediaFile" | "liveWallpaper" | "sdk">; sent?: SentFilesOptions } = {}) {
   const dir = path.join(tmp, String(made++));
   const repo = path.join(dir, "api");
   const person = newSeed();
@@ -208,7 +209,7 @@ function computer(o: { lines?: Pick<TileLines, "get" | "followAll">; look?: Shar
   // How this computer looks (`appearance.ts`), its wallpaper's files among what it keeps.
   let look = o.look;
   const looks = look ? [appearance({ current: () => look!, onChange: () => {}, server: () => server, ...o.files })] : [];
-  const server = new WorkspaceServer([...workspaceDomains, terminals, ...looks], new Intents(new AuditLog({ file: path.join(dir, "audit.jsonl") })));
+  const server = new WorkspaceServer([...workspaceDomains, terminals, ...looks, ...(o.sent ? [sentFiles(o.sent)] : [])], new Intents(new AuditLog({ file: path.join(dir, "audit.jsonl") })));
   // The agent of t1 waits on the person; t2's works.
   let statuses: WaitingStatus[] = [
     { tileId: "t1", status: { state: "waiting", kind: "permission", since: T, title: "Editing Nav.tsx" } },
@@ -703,7 +704,7 @@ test("the phone following Home is told how the computer looks, every colour in h
   // Glass off: the computer draws no photo, so neither does the phone.
   c.recolour({ ...withPhoto, glass: { ...withPhoto.glass, enabled: false } });
   await until(() => heard().length === 2);
-  assert.deepEqual(heard()[1]!.look!.wallpaper, { kind: "none", colour: false, brightness: Math.round(withPhoto.wallpaper.brightness * 100), motion: withPhoto.glass.animate, glass: null });
+  assert.deepEqual(heard()[1]!.look!.wallpaper, { kind: "none", colour: false, brightness: Math.round(withPhoto.wallpaper.brightness * 100), motion: withPhoto.glass.animate, glass: null, contentTint: null });
 
   const light = PRESETS["catppuccin-latte"]!;
   c.recolour({ ...withPhoto, mode: light.mode, palette: light.palette, terminal: light.terminal, wallpaper: { ...withPhoto.wallpaper, kind: "@dip497/live-scenes/koi", colour: true } });
@@ -724,6 +725,56 @@ test("the phone following Home is told how the computer looks, every colour in h
   later.send("home", { t: "follow" });
   await until(() => later.heard.get("home")!.length === 1);
   assert.deepEqual((JSON.parse(later.heard.get("home")![0]!) as HomeMessage).look, again.look);
+});
+
+test("the owner's phone is shown the files an agent sent and fetches them in pieces, and may not send one or name another tile's; a guest may do none of it", async () => {
+  const dir = fs.mkdtempSync(path.join(tmp, "sent-"));
+  const source = path.join(dir, "report.pdf");
+  const bytes = Buffer.alloc(SENT_FILE_PIECE + 77, 7);
+  fs.writeFileSync(source, bytes);
+  const store = new SentFileStore(path.join(dir, "kept"));
+  const { file } = await store.add("t1", source);
+  const sent: SentFilesOptions = { store, place: () => "/work", elsewhere: () => false, phones: () => 1 };
+  const c = computer({ sent });
+  const phone = c.connect(c.phone);
+  const api = phone.open("api");
+  api.send({ t: "open", workspace: c.workspace });
+  let id = 0;
+  const ask = async (method: string, params: unknown[]) => {
+    const n = ++id;
+    api.send({ id: n, method, params });
+    await until(() => api.heard.some((f) => (JSON.parse(f) as { id?: number }).id === n));
+    return JSON.parse(api.heard.find((f) => (JSON.parse(f) as { id?: number }).id === n)!) as { result?: Record<string, unknown>; error?: { code: string } };
+  };
+  assert.deepEqual((await ask("agent.files", ["t1"])).result, { files: [file] });
+  const first = (await ask("agent.filePiece", [file.id, 0])).result!;
+  const second = (await ask("agent.filePiece", [file.id, SENT_FILE_PIECE])).result!;
+  assert.ok(Buffer.concat([first, second].map((r) => Buffer.from(r.data as string, "base64"))).equals(bytes));
+  assert.equal((await ask("agent.files", ["t-of-no-workspace"])).error?.code, "NOT_FOUND");
+  assert.equal((await ask("agent.sendFile", ["t1", source])).error?.code, "FORBIDDEN");
+  assert.equal((await ask("agent.sentFiles", ["t1"])).error?.code, "FORBIDDEN");
+  assert.equal((await ask("agent.takeBackFile", [file.id])).error?.code, "FORBIDDEN");
+
+  const guest = await guestWindows({ sent });
+  assert.equal((await guest.ask("agent.files", ["t1"])).error?.code, "FORBIDDEN");
+  assert.equal((await guest.ask("agent.filePiece", [file.id, 0])).error?.code, "FORBIDDEN");
+  assert.equal((await guest.ask("agent.sendFile", ["t1", source])).error?.code, "FORBIDDEN");
+  assert.equal((await guest.ask("agent.takeBackFile", [file.id])).error?.code, "FORBIDDEN");
+  assert.equal((await store.of("t1")).length, 1);
+});
+
+test("a phone may read what an agent said earlier; a guest with the view role may too, as it may read the conversation", async () => {
+  const c = computer();
+  const phone = c.connect(c.phone);
+  const api = phone.open("api");
+  api.send({ t: "open", workspace: c.workspace });
+  api.send({ id: 1, method: "agent.conversationBefore", params: ["t1", "s1", 100] });
+  await until(() => api.heard.length > 0);
+  // Asked of a host that serves no conversation here: the method is let through to it, not refused.
+  assert.notEqual((JSON.parse(api.heard[0]!) as { error?: { code: string } }).error?.code, "FORBIDDEN");
+  const guest = await guestWindows();
+  assert.notEqual((await guest.ask("agent.conversationBefore", ["t1", "s1", 100])).error?.code, "FORBIDDEN");
+  assert.equal((await guest.ask("agent.conversationBefore", ["t-of-no-workspace", "s1", 100])).error?.code, "NOT_FOUND");
 });
 
 test("the owner's phone is given the wallpaper's photo in pieces and its live wallpaper's files under the views' policy; an old revision, a file outside the wallpaper and a guest are refused", async () => {
@@ -917,7 +968,7 @@ test("while a phone follows Home, every agent's words are read, unwatched and wi
  *  terminal, each with an `api` stream of its own for terminals, on her one connection, as her app
  *  opens them. `early`: the first window asks before her app's hello on `sync` arrives, as one may
  *  just after it dials. */
-async function guestWindows({ early = false, looks }: { early?: boolean; looks?: { look: SharedAppearance; files: Pick<AppearanceOptions, "mediaFile" | "liveWallpaper" | "sdk"> } } = {}) {
+async function guestWindows({ early = false, looks, sent }: { early?: boolean; looks?: { look: SharedAppearance; files: Pick<AppearanceOptions, "mediaFile" | "liveWallpaper" | "sdk"> }; sent?: SentFilesOptions } = {}) {
   const dir = path.join(tmp, String(made++));
   const repo = path.join(dir, "api");
   const person = newSeed();
@@ -943,7 +994,7 @@ async function guestWindows({ early = false, looks }: { early?: boolean; looks?:
   });
   const tileLines = new TileLines({ server: () => server });
   const appearances = looks ? [appearance({ current: () => looks.look, onChange: () => {}, server: () => server, ...looks.files })] : [];
-  const server = new WorkspaceServer([...workspaceDomains, terminals.domain, tileLines.domain, ...appearances], intents);
+  const server = new WorkspaceServer([...workspaceDomains, terminals.domain, tileLines.domain, ...appearances, ...(sent ? [sentFiles(sent)] : [])], intents);
   const links = new PeerLinks({ store, changes: () => () => {}, lists, server, machines: { self: () => ({ device: idOf(newSeed()), name: "desk" }), mine: () => undefined, whose: () => undefined, saved: () => undefined } });
   const [computerEnd, herComputer] = linkPair(hers, idOf(newSeed()));
   links.serve(computerEnd);

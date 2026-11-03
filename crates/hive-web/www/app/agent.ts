@@ -8,6 +8,7 @@ import { Chat } from "./chat.js";
 import { Ask, type Composer, type Picked, composer, h, icon, iconButton, say } from "./dom.js";
 import { Outbox, type Outgoing } from "./outbox.js";
 import { PHOTOS_MAX, photoOf } from "./photos.js";
+import { FileRows } from "./sent-files.js";
 import { TerminalView } from "./terminal.js";
 import type { Agent, Overview, PageNote, SlashCommand } from "./types.js";
 import { NOTICES, ago, elapsed, kindLabel, stateLabel, where } from "./words.js";
@@ -59,6 +60,11 @@ export class AgentScreen {
   private typed: Answers["typed"] = null;
   private chat: Chat | null = null;
   private unfollow: (() => void) | null = null;
+  /** The files it sent, as rows in its chat. */
+  private files: FileRows | null = null;
+  private unfollowFiles: (() => void) | null = null;
+  /** Over its terminal, which shows them not: that there are files, and a way to them. */
+  private readonly filesNote = h("button", { type: "button", class: "files-note", hidden: true, "data-files-note": "" });
   /** Agents started from here that the computer has not listed yet. */
   private readonly fresh = new Set<string>();
   private readonly outbox: Outbox;
@@ -78,12 +84,14 @@ export class AgentScreen {
       void this.showNotes();
     });
     this.menu.append(notes, close);
+    this.filesNote.addEventListener("click", () => this.showTerminal(false));
     const more = iconButton("more", "More", () => (this.menu.hidden = !this.menu.hidden), { "data-more": "" });
     this.el.addEventListener("click", () => (this.menu.hidden = true));
     this.el.append(
       h("header", { class: "backbar" }, back, h("div", { class: "what" }, this.title, h("p", { class: "sub" }, this.dot, this.sub)), this.flip, more, this.menu),
       this.notes,
       this.gone,
+      this.filesNote,
       this.body,
       this.dock);
     const message = composer("Message", (text, photos) => this.sendIt(text, photos), { "data-message": "" },
@@ -181,7 +189,11 @@ export class AgentScreen {
     this.typed = null;
     this.suggested.hidden = true;
     this.waits.replaceChildren();
-    this.chat = new Chat((use) => (this.agent ? this.app.tool(this.agent, use) : Promise.reject(new Error("it is no longer there"))));
+    this.chat = new Chat(
+      (use) => (this.agent ? this.app.tool(this.agent, use) : Promise.reject(new Error("it is no longer there"))),
+      (session, before) => (this.agent ? this.app.earlier(this.agent, session, before) : Promise.reject(new Error("it is no longer there"))),
+    );
+    this.files = new FileRows(this.chat, (file, from, got) => (this.agent ? this.app.fetchSentFile(this.agent, file, from, got) : Promise.resolve(false)), () => this.showFilesNote());
     for (const item of this.outbox.of(tile)) this.showOutgoing(item, this.chat);
     this.terminal = false;
     this.place(this.chat.el);
@@ -237,6 +249,11 @@ export class AgentScreen {
     this.closing.el.hidden = true;
     this.unfollow?.();
     this.unfollow = null;
+    this.unfollowFiles?.();
+    this.unfollowFiles = null;
+    this.files?.close();
+    this.files = null;
+    this.filesNote.hidden = true;
     if (this.asksTimer) clearInterval(this.asksTimer);
     this.asksTimer = null;
     this.asksSeen = "";
@@ -285,7 +302,17 @@ export class AgentScreen {
         this.showTerminal(true);
       }
     }
+    if (!this.unfollowFiles && this.files) {
+      const files = this.files;
+      this.unfollowFiles = this.app.sentFiles(a, (list) => files.listed(list));
+    }
     this.term.retry();
+  }
+
+  private showFilesNote(): void {
+    const count = this.files?.count ?? 0;
+    this.filesNote.hidden = !this.terminal || count === 0;
+    this.filesNote.textContent = count === 1 ? "1 file from this agent" : `${count} files from this agent`;
   }
 
   /** Its terminal, or its chat: the terminal is watched only while it shows. */
@@ -300,6 +327,7 @@ export class AgentScreen {
     // The terminal shows the chooser itself; the header still says it waits.
     this.waits.hidden = on;
     this.place(on ? this.term.el : this.chat.el);
+    this.showFilesNote();
     if (on) this.term.watch(this.app, a.workspace, a.tile);
     else this.term.unwatch();
   }

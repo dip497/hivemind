@@ -477,7 +477,10 @@ hive ctl keys <tileId> Down,Enter                             # drive its TUI pi
 hive ctl agents --json                                        # every agent with its state (working / idle / waiting / asleep / …), what it waits on and its last line; --watch follows them
 hive ctl tiles --json                                         # every tile (agents, terminals, tools, browsers) with its kind, name and frame
 hive ctl focus <tileId> · hive ctl close <tileId> · hive ctl rename <tileId> "name"   # no name: take it away
+hive ctl send-file report.pdf --json                          # a copy for the person's phone, in your chat there; at most 32 MiB, kept 7 days
 \`\`\`
+
+A file sent with \`send-file\` waits on the computer until the person's phone opens your chat: say in your reply that you sent it, and never that they have it. It goes only to their own paired phones, and with no approval, so send only what they asked for or need.
 
 With no \`--mode\`, a delegated worker runs autonomously (no human at its tile). Pass \`--mode yolo\` to ask nothing whatever the agent, or \`--mode plan|acceptEdits|default\` to keep a human in the loop, or \`--supervise\` to route its prompts to you. \`--no-report\` makes a fire-and-forget worker you'll poll with \`read\`. Keep \`read --timeout\` (e.g. \`90s\`) under your own tool's limit (Claude Code Bash: 120 s); the wait is short polls, so it is safe to call again.
 

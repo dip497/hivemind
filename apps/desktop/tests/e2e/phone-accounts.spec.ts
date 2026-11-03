@@ -198,10 +198,23 @@ test("each account on the phone shows its own computer's colours and photo, kept
   await chips.nth(0).click();
   await shows("#123456", 1200);
 
+  // Left the moment their look changed, within the half second kept changes wait: nothing is lost.
+  await chips.nth(1).click();
+  await shows("#654321", 800);
+  await page.clock.install();
+  await page.clock.pauseAt(Date.now() + 60_000);
+  await theirs.evaluate(() => window.hive.settingsSet("appearance.palette.bg", "#654322"));
+  await expect.poll(canvas, { timeout: 30_000 }).toBe("#654322");
+  await theirs.evaluate(() => window.hive.settingsSet("appearance.palette.bg", "#654323"));
+  await expect.poll(canvas, { timeout: 30_000 }).toBe("#654323");
+  await chips.nth(0).click();
+  await page.clock.resume();
+  await shows("#123456", 1200);
+
   // Their computer stopped, the phone still has their look: it asks them for nothing.
   await apps.pop()!.close();
   await chips.nth(1).click();
-  await shows("#654321", 800);
+  await shows("#654323", 800);
 
   // An account that has said nothing of how it looks, as one kept by an older page, shows none of another's.
   await chips.nth(0).click();

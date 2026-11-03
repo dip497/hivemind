@@ -11,7 +11,7 @@ use hive_phone::{
     identity::DeviceCertificate,
     markdown, network, notes, pairing, person,
     screen::{Screen, FIRST_HISTORY},
-    views,
+    sent_files, views,
     workspace::{self, Answer, Input, Reply, Sent, Watched},
 };
 use iroh::{
@@ -728,6 +728,7 @@ impl Host {
                 "entries": piece.entries,
                 "cursor": piece.cursor,
                 "session": piece.session,
+                "before": piece.before,
             });
             if let Ok(piece) = to_js(&piece) {
                 let _ = said.call1(&JsValue::NULL, &piece);
@@ -738,6 +739,23 @@ impl Host {
             Ok(())
         };
         refused_or(n0_future::future::or(followed, stopped).await, ())
+    }
+
+    /// What the agent of `tile` said in its session `session` just before byte `before`
+    /// (`agent.conversationBefore`): `{entries, before}`.
+    #[wasm_bindgen(js_name = conversationBefore)]
+    pub async fn conversation_before(
+        &self,
+        workspace: String,
+        tile: String,
+        session: String,
+        before: f64,
+    ) -> Result<JsValue, JsError> {
+        let page =
+            conversation::earlier(&self.connection, &workspace, &tile, &session, before as u64)
+                .await
+                .map_err(err)?;
+        to_js(&json!({ "entries": page.entries, "before": page.before }))
     }
 
     /// The views the device offers this browser in `workspace` (`view.list`): `[{id, name,
@@ -803,6 +821,55 @@ impl Host {
         let data = js_sys::Uint8Array::from(&bytes[..]);
         js_sys::Reflect::set(&out, &"data".into(), &data).map_err(|_| err("no object"))?;
         Ok(out)
+    }
+
+    /// Follow the files the agent of `tile` sent (hive-phone's `sent_files::follow`): `listed` is
+    /// called with `[{id, name, size, type, at}]`, the whole list each time, until `until` settles.
+    #[wasm_bindgen(js_name = sentFiles)]
+    pub async fn sent_files(
+        &self,
+        workspace: String,
+        tile: String,
+        listed: js_sys::Function,
+        until: js_sys::Promise,
+    ) -> Result<(), JsError> {
+        let followed = sent_files::follow(&self.connection, &workspace, &tile, |files| {
+            if let Ok(files) = to_js(&json!(files)) {
+                let _ = listed.call1(&JsValue::NULL, &files);
+            }
+        });
+        let stopped = async {
+            let _ = wasm_bindgen_futures::JsFuture::from(until).await;
+            Ok(())
+        };
+        refused_or(n0_future::future::or(followed, stopped).await, ())
+    }
+
+    /// Fetch the file `id` of `size` bytes from `from` on (hive-phone's `sent_files::fetch`): `got`
+    /// is handed each piece, a `Uint8Array`, in order: whether it has it all, false when the
+    /// connection went first; refused, it throws why.
+    #[wasm_bindgen(js_name = fetchSentFile)]
+    pub async fn fetch_sent_file(
+        &self,
+        workspace: String,
+        id: String,
+        size: f64,
+        from: f64,
+        got: js_sys::Function,
+    ) -> Result<bool, JsError> {
+        let fetched = sent_files::fetch(
+            &self.connection,
+            &workspace,
+            &id,
+            size as u64,
+            from as u64,
+            |piece| {
+                let piece = js_sys::Uint8Array::from(&piece[..]);
+                let _ = got.call1(&JsValue::NULL, &piece);
+            },
+        )
+        .await;
+        refused_or(fetched.map(|()| true), false)
     }
 
     /// Open the view `view` on `workspace`, shown on `screen` (`{w, h, theme}`): its session there.

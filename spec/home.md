@@ -1,4 +1,4 @@
-# Home (0.5)
+# Home (0.6)
 
 What the person's phone shows first (`docs/design/phone-browser-2026-10-03.md` §11.2): every
 workspace the computer holds, its frames and its tiles, as the desktop's Layers panel lists them,
@@ -75,13 +75,14 @@ again, alone or with rows, whenever it changed: never otherwise.
     "terminal": { "background": "#101820", "foreground": "#eeeeee", "cursor": "#eeeeee",
       "selection": "#333333", "ansi": ["#101010", … 16 in all] },
     "wallpaper": { "kind": "image", "colour": false, "brightness": 85, "motion": true, "glass": 72,
-      "media": { "revision": "0123456789abcdef", "type": "image" } } } }
+      "contentTint": null, "media": { "revision": "0123456789abcdef", "type": "image" } } } }
 ```
 
 `colors` are the palette's tokens and the accent's `brand` and `accent`, each `#rrggbb`. The
 wallpaper is the one the computer draws: `kind` a built-in one's id (`none` when it draws none),
 `image`, `video` or a package's live wallpaper (`@owner/package/name`); `brightness` and `glass`
-(the panels' tint while glass is on, else null) in percent. A photo or video is named by
+(the panels' tint while glass is on, else null) in percent, as is `contentTint` (0.6; tool content's
+tint while tool content is frosted, else null). A photo or video is named by
 `media.revision`, a hash of its address, never the address; its bytes come from
 `appearance.media`, a live wallpaper's files from `appearance.wallpaperFile` (`workspace-api.md`).
 A device keeps a look only when every colour is `#rrggbb`, the mode `dark` or `light`, there are 16

@@ -35,19 +35,22 @@ test.afterEach(async () => {
 });
 
 const shot = async (page: Page, name: string) => { if (SHOTS) await page.screenshot({ path: path.join(SHOTS, `${name}.png`) }); };
-/** The largest step between neighbouring pixels down the screen's left margin, above the tabs, where only the wallpaper's cover shows. */
+/** The largest step between neighbouring pixels down the screen's left margin, between what stays at its top and foot, where only the wallpaper's cover shows. */
 const marginStep = async (page: Page) => {
-  const tabs = await page.locator(".tabs").evaluate((el) => el.getBoundingClientRect().top);
+  const [from, to] = await page.evaluate(() => {
+    const shown = (s: string) => [...document.querySelectorAll<HTMLElement>(s)].find((el) => el.offsetParent)?.getBoundingClientRect();
+    return [Math.ceil(shown(".backbar")?.bottom ?? 0) + 2, Math.floor(shown(".tabs")?.top ?? innerHeight * 0.7) - 2];
+  });
   const picture = await page.screenshot({ type: "png", scale: "css" });
-  return page.evaluate(async ([b64, above]) => {
+  return page.evaluate(async ([b64, top, below]) => {
     const bitmap = await createImageBitmap(new Blob([Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))], { type: "image/png" }));
     const g = new OffscreenCanvas(bitmap.width, bitmap.height).getContext("2d")!;
     g.drawImage(bitmap, 0, 0);
-    const px = g.getImageData(6, 0, 1, above).data;
+    const px = g.getImageData(6, top!, 1, below! - top!).data;
     let step = 0;
     for (let i = 4; i < px.length; i += 4) for (let c = 0; c < 3; c++) step = Math.max(step, Math.abs(px[i + c]! - px[i + c - 4]!));
     return step;
-  }, [picture.toString("base64"), Math.floor(tabs) - 2] as const);
+  }, [picture.toString("base64"), from, to] as const);
 };
 const token = (page: Page, name: string) => page.evaluate((n) => getComputedStyle(document.documentElement).getPropertyValue(`--${n}`).trim(), name);
 
@@ -140,6 +143,20 @@ test("an open phone page takes the computer's colours, its photo from the same f
   await shot(page, "photo-devices");
   expect(await marginStep(page)).toBeLessThan(12);
   await page.locator('[data-tab="home"]').click();
+  // A conversation is solid; with tool content frosted, the photo shows there, sharp, as much as the content tint leaves.
+  await page.evaluate(() => (location.hash = "agent=nobody"));
+  await expect(page.locator('[data-screen="agent"]')).toBeVisible();
+  expect(await marginStep(page)).toBeLessThan(12);
+  await set("appearance.glass.contentOpacity", 0.2);
+  await set("appearance.glass.contentGlass", true);
+  await expect.poll(() => marginStep(page), { timeout: 10_000 }).toBeGreaterThan(12);
+  await shot(page, "photo-chat");
+  const thin = await marginStep(page);
+  await set("appearance.glass.contentOpacity", 0.9);
+  await expect.poll(() => marginStep(page), { timeout: 10_000 }).toBeLessThan(thin / 2);
+  await set("appearance.glass.contentGlass", false);
+  await expect.poll(() => marginStep(page), { timeout: 10_000 }).toBeLessThan(12);
+  await page.evaluate(() => (location.hash = "home"));
   // Kept: the page opened again shows it before asking the computer for it again.
   await page.reload();
   await expect(page.locator("[data-wallpaper-photo]")).toBeAttached({ timeout: 20_000 });

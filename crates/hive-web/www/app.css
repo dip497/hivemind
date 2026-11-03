@@ -304,6 +304,25 @@ button { cursor: pointer; }
 .md table { border-collapse: collapse; font-size: 14px; line-height: 20px; }
 .md th, .md td { border: 1px solid var(--line); padding: 4px 8px; text-align: start; vertical-align: top; }
 .md th { background: var(--panel); font-weight: 600; }
+/* A file the agent sent: its name, how much came, and what to do with it. */
+.sent-file { align-self: stretch; display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; background: var(--raised); border-radius: 14px; }
+.sent-file-row { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.sent-file-icon { flex: none; width: 22px; height: 22px; color: var(--text2); }
+.sent-file-about { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.sent-file-name { font-size: 15px; line-height: 20px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sent-file-size { font-size: 13px; line-height: 18px; color: var(--text3); }
+.sent-file button { flex: none; min-height: 44px; padding: 0 14px; border: 1px solid var(--line); border-radius: 22px; background: transparent; font-size: 14px; }
+.sent-file button:disabled { opacity: 0.5; }
+.sent-file-bar { display: block; height: 3px; border-radius: 2px; background: var(--line); overflow: hidden; }
+.sent-file-bar[hidden] { display: none; }
+.sent-file-bar > span { display: block; height: 100%; width: 0; background: var(--text); }
+.sent-file-preview[hidden] { display: none; }
+.sent-file-preview img { display: block; max-width: 100%; max-height: 320px; border-radius: 8px; }
+.files-note { align-self: stretch; min-height: 44px; border: 0; border-bottom: 1px solid var(--line); background: var(--raised); font-size: 14px; }
+.files-note[hidden] { display: none; }
+.load-earlier { align-self: center; flex: none; min-height: 44px; padding: 0 16px; border: 1px solid var(--line); border-radius: 22px; background: transparent; font-size: 14px; color: var(--text2); }
+.load-earlier[hidden] { display: none; }
+.load-earlier:disabled { opacity: 0.6; }
 /* A tool used: one quiet line, red only when it failed; tools used one after another, one fold. */
 /* What the agent's own program wrote: quieter than a tool, and one line for a run of them. */
 .said-program > p { margin: 0; min-height: 24px; padding: 2px 0; display: flex; align-items: center; }
@@ -673,7 +692,7 @@ button { cursor: pointer; }
 @keyframes wp-drift-c { from { transform: translate3d(0, 0, 0) scale(0.9); } to { transform: translate3d(-8vw, 10vh, 0) scale(1.2); } }
 html.wp-static .wp-bloom { animation: none; }
 @media (prefers-reduced-motion: reduce) { .wp-bloom { animation: none; } }
-:root:has(.screen[data-screen="view"]:not([hidden])) .wallpaper, :root:has(.agent-screen:not([hidden])) .wallpaper { display: none; }
+:root:has(.screen:is([data-screen="view"], [data-screen="terminal"]):not([hidden])) .wallpaper, :root:not(.content-glass):has([data-screen="agent"]:not([hidden])) .wallpaper { display: none; }
 /* A live wallpaper's frame, shown once it has drawn its first frame. */
 /* Its own colour scheme, so the frame is not painted opaque when the page is dark. */
 .wp-live { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: transparent; color-scheme: normal; pointer-events: none; opacity: 0; transition: opacity 0.4s ease-out; }
@@ -698,8 +717,20 @@ html.wallpaper-on .screen:not(.agent-screen, .start-screen, .view-screen) .card:
 html.wallpaper-on .search { background: color-mix(in srgb, var(--panel) 60%, transparent); }
 /* Stuck, a heading needs a cover over the rows under it, and that cover is a stripe on the sheet: it scrolls with them. */
 html.wallpaper-on :is(.project, .group-head) { position: static; background: transparent; }
+/* A conversation while the computer frosts tool content: as its tiles, the wallpaper under the content
+   tint alone, no blur, held still. Only its title bar, which nothing scrolls under, is on the glass. */
+html.wallpaper-on.content-glass .screen[data-screen="agent"] { background: color-mix(in srgb, var(--canvas) var(--content-tint), transparent); }
+html.content-glass:has([data-screen="agent"]:not([hidden])) .wallpaper::after { background: none; -webkit-backdrop-filter: none; backdrop-filter: none; }
+html.content-glass:has([data-screen="agent"]:not([hidden])) .wp-bloom { animation-play-state: paused; }
+html.wallpaper-on.content-glass [data-screen="agent"] .backbar {
+  background: color-mix(in srgb, var(--canvas) clamp(68%, var(--glass), 92%), transparent);
+  -webkit-backdrop-filter: blur(18px) saturate(130%);
+  backdrop-filter: blur(18px) saturate(130%);
+}
+html.wallpaper-on.wallpaper-moving.content-glass [data-screen="agent"] .backbar { -webkit-backdrop-filter: none; backdrop-filter: none; }
 @media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
   html.wallpaper-on .wallpaper::after { background: var(--canvas); }
+  html.wallpaper-on.content-glass .screen[data-screen="agent"] { background: var(--canvas); }
   html.wallpaper-on .screen:not(.agent-screen, .start-screen, .view-screen) .card:not(.sheet) { background: var(--card); }
   html.wallpaper-on .search { background: var(--panel); }
   html.wallpaper-on :is(.project, .group-head) { position: sticky; background: var(--canvas); }

@@ -13,8 +13,13 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 - Added: workspace API 0.39: `git.log`, `git.fileHistory`, `git.blame` and `git.commitInfo`, at the `view` role.
 - Fixed: a file tree's right-click menu on the canvas (Files, Changes' file list) opened off to the side, often outside the window.
 - Added: **Files** and **Changes**, the Code tile's file tree and its changes as tools of their own: **Add ▸ Files** or **Changes**, or `hive ctl open-tool @hivemind/code/files` and `…/changes`. Each shows its own frame's folder, and a file picked in one opens in that frame's editor. `hive ctl open-tool @hivemind/code` still opens Code.
+- Added: on the phone page, the chat shows your wallpaper while **Frost tool content** is on, under your **Content tint**.
+- Fixed: on the phone page, switching accounts just after a computer's look changed no longer loses that change.
 - Changed: phone page layout. Over a wallpaper, each screen is one even sheet of glass, with no stripes or bare photo below the list; **Devices** is grouped into Computers, Other accounts and This browser, with long ids on one line until tapped and **Switch** beside the account. While a wallpaper shows, project headings scroll with their rows and a photo holds still behind the glass.
 - Fixed: a Windows computer whose ssh opens Git Bash can be added as a machine, instead of being refused as an unsupported platform.
+- Added: an agent can send you a file. `hive ctl send-file report.pdf` puts it in that agent's chat on the phone page, where **Download** and **Save** get it; it stays on the computer for 7 days, at most 32 MiB. `hive ctl sent-files` lists them and `hive ctl take-back-file` removes one. Workspace API 0.39 adds `agent.sendFile`, `agent.sentFiles`, `agent.takeBackFile`, `agent.files` and `agent.filePiece`.
+- Added: on the phone page, **Load earlier messages** at the top of a chat brings the rest of that agent's conversation, a page at a time. Workspace API 0.39 adds `agent.conversationBefore`, and `agent.conversation` answers `before`.
+- Fixed: on the phone page, a chat open when the page reloads no longer stays on **Loading chat…**.
 
 ## [2026.11.1] — 2026-11-02
 

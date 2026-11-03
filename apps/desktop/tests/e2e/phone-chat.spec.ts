@@ -271,6 +271,67 @@ const written = (id: string, content: unknown, more: object = {}) => `${JSON.str
 const notification = (summary: string, more = "") => `<task-notification>\n<task-id>af46</task-id>\n<output-file>/tmp/invented/tasks/af46.output</output-file>\n<status>completed</status>\n<summary>${summary}</summary>\n${more}<usage><total_tokens>1234</total_tokens></usage>\n</task-notification>`;
 const fromProgram = { origin: { kind: "task-notification" } };
 
+test("a chat opened after a reload shows its newest and offers the rest: Load earlier brings it above, what the person reads stays where it is, and a tool at the edge of a page takes in what it gave back", async () => {
+  test.skip(!hiveNetBuilt() || !hiveWebBuilt(), "build hive-net (cargo build in crates/hive-net) and the page (crates/hive-web/build.sh) first");
+  test.setTimeout(240_000);
+  const { page, send, sessionFile, agent, person: said } = await chatWith(true);
+  await send("echo ready");
+  await expect(agent).toHaveText(["ready"], { timeout: 30_000 });
+  const stamp = (n: number) => new Date(Date.now() + n).toISOString();
+  const record = (type: string, uuid: string, n: number, content: unknown) => `${JSON.stringify({ type, uuid, timestamp: stamp(n), sessionId: "s", message: { role: type, content } })}\n`;
+  // 150 messages, a tool used, 198 messages, what it gave back just inside the newest 200 entries.
+  const lines = [
+    ...Array.from({ length: 150 }, (_, n) => record("user", `old-${n}`, n, `message ${n}`)),
+    record("assistant", "the-use", 150, [{ type: "tool_use", id: "edge-tool", name: "Bash", input: { command: "ls edge" } }]),
+    record("user", "the-result", 151, [{ type: "tool_result", tool_use_id: "edge-tool", content: "the edge gave this back" }]),
+    ...Array.from({ length: 199 }, (_, n) => record("user", `new-${n}`, 152 + n, `message ${150 + n}`)),
+  ];
+  fs.appendFileSync(sessionFile(), lines.join(""));
+
+  // Loaded again with the chat open, the chat follows again.
+  await page.reload();
+  const newest = said.filter({ hasText: "message 348" });
+  await expect(newest).toBeVisible({ timeout: 60_000 });
+  await expect(page.locator("[data-loading]")).toHaveCount(0);
+  await expect(said.filter({ hasText: /^message 0$/ })).toHaveCount(0);
+  const more = page.locator("[data-load-earlier]");
+  await expect(more).toHaveText("Load earlier messages");
+  // What a tool gave back, its use not here yet.
+  await expect(page.locator('[data-chat] [data-who="tool"]')).toHaveCount(1);
+
+  const anchor = said.filter({ hasText: /^message 150$/ });
+  await anchor.scrollIntoViewIfNeeded();
+  const seen = (await anchor.boundingBox())!.y;
+  await more.evaluate((b) => (b as HTMLButtonElement).click());
+  await expect(said.filter({ hasText: /^message 0$/ })).toHaveCount(1, { timeout: 30_000 });
+  await expect(more).toBeHidden();
+  expect(Math.abs((await anchor.boundingBox())!.y - seen), "what the person reads stays where it is").toBeLessThan(4);
+
+  // All of it, once each, in order.
+  const texts = await said.allInnerTexts();
+  const numbered = texts.filter((x) => /^message \d+$/.test(x)).map((x) => Number(x.slice(8)));
+  expect(numbered).toEqual(Array.from({ length: 349 }, (_, n) => n));
+
+  // The tool found its result: no row of a result alone, and it unfolds with it.
+  await expect(page.locator('[data-chat] [data-who="tool"]')).toHaveCount(0);
+  const tool = page.locator('[data-chat] [data-entry^="the-use"]');
+  await tool.locator("button").first().click();
+  await expect(tool).toContainText("the edge gave this back", { timeout: 15_000 });
+});
+
+test("a chat whose newest stretch is mostly what no rule reads goes on back by itself, so it does not open nearly empty", async () => {
+  test.skip(!hiveNetBuilt() || !hiveWebBuilt(), "build hive-net (cargo build in crates/hive-net) and the page (crates/hive-web/build.sh) first");
+  test.setTimeout(240_000);
+  const { page, send, sessionFile, agent, person: said } = await chatWith(true);
+  await send("echo ready");
+  await expect(agent).toHaveText(["ready"], { timeout: 30_000 });
+  const noise = `${JSON.stringify({ type: "progress", uuid: "n", timestamp: new Date().toISOString(), data: "n".repeat(300_000) })}\n`;
+  fs.appendFileSync(sessionFile(), `${Array.from({ length: 40 }, (_, n) => written(`early-${n}`, `early ${n}`)).join("")}${noise.repeat(5)}${written("late", "late one")}`);
+  await page.reload();
+  await expect(said.filter({ hasText: "late one" })).toBeVisible({ timeout: 60_000 });
+  await expect(said.filter({ hasText: /^early 39$/ })).toBeVisible({ timeout: 30_000 });
+});
+
 test("what the agent's own program writes shows as quiet lines, never as the person's: a run of them is one line with a count that opens to each, a helper's report only when opened; the person's own words about one stay theirs", async ({}, testInfo) => {
   test.skip(!hiveNetBuilt() || !hiveWebBuilt(), "build hive-net (cargo build in crates/hive-net) and the page (crates/hive-web/build.sh) first");
   test.setTimeout(240_000);

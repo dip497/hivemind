@@ -114,6 +114,41 @@ pub struct Piece {
     pub entries: Vec<Entry>,
     pub cursor: u64,
     pub session: String,
+    /// Where what was said earlier ends, in the answer to asking from no cursor: 0 when nothing was.
+    pub before: Option<u64>,
+}
+
+/// A page of what was said earlier: its entries, and where what was said before them ends.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Earlier {
+    pub entries: Vec<Entry>,
+    pub before: u64,
+}
+
+/// What the agent of `tile` said in its session `session` just before byte `before`, through
+/// `workspace`.
+pub async fn earlier(
+    connection: &Connection,
+    workspace: &str,
+    tile: &str,
+    session: &str,
+    before: u64,
+) -> Result<Earlier> {
+    let mut w = Workspace::open(connection, workspace).await?;
+    let answer = w
+        .call("agent.conversationBefore", json!([tile, session, before]))
+        .await?;
+    let page_before = answer
+        .get("before")
+        .and_then(Value::as_u64)
+        .context("the device did not say where this page begins")?;
+    if page_before >= before {
+        anyhow::bail!("the device sent a page that does not go back");
+    }
+    Ok(Earlier {
+        entries: read_entries(&answer["entries"]),
+        before: page_before,
+    })
 }
 
 /// What the phone was handed of a conversation it follows, so that each piece is handed in order
@@ -237,6 +272,7 @@ pub async fn follow(
                 entries: read_entries(&answer["entries"]),
                 cursor,
                 session: session.unwrap_or_default().to_string(),
+                before: answer.get("before").and_then(Value::as_u64),
             };
             handed.answered(piece).into_iter().for_each(&mut said);
             continue;
@@ -265,6 +301,7 @@ pub async fn follow(
                 entries: read_entries(at(1).unwrap_or(&Value::Null)),
                 cursor,
                 session: session.to_string(),
+                before: None,
             };
             handed.sent(piece).into_iter().for_each(&mut said);
         }
@@ -288,6 +325,7 @@ mod tests {
             }],
             cursor,
             session: session.into(),
+            before: None,
         }
     }
 
