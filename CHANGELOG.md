@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Added: on the phone page, **View** can hide asleep agents, as the desktop's Layers panel does, and an asleep agent's row says so. Home 0.8 adds `asleep`.
 - Added: an agent that left work running in the background says so, **1 running**, on its tile, its Layers row and the phone page, so a build still going no longer looks finished. Claude only for now. Workspace API 0.41 and Home 0.7 add `background`, and it no longer counts a monitor or a teammate.
 - Fixed: after updating, the app no longer offers the version it is already running when it starts.
 
