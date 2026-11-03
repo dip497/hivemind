@@ -163,6 +163,12 @@ pub struct TileRow {
         skip_serializing_if = "Not::not"
     )]
     pub conversation: bool,
+    #[serde(
+        default,
+        deserialize_with = "or_none",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub background: Option<u64>,
 }
 
 impl TileRow {

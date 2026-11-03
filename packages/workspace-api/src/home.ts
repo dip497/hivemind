@@ -52,6 +52,7 @@ export interface HomeTile {
   state?: AgentItem["state"];
   since?: number;
   waiting?: AgentItem["waiting"];
+  background?: AgentItem["background"];
   /** For an agent, as the agent list says: what runs it, the machine it runs on, and whether its
    *  turn can be interrupted and its conversation read. */
   program?: AgentItem["program"];

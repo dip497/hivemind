@@ -37,8 +37,8 @@ prompt.
 ## Waiting on background work
 
 An agent can end its turn and still wait on work it started, which comes back to it when it
-finishes: it is `working` until then, and `awaiting` says how many tasks. `background` counts every
-task left running, `awaiting` only those: `turn.ended` without it is `done`, whatever `background`
+finishes: it is `working` until then, and `awaiting` says how many tasks. `background` counts the
+tasks left running (`hook-protocol.md`), `awaiting` only those: `turn.ended` without it is `done`, whatever `background`
 says, so a dev server holds nothing. `awaiting` is present only while `working` or `waiting`, and
 `turn.started`, an interrupt and an exit clear it.
 

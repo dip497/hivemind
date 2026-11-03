@@ -50,6 +50,13 @@ export const RowLine = memo(function RowLine({ tileId }: { tileId: string }) {
   );
 });
 
+/** How many background tasks its agent's last turn left running, and nothing while it left none. */
+export const Running = memo(function Running({ tileId, className }: { tileId: string; className?: string }) {
+  const count = useWait(tileId)?.background;
+  if (!count) return null;
+  return <span data-running title={`${count} background ${count === 1 ? "task" : "tasks"} running`} className={className}>{count} running</span>;
+});
+
 /** The whole of a terminal's line, for its row's hover card: what its agent waits on, the tool and
  *  what it would run as the agent wrote it (its lines kept, none cut, controls out; its first twelve
  *  lines, ending in an ellipsis when there are more, and saying when it may be longer than a review

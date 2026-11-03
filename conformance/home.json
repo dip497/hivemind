@@ -106,7 +106,8 @@
       "label": "Claude Code"
      },
      "interrupt": true,
-     "conversation": true
+     "conversation": true,
+     "background": 3
     },
     {
      "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
@@ -232,7 +233,8 @@
      },
      "machine": "desk",
      "interrupt": true,
-     "conversation": true
+     "conversation": true,
+     "background": 3
     },
     "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t2": {
      "of": "tile",

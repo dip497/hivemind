@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Added: an agent that left work running in the background says so, **1 running**, on its tile, its Layers row and the phone page, so a build still going no longer looks finished. Claude only for now. Workspace API 0.41 and Home 0.7 add `background`, and it no longer counts a monitor or a teammate.
 - Fixed: after updating, the app no longer offers the version it is already running when it starts.
 
 ## [2026.11.2] — 2026-11-03

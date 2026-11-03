@@ -40,6 +40,9 @@ function hive(...args: string[]) {
 const runningInBackground = (...types: string[]) => fs.writeFileSync(path.join(repo, ".fake-background.json"), JSON.stringify(types.map((type) => ({ type, status: "running" }))));
 const stateOf = (tile: string) => hive("ctl", "agents", "--json").json.agents.find((a: { tile: string }) => a.tile === tile)?.state;
 const look = (tile: string) => page.locator(`.react-flow__node-terminal[data-id="${tile}"] .hm-term-root [data-status-look]`).first();
+const notes = (tile: string) => page.locator(`.react-flow__node-terminal[data-id="${tile}"] [data-running], [data-layer-tile="${tile}"] [data-running]`);
+const noteOnTile = (tile: string) => page.locator(`.react-flow__node-terminal[data-id="${tile}"] [data-running]`);
+const noteInLayers = (tile: string) => page.locator(`[data-layer-tile="${tile}"] [data-running]`);
 
 test.beforeAll(async () => {
   test.setTimeout(180_000);
@@ -95,4 +98,12 @@ test("a turn that ends with only a dev server running is done", async () => {
   expect(read.awaiting).toBeUndefined();
   await expect.poll(() => stateOf(tile), { timeout: 10_000 }).toBe("done");
   await expect(look(tile)).not.toHaveAttribute("data-status-look", "working", { timeout: 15_000 });
+
+  // What it left running is said on its tile, in Layers and to `hive ctl`, until a turn leaves none.
+  await expect(notes(tile)).toHaveText(["1 running", "1 running"], { timeout: 15_000 });
+  expect(hive("ctl", "agents", "--json").json.agents.find((a: { tile: string }) => a.tile === tile).background).toBe(1);
+  fs.rmSync(path.join(repo, ".fake-background.json"));
+  hive("ctl", "send", tile, "echo stopped the server");
+  expect(hive("ctl", "read", tile, "--timeout", "40000", "--json").json).toMatchObject({ text: "stopped the server" });
+  await expect(notes(tile)).toHaveCount(0, { timeout: 15_000 });
 });

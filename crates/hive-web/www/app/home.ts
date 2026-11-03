@@ -206,6 +206,7 @@ export class Home {
           t.since !== undefined && h("span", { class: "age", "data-since": t.since }, ago(t.since))),
         h("span", { class: "under" },
           h("span", { class: `status${t.waiting ? " waits" : ""}`, "data-line": "" }, ...lineOf(t, e.line)),
+          !!t.background && h("span", { class: "age", "data-running": "" }, `${t.background} running`),
           e.unread && h("span", { class: "unread", "aria-label": "Unread", "data-unread": "" }))),
     ];
     const row = h("div", {

@@ -93,7 +93,7 @@ export function homeRows(s: HomeSource): Map<string, HomeRow> {
         ...(pinned.has(t.id) ? { pinned: true as const } : {}),
         ...(parent ? { parent } : {}),
         ...(a ? {
-          state: a.state, since: a.since, ...(a.waiting ? { waiting: a.waiting } : {}),
+          state: a.state, since: a.since, ...(a.waiting ? { waiting: a.waiting } : {}), ...(a.background ? { background: a.background } : {}),
           ...(a.program ? { program: a.program } : {}), machine: a.machine,
           ...(a.interrupt ? { interrupt: true as const } : {}), ...(a.conversation ? { conversation: true as const } : {}),
         } : {}),

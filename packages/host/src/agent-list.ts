@@ -83,6 +83,7 @@ export function agentsOf(held: HeldBoard[], statuses: WaitingStatus[], machines:
       since: status.since,
       machine: machineCalled(folderOf(board, at.tile), machines),
       ...(waiting ? { waiting } : {}),
+      ...(status.background && status.state !== "exited" ? { background: status.background } : {}),
       ...(facts.interrupts(at.tile) ? { interrupt: true as const } : {}),
       ...(facts.converses(at.tile) ? { conversation: true as const } : {}),
       ...(status.session ? { session: status.session } : {}),

@@ -156,6 +156,18 @@ test("of 200 tiles, the rows far below the screen are not rendered until scrolle
   await expect.poll(() => rendered(last)).toBe(true);
 });
 
+test("a row says what its agent left running in the background, and nothing when it left nothing", async () => {
+  test.skip(!built(), "build the page first (crates/hive-web/build.sh)");
+  const page = await home();
+  await page.evaluate(() => {
+    const tile = (id: string, background?: number) => [`t:w0/${id}`, { of: "tile", workspace: "w0", id, frameId: null, kind: "claude", name: id, agent: "claude", order: 0, state: "done", since: 1790000000000, machine: "desk", ...(background ? { background } : {}) }];
+    (window as unknown as Driven).change({ t: "home", layout: { seq: 1, rows: [["w:w0", { of: "workspace", workspace: "w0", name: "api" }], tile("builds", 2), tile("rests")] }, lines: { seq: 1, rows: [] } });
+  });
+  await expect(page.locator('[data-tree] [data-row="t:w0/builds"] [data-running]')).toHaveText("2 running");
+  await expect(page.locator('[data-tree] [data-row="t:w0/rests"]')).toBeVisible();
+  await expect(page.locator('[data-tree] [data-row="t:w0/rests"] [data-running]')).toHaveCount(0);
+});
+
 test("a working agent's spinner turns while a few work; past 40 working, every one is still", async () => {
   test.skip(!built(), "build the page first (crates/hive-web/build.sh)");
   const page = await home();
