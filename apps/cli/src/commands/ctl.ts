@@ -70,6 +70,8 @@ function failureOf(e: unknown): Failure & { exit: number } {
     const fix = e.fix ?? (e.exit === EXIT.usage ? helpFor()
       : e.code === "UNAVAILABLE" ? "start the hivemind app, or run `hive host`"
       : e.code === "ASLEEP" ? (/hive ctl wake \S+/.exec(message)?.[0] ?? "hive ctl wake <tile>")
+      : e.code === "FILE_TOO_BIG" ? "send a smaller file, or split it"
+      : e.code === "NO_PHONE" ? "ask the person to pair a phone with the computer the agent runs on (in the app: Settings → Connect → Connect, then the Phone browser tab)"
       : undefined);
     return { code: e.code, message, ...(fix ? { fix } : {}), exit: e.exit };
   }
@@ -873,6 +875,30 @@ const tileLook = sub("look", "Bring a tile into view, wait for it to draw, and s
   return { ...rest, png: file };
 });
 
+const fileTileArg = { tile: { type: "string", description: "the agent, from a terminal (default: $HIVEMIND_TILE — set inside every spawned agent, which sends only as itself)" } } as const;
+const agentForFiles = (given: string | undefined): string => {
+  const tile = given || ownTile();
+  if (!tile) throw new UsageError("not inside a hivemind agent tile ($HIVEMIND_TILE unset) — pass --tile <tileId>");
+  return tile;
+};
+
+const sendFile = sub("send-file", "Send a file to the person's phone, where it shows in this agent's chat to save. The computer keeps a copy for 7 days, and the phone fetches it when next open: ready does not mean they have it", {
+  file: { type: "positional", required: true, description: "the file, on the computer the agent runs on; at most 32 MiB" },
+  ...fileTileArg,
+}, async (a) => {
+  const sent = await onDrive((d) => d.call("agent.sendFile", [agentForFiles(a.tile), path.resolve(String(a.file))])) as Record<string, unknown>;
+  return { ...sent, ready: `Ready for the person's phone, kept for 7 days. It has not necessarily reached them yet.` };
+});
+const sentFilesCmd = sub("sent-files", "List the files this agent sent the person's phone that are still kept, oldest first", fileTileArg,
+  (a) => onDrive((d) => d.call("agent.sentFiles", [agentForFiles(a.tile)])));
+const takeBackFile = sub("take-back-file", "Remove a file this agent sent, by its id (from `hive ctl sent-files`), so the phone no longer shows or fetches it", {
+  id: { type: "positional", required: true, description: "the file's id" },
+}, (a) => onDrive(async (d) => {
+  const r = await d.call("agent.takeBackFile", [String(a.id)]) as { takenBack: boolean };
+  if (!r.takenBack) throw new HcpCliError("NOT_FOUND", `no file ${String(a.id)} is kept here`, EXIT.notFound);
+  return r;
+}));
+
 const tile = defineCommand({
   meta: { name: "tile", description: "Look at a tile as the person sees it" },
   subCommands: { look: tileLook },
@@ -888,6 +914,7 @@ export const ctlCmd = defineCommand({
   subCommands: {
     whoami, agents, tiles, frames, frame, "open-tool": openTool, spawn, sessions, send, keys, read, stream, workflow, approve, approval, report, inbox, "open-review": openReview,
     focus, close, sleep, wake, rename, connect, disconnect, view, plugin, tile,
+    "send-file": sendFile, "sent-files": sentFilesCmd, "take-back-file": takeBackFile,
     "set-state": setState, "add-comment": addComment, "mark-acceptance": markAcceptance,
     "delete-issue": deleteIssueCmd, "list-workspaces": listWorkspacesCmd, notes: notesCmd, browser,
   },

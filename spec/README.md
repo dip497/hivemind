@@ -27,6 +27,7 @@ for a program's messages, https://hivemind.griiken.com/guide/api-protocol/.
 | `home.md` | What the person's phone shows first: every workspace's frames and tiles as the desktop's Layers panel lists them, followed as two numbered sequences of keyed rows and last lines, caught up from where a phone was; how the phone groups and orders them | 0.4 |
 | `markdown.md` | What an agent says, read by the phone's core for every app: blocks and styled runs, links only to https, raw HTML as text | 0.1 |
 | `push.md` | What a phone is told while the person is away, encrypted to it, a permission it may allow or deny said so; that a device it found away is back; and the network's push server, which passes on what the devices a phone named sign | 0.5 |
+| `sent-files.md` | A file an agent sends the person's phone: a frozen copy on the computer, fetched in pieces by its id, and how the phone may show it (0.39). |
 
 Versions are `major.minor`: a minor adds optional fields or enum values a reader may ignore; a
 major changes or removes something. Until 1.0 anything may change.

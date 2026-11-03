@@ -16,7 +16,7 @@ import type { EventMessage } from "@hivemind/workspace-api/protocol";
 import { Intents } from "@hivemind/workspace-host/intents";
 import { AuditLog } from "@hivemind/workspace-host/audit-log";
 import { readAgentManifest } from "@hivemind/agents/load";
-import { followConversation, lastSaidSince, pendingTool, readConversation, TAIL_BYTES, TAIL_ENTRIES, TOOL_MAX, toolUse } from "../src/conversation.ts";
+import { EARLIER_BYTES_MAX, followConversation, lastSaidSince, pendingTool, readConversation, readEarlier, TAIL_BYTES, TAIL_ENTRIES, TOOL_MAX, toolUse } from "../src/conversation.ts";
 import { askingOf, conversationOf, conversations, transcriptOf, type Transcript } from "../src/conversations.ts";
 import { manifestFacts } from "../src/agent-list.ts";
 
@@ -472,4 +472,90 @@ test("a program on this machine is told the session file of an agent here; a pho
   assert.equal(codeOf(await server.answer("agent.transcript", ["t1"], phone)), "UNSUPPORTED");
   assert.equal(codeOf(await server.answer("agent.transcript", ["t2"], program)), "UNSUPPORTED");
   assert.equal(codeOf(await server.answer("agent.transcript", ["t9"], program)), "NOT_FOUND");
+});
+
+/** Every entry a file says, read page by page from its end as a phone asks for them. */
+const pages = (at: string, format: AgentTranscript) => {
+  const first = readConversation(at, format);
+  const ids = first.entries.map((e) => e.id);
+  let before = first.before!;
+  let asked = 0;
+  while (before > 0) {
+    const page = readEarlier(at, format, before);
+    assert.ok(page.before < before, "each page goes further back");
+    ids.unshift(...page.entries.map((e) => e.id));
+    before = page.before;
+    assert.ok(++asked < 1000);
+  }
+  return { ids, first, asked };
+};
+
+test("read page by page back from its end, a session file gives everything it says, once each and in order, however long its lines", () => {
+  const records = Array.from({ length: 700 }, (_, n) => said(n, n % 50 === 7 ? "x".repeat(40_000) : `prompt ${n}`));
+  const at = sessionFile(records.join(""));
+  const { ids, first, asked } = pages(at, FORMAT);
+  assert.equal(first.entries.length, TAIL_ENTRIES);
+  assert.ok(first.before! > 0);
+  assert.deepEqual(ids, records.map((_, n) => `u${n}`));
+  assert.ok(asked >= 2, "more than one page");
+
+  // A file short enough has nothing earlier.
+  const short = sessionFile(said(0) + said(1));
+  assert.deepEqual(readConversation(short, FORMAT).before, 0);
+  assert.deepEqual(pages(short, FORMAT).ids, ["u0", "u1"]);
+
+  // Asked after a cursor, as on a reconnect that goes on: nothing about earlier.
+  assert.equal(readConversation(at, FORMAT, first.cursor).before, undefined);
+  assert.deepEqual(readEarlier(path.join(tmp, "no-such.jsonl"), FORMAT, 100), { entries: [], before: 0 });
+});
+
+test("a line longer than a page is read whole; one longer than the most read is passed over, and what comes before it is still reached", () => {
+  const long = sessionFile(said(0) + said(1, "y".repeat(3 * TAIL_BYTES)) + said(2));
+  assert.deepEqual(pages(long, FORMAT).ids, ["u0", "u1", "u2"]);
+
+  const huge = sessionFile(said(0) + said(1, "z".repeat(EARLIER_BYTES_MAX + 1024)) + said(2));
+  assert.deepEqual(pages(huge, FORMAT).ids, ["u0", "u2"]);
+
+  // Most of the file what no rule reads, as tool output is: a page goes back until it holds enough.
+  const sparse = sessionFile(Array.from({ length: 400 }, (_, n) => said(n) + `${JSON.stringify({ type: "other", note: "n".repeat(100_000) })}\n`).join(""));
+  const page = readEarlier(sparse, FORMAT, fs.statSync(sparse).size);
+  assert.ok(page.entries.length >= 30, `${page.entries.length} entries`);
+  assert.ok(page.before < fs.statSync(sparse).size - 3 * TAIL_BYTES);
+
+  // A stretch that says nothing: the page goes on past it to what does.
+  const quiet = sessionFile(said(0) + `${JSON.stringify({ type: "other", note: "n".repeat(TAIL_BYTES / 2) })}\n`.repeat(3) + said(1));
+  const first = readConversation(quiet, FORMAT);
+  assert.deepEqual(first.entries.map((e) => e.id).includes("u1"), true);
+  assert.deepEqual(pages(quiet, FORMAT).ids, ["u0", "u1"]);
+});
+
+test("asked for what was said earlier, the caller gets a page of that session and may unfold a tool from it with what it gave back; another session finds nothing", async () => {
+  const TOOLS: AgentTranscript = {
+    id: "uuid", at: "timestamp",
+    said: [
+      { require: { type: "user" }, text: "message.content", who: "person" },
+      { require: { type: "assistant" }, each: "message.content", item: { type: "tool_use" }, tool: { id: "id", name: "name", about: ["input.command"] } },
+      { require: { type: "tool" }, result: { of: "of", text: "output" } },
+    ],
+  } as unknown as AgentTranscript;
+  const stamp = new Date(1_790_000_000_000).toISOString();
+  const use = `${JSON.stringify({ type: "assistant", uuid: "a0", timestamp: stamp, message: { content: [{ type: "tool_use", id: "old-tool", name: "Bash", input: { command: "ls" } }] } })}\n`;
+  const gave = `${JSON.stringify({ type: "tool", uuid: "r0", timestamp: stamp, of: "old-tool", output: "files" })}\n`;
+  const at = sessionFile(use + gave + Array.from({ length: TAIL_ENTRIES + 5 }, (_, n) => said(n, "w".repeat(10_000))).join(""));
+  const { server, client } = served(() => ({ session: "s1", file: at, format: TOOLS }));
+  const phone = client();
+  try {
+    const answer = await server.answer("agent.conversation", ["t1"], phone) as { result: { before: number; entries: unknown[] } };
+    assert.ok(answer.result.before > 0);
+    assert.equal((await server.answer("agent.tool", ["t1", "old-tool"], phone) as { error?: { code: string } }).error?.code, "NOT_FOUND", "not shown yet");
+    const page = await server.answer("agent.conversationBefore", ["t1", "s1", answer.result.before], phone) as { result: { before: number; entries: Array<{ id: string }> } };
+    assert.equal(page.result.before, 0);
+    assert.ok(page.result.entries.some((e) => e.id.startsWith("a0")));
+    const unfolded = await server.answer("agent.tool", ["t1", "old-tool"], phone) as { result: { name: string; result?: { text: string } } };
+    assert.deepEqual([unfolded.result.name, unfolded.result.result?.text], ["Bash", "files"]);
+    assert.equal((await server.answer("agent.conversationBefore", ["t1", "s0", 100], phone) as { error?: { code: string } }).error?.code, "NOT_FOUND");
+    assert.equal((await server.answer("agent.conversationBefore", ["t1", "s1", -1], phone) as { error?: { code: string } }).error?.code, "BAD_REQUEST");
+  } finally {
+    phone.go();
+  }
 });

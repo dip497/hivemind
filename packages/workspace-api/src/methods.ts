@@ -7,7 +7,7 @@ import type { LinkResult, TransferResult } from "@hivemind/core/cross-repo";
 import type { PageBox, PageComment, ReviewComment, ReviewIntent } from "@hivemind/core/review";
 import type { BlameOptions, BlamePayload, CommitInfo, DiffPayload, DiffScope, FileHistoryCursor, FileHistoryPage, GitBranchList, GitRevision, GitStatusSnapshot, HandedOff, LogOptions, LogPage, WorktreeCreateOpts, WorktreeEntry } from "./git.js";
 import type { SleepAnswer, WakeAnswer } from "./agents.js";
-import type { AgentAnswer, AgentChange, Approval, Answerer, AgentChanges, AgentEvent, AgentItem, AgentRead, AgentSessions, ConversationEntry, SlashCommand, Folders, Links, PipeChange, Places, SpawnChange, StartAgent, StartImage, Startable, StatusChange, TileOpened, ToolUse } from "./agents.js";
+import type { AgentAnswer, AgentChange, Approval, Answerer, AgentChanges, AgentEvent, AgentItem, AgentRead, AgentSessions, ConversationEntry, SentFile, SentFilePiece, SlashCommand, Folders, Links, PipeChange, Places, SpawnChange, StartAgent, StartImage, Startable, StatusChange, TileOpened, ToolUse } from "./agents.js";
 import type { ActivityLevels, ExitInfo, LastLines, TerminalOpts, Typist } from "./terminals.js";
 import type { JoinQuestion, JoinRequests, PersonHere } from "./people.js";
 import type { GuestAnswer } from "@hivemind/workspace-host/connect";
@@ -193,6 +193,9 @@ export interface WorkspaceMethods {
    *  or another session than its own now: the last of it), how far into its session file that goes,
    *  and the session; then each `agent.said` as it is written, from the start of each session it
    *  begins since, until the connection goes. `session` is left out for an agent with none. */
+  /** (0.39) What was said just before byte `before` of its session `session`: where `agent.conversation`
+   *  or this last answered it begins. `before` 0: nothing earlier. */
+  "agent.conversationBefore": (tile: string, session: string, before: number) => { entries: ConversationEntry[]; before: number };
   "agent.conversation": (tile: string, cursor?: number, session?: string) => { entries: ConversationEntry[]; cursor: number; session?: string };
   /** (0.9 of spec/agents.md) The tool use `use` in the conversation of the agent of `tile`, unfolded. */
   "agent.tool": (tile: string, use: string) => ToolUse;
@@ -218,6 +221,19 @@ export interface WorkspaceMethods {
   /** (0.36) The slash commands the agent of `tile` takes at its prompt: its own, the person's and
    *  the project's, as its manifest says where they are; by name. */
   "agent.commands": (tile: string) => { commands: SlashCommand[] };
+  /** (0.39) Freeze the file at `path` on this computer for the person's phone, as the agent of
+   *  `tile`: what was kept. A program here alone, and an agent only as itself. */
+  "agent.sendFile": (tile: string, path: string) => SentFile;
+  /** (0.39) What the agent of `tile` sent and is still kept, oldest first: a program here alone. */
+  "agent.sentFiles": (tile: string) => { files: SentFile[] };
+  /** (0.39) The owner's alone: the files the agent of `tile` sent, oldest first; the caller is sent
+   *  `agent.filesChanged` from now until it goes. */
+  "agent.files": (tile: string) => { files: SentFile[] };
+  /** (0.39) The owner's alone: a piece of a file an agent sent, from `offset`. */
+  "agent.filePiece": (id: string, offset: number) => SentFilePiece;
+  /** (0.39) Remove a file an agent sent, before the phone fetches it or after: a program here alone,
+   *  and an agent only its own. */
+  "agent.takeBackFile": (id: string) => { takenBack: boolean };
   /** (0.23) Open a tool's tile in the workspace at `repo`: the tool by its id
    *  (`@owner/name/tool`, or `@owner/name` when the package has one tool), in `frame` if given, at
    *  `url` for one that shows a page, with `state` (0.32) as the tile's first saved state. */
@@ -411,6 +427,8 @@ export interface WorkspaceEvents {
   /** What was said next in the conversation of the agent in `tile`, to whoever follows it, in its
    *  session `session`. */
   "agent.said": (tile: string, entries: ConversationEntry[], cursor: number, session: string) => void;
+  /** (0.39) The files the agent of `tile` sent, whole, to whoever asked `agent.files`, when they change. */
+  "agent.filesChanged": (tile: string, files: SentFile[]) => void;
   /** A terminal's session ended, to the clients that showed it. */
   "terminal.exit": (tile: string, info: ExitInfo) => void;
   /** Changes in watched terminals' activity. */

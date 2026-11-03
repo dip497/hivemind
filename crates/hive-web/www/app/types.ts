@@ -46,6 +46,15 @@ export interface Paired {
   admission: string;
 }
 
+/** A file an agent sent, as `agent.files` lists it. */
+export interface SentFile {
+  id: string;
+  name: string;
+  size: number;
+  type: string;
+  at: number;
+}
+
 export interface Entry {
   id: string;
   at: number;
@@ -78,6 +87,14 @@ export interface Piece {
   entries: Entry[];
   cursor: number;
   session: string;
+  /** Where what was said earlier ends, in the first piece: 0 or none when nothing was. */
+  before?: number | null;
+}
+
+/** A page of what was said earlier, and where what was said before it ends. */
+export interface EarlierPage {
+  entries: Entry[];
+  before: number;
 }
 
 /** A message the computer took for an agent (`agent.send`): `held` until its turn ends, or typed in. */
@@ -277,6 +294,7 @@ export interface Look {
     brightness: number;
     motion: boolean;
     glass: number | null;
+    contentTint: number | null;
     media?: { revision: string; type: "image" | "video" };
   };
 }

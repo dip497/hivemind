@@ -6,6 +6,7 @@
 
 #![allow(dead_code)]
 
+use base64::Engine as _;
 use std::{
     future::Future,
     path::{Path, PathBuf},
@@ -163,6 +164,16 @@ pub struct Desk {
     pub asked_from: Arc<Mutex<Vec<AskedFrom>>>,
     /// What the phone told of the views it showed, `view.*`, as it came.
     pub viewed: Arc<Mutex<Vec<Value>>>,
+    /// The files an agent of its sent, as `agent.files` lists them: sent to each that follows them
+    /// and again as they change; and the one file any id fetches, a kibibyte at a time.
+    pub sent_files: watch::Sender<Value>,
+    pub sent_bytes: Arc<Mutex<Vec<u8>>>,
+    /// Where in the file the phone asked from, as it asked.
+    pub sent_asked: Arc<Mutex<Vec<u64>>>,
+    /// A page of what was said earlier, entries and where it begins, as any asking gets it; and
+    /// what the phone asked, as it asked.
+    pub earlier: Arc<Mutex<Option<(Value, u64)>>>,
+    pub asked_earlier: Arc<Mutex<Vec<Value>>>,
     /// The connections the phone made, while they last.
     connections: Arc<Mutex<Vec<Connection>>>,
     on_unpair: Arc<Mutex<Option<OnUnpair>>>,
@@ -182,6 +193,11 @@ struct Serving {
     session: watch::Sender<Session>,
     asked_from: Arc<Mutex<Vec<AskedFrom>>>,
     viewed: Arc<Mutex<Vec<Value>>>,
+    sent_files: watch::Sender<Value>,
+    sent_bytes: Arc<Mutex<Vec<u8>>>,
+    sent_asked: Arc<Mutex<Vec<u64>>>,
+    earlier: Arc<Mutex<Option<(Value, u64)>>>,
+    asked_earlier: Arc<Mutex<Vec<Value>>>,
     on_unpair: Arc<Mutex<Option<OnUnpair>>>,
 }
 
@@ -225,6 +241,11 @@ impl Desk {
             }),
             asked_from: Arc::default(),
             viewed: Arc::default(),
+            sent_files: watch::Sender::new(json!([])),
+            sent_bytes: Arc::default(),
+            sent_asked: Arc::default(),
+            earlier: Arc::default(),
+            asked_earlier: Arc::default(),
             connections: Arc::default(),
             on_unpair: Arc::default(),
         };
@@ -240,6 +261,11 @@ impl Desk {
             session: desk.session.clone(),
             asked_from: desk.asked_from.clone(),
             viewed: desk.viewed.clone(),
+            sent_files: desk.sent_files.clone(),
+            sent_bytes: desk.sent_bytes.clone(),
+            sent_asked: desk.sent_asked.clone(),
+            earlier: desk.earlier.clone(),
+            asked_earlier: desk.asked_earlier.clone(),
             on_unpair: desk.on_unpair.clone(),
         };
         let (dialled, closed) = (desk.dialled.clone(), desk.closed.clone());
@@ -406,8 +432,30 @@ async fn api(mut send: SendStream, mut recv: RecvStream, phone: &str, serving: &
         if message["method"] == "agent.conversation" {
             return converse(send, recv, &message, serving).await;
         }
+        if message["method"] == "agent.files" {
+            return sent_files(send, recv, &message, serving).await;
+        }
         let mut out = vec![];
-        if message["method"]
+        if message["method"] == "agent.filePiece" {
+            let at = message["params"][1].as_u64().unwrap();
+            serving.sent_asked.lock().unwrap().push(at);
+            let bytes = serving.sent_bytes.lock().unwrap().clone();
+            let start = (at as usize).min(bytes.len());
+            let piece = &bytes[start..(start + 1024).min(bytes.len())];
+            out.push(json!({ "id": message["id"], "result": {
+                "data": base64::engine::general_purpose::STANDARD.encode(piece), "size": bytes.len(),
+            } }));
+        } else if message["method"] == "agent.conversationBefore" {
+            serving
+                .asked_earlier
+                .lock()
+                .unwrap()
+                .push(message["params"].clone());
+            let page = serving.earlier.lock().unwrap().clone().unwrap();
+            out.push(
+                json!({ "id": message["id"], "result": { "entries": page.0, "before": page.1 } }),
+            );
+        } else if message["method"]
             .as_str()
             .is_some_and(|m| m.starts_with("view."))
         {
@@ -540,6 +588,34 @@ fn view(
         }
         "view.close" => vec![json!({ "id": id, "result": { "closed": true } })],
         _ => vec![],
+    }
+}
+
+/// `agent.files`, `asked`: the list as it stands, then whole as it changes, until the phone lets go.
+async fn sent_files(mut send: SendStream, mut recv: RecvStream, asked: &Value, serving: &Serving) {
+    let mut files = serving.sent_files.subscribe();
+    let first = files.borrow_and_update().clone();
+    let answer = json!({ "id": asked["id"], "result": { "files": first } });
+    if write_frame(&mut send, answer.to_string().as_bytes())
+        .await
+        .is_err()
+    {
+        return;
+    }
+    loop {
+        tokio::select! {
+            changed = files.changed() => if changed.is_err() { return },
+            _ = read_frame(&mut recv) => return,
+        }
+        let now = files.borrow_and_update().clone();
+        let event = json!({ "event": "agent.filesChanged", "params": [TILE, now] });
+        let other = json!({ "event": "agent.filesChanged", "params": ["another", []] });
+        if write_frame(&mut send, json!([other, event]).to_string().as_bytes())
+            .await
+            .is_err()
+        {
+            return;
+        }
     }
 }
 

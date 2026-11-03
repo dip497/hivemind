@@ -454,6 +454,13 @@ fn the_look_is_held_from_the_whole_and_from_a_change_kept_with_the_rest_and_one_
     short["terminal"]["ansi"] = json!(["#000000"]);
     assert!(!home.apply(&json!({ "t": "changes", "look": short })));
     assert_eq!(home.look.as_ref().unwrap().colors["bg"], "#fafafa");
+    // Tool content's tint is kept; a number past 100 is no tint.
+    let mut frosted = look("#fafafa", "light");
+    frosted["wallpaper"]["contentTint"] = json!(45);
+    assert!(home.apply(&json!({ "t": "changes", "look": frosted.clone() })));
+    assert_eq!(home.look.as_ref().unwrap().wallpaper.content_tint, Some(45));
+    frosted["wallpaper"]["contentTint"] = json!(140);
+    assert!(!home.apply(&json!({ "t": "changes", "look": frosted })));
     // A photo named by its revision is taken; one named by anything else, or a wallpaper that is
     // not a word nor a package's, is not.
     let mut photo = look("#fafafa", "light");

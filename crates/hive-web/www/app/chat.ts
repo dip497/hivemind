@@ -8,7 +8,7 @@
 
 import { h, icon, pill, say } from "./dom.js";
 import { markdown } from "./markdown.js";
-import type { Entry, Piece, Unfolded } from "./types.js";
+import type { EarlierPage, Entry, Piece, Unfolded } from "./types.js";
 import { message } from "./words.js";
 
 type Result = NonNullable<Entry["result"]>;
@@ -34,6 +34,10 @@ const PHOTO_MARK = /\[Image #\d+\]\s*/g;
 const wordsOf = (text: string): string => text.replace(PHOTO_MARK, "").trim();
 /** What an agent given a photo as a path adds after the person's words: those paths and no more. */
 const onlyPaths = (text: string): boolean => text.split(/\s+/).every((word) => !word || /[/\\]/.test(word));
+
+const LOAD_EARLIER = "Load earlier messages";
+/** A chat that opens with fewer than this goes on back by itself. */
+const FEW_ENTRIES = 30;
 
 /** How long one task draws for. */
 const SLICE_MS = 12;
@@ -63,10 +67,24 @@ export class Chat {
   private pending: Array<{ el: HTMLElement; text: string; photos: HTMLElement | null; at: number; arrived?: () => void }> = [];
   /** The thumbnails of photos sent from here, by the entry that has their message. */
   private photosOf = new Map<string, HTMLElement>();
+  /** The files the agent sent, each row with when: placed among what was said by that time. */
+  private files = new Map<HTMLElement, number>();
 
-  /** `unfold`: a tool use of its, whole; none, a tool shows what it gave back as sent. */
-  constructor(private readonly unfold?: (use: string) => Promise<Unfolded>) {
-    this.el.append(this.loading, this.nothing);
+  /** What a tool gave back, drawn alone as its use is not here yet, by the tool's id: its use, once
+   *  an earlier page brings it, takes it in. */
+  private alone = new Map<string, { row: HTMLElement; result: Result }>();
+  /** Above all else: asks for what was said earlier, while there is any. */
+  private readonly more = h("button", { type: "button", class: "load-earlier", hidden: true, "data-load-earlier": "" }, LOAD_EARLIER);
+  /** Where what was said earlier in this session ends; 0: nothing was; null: not told yet. */
+  private before: number | null = null;
+  /** Its first piece was drawn. */
+  private filled = false;
+
+  /** `unfold`: a tool use of its, whole; none, a tool shows what it gave back as sent. `earlier`: a
+   *  page of what was said in a session before a place in it; none, only what comes is shown. */
+  constructor(private readonly unfold?: (use: string) => Promise<Unfolded>, private readonly earlier?: (session: string, before: number) => Promise<EarlierPage>) {
+    this.el.append(this.more, this.loading, this.nothing);
+    this.more.addEventListener("click", () => void this.loadEarlier());
     this.el.addEventListener("scroll", () => this.placed(), { passive: true });
     new ResizeObserver(() => (this.el.scrollTop = this.el.scrollHeight - this.el.clientHeight - this.away)).observe(this.el);
     this.newest.addEventListener("click", () => {
@@ -80,9 +98,24 @@ export class Chat {
     if (this.session && piece.session !== this.session) this.clear();
     this.session = piece.session;
     this.loading.remove();
+    // Asked again after a reconnection, it may begin later than what is shown already.
+    if (piece.before != null && (this.before === null || piece.before < this.before)) this.before = piece.before;
+    this.showMore();
     const following = this.el.scrollHeight - this.el.scrollTop - this.el.clientHeight < 48;
+    const fresh = this.toDraw(piece.entries);
+    this.nothing.hidden = this.ids.size > 0 || this.pending.length > 0 || this.files.size > 0;
+    if (!fresh.length) return;
+    this.draw(fresh, following, false);
+    // Most of a session file may be what tools gave back: a chat that opens nearly empty goes on back.
+    if (!this.filled && this.ids.size < FEW_ENTRIES) void this.loadEarlier();
+    this.filled = true;
+  }
+
+  /** Of `entries`, those not here yet that need a row of their own; what a tool gave back goes to
+   *  its use. */
+  private toDraw(entries: Entry[]): Entry[] {
     const fresh: Entry[] = [];
-    for (const e of piece.entries) {
+    for (const e of entries) {
       if (this.ids.has(e.id)) continue;
       this.ids.add(e.id);
       if (e.who === "person") this.arrived(e);
@@ -100,16 +133,24 @@ export class Chat {
       if (e.tool) this.drawing.add(e.tool.id);
       fresh.push(e);
     }
-    this.nothing.hidden = this.ids.size > 0 || this.pending.length > 0;
-    if (!fresh.length) return;
+    return fresh;
+  }
+
+  /** Draw `fresh`, newest first, a slice a task: at the foot, or with `above`, over everything. */
+  private draw(fresh: Entry[], following: boolean, above: boolean, drawn?: () => void): void {
+    const newestFile = Math.max(0, ...this.files.values());
+    const movesFiles = fresh.some((e) => e.at < newestFile);
     let next = fresh.length;
     let older: HTMLElement | null = null;
     const slice = (): void => {
       const t = performance.now();
+      // What the person sees stays where it is as what was said before goes in above it; a row drawn
+      // may take a lone result's place there, so this is read first.
+      const below = this.el.scrollHeight - this.el.scrollTop;
       const rows: HTMLElement[] = [];
       while (next > 0 && (!rows.length || performance.now() - t < SLICE_MS)) rows.unshift(this.row(fresh[--next]!));
       const news = rows.filter((row) => !row.classList.contains("said-program")).length;
-      if (!older) {
+      if (!older && !above) {
         // Above what is still being sent, which stays at the foot.
         const foot = this.pending[0]?.el;
         if (foot) foot.before(...rows);
@@ -119,15 +160,18 @@ export class Chat {
         else this.unseen += news;
         this.placed();
       } else {
-        // What the person sees stays where it is as what was said before goes in above it.
-        const below = this.el.scrollHeight - this.el.scrollTop;
-        older.before(...rows);
+        if (above) this.more.after(...rows);
+        else older!.before(...rows);
         this.fold();
         this.el.scrollTop = this.el.scrollHeight - below;
       }
       // The chat's own child it went into, a fold perhaps.
       older = rows[0]!.closest<HTMLElement>("[data-chat] > *");
       if (next > 0) setTimeout(slice);
+      else {
+        if (movesFiles) for (const [row, at] of this.files) this.putFile(row, at);
+        drawn?.();
+      }
     };
     slice();
   }
@@ -192,7 +236,36 @@ export class Chat {
   private drop(mine: { el: HTMLElement }): void {
     mine.el.remove();
     this.pending = this.pending.filter((p) => p !== mine);
-    this.nothing.hidden = this.loading.isConnected || this.ids.size > 0 || this.pending.length > 0;
+    this.nothing.hidden = this.loading.isConnected || this.ids.size > 0 || this.pending.length > 0 || this.files.size > 0;
+  }
+
+  /** Show the row of a file the agent sent at `at`, where that falls among what was said. */
+  placeFile(row: HTMLElement, at: number): void {
+    const following = this.el.scrollHeight - this.el.scrollTop - this.el.clientHeight < 48;
+    this.files.set(row, at);
+    this.putFile(row, at);
+    this.nothing.hidden = true;
+    if (following) this.el.scrollTop = this.el.scrollHeight;
+    else this.unseen += 1;
+    this.placed();
+  }
+
+  removeFile(row: HTMLElement): void {
+    this.files.delete(row);
+    row.remove();
+    this.nothing.hidden = this.loading.isConnected || this.ids.size > 0 || this.pending.length > 0 || this.files.size > 0;
+  }
+
+  private putFile(row: HTMLElement, at: number): void {
+    for (const child of this.el.children) {
+      // Among what was said alone: the files keep their own order, oldest first, as they are placed.
+      if (this.files.has(child as HTMLElement)) continue;
+      const when = (child as HTMLElement).dataset.at ?? child.querySelector<HTMLElement>("[data-at]")?.dataset.at;
+      if (when !== undefined && Number(when) > at) return child.before(row);
+    }
+    const foot = this.pending[0]?.el;
+    if (foot) foot.before(row);
+    else this.el.append(row);
   }
 
   /** The newest's button: shown while scrolled away, its count what came since. */
@@ -281,7 +354,12 @@ export class Chat {
 
   private clear(): void {
     // What is still being sent is not of the session that ended: it stays.
-    this.el.replaceChildren(this.nothing, ...this.pending.map((p) => p.el));
+    this.el.replaceChildren(this.more, this.nothing, ...this.files.keys(), ...this.pending.map((p) => p.el));
+    this.before = null;
+    this.filled = false;
+    this.alone = new Map();
+    this.more.textContent = LOAD_EARLIER;
+    this.showMore();
     this.ids = new Set();
     this.tools = new Map();
     this.given = new Map();
@@ -289,9 +367,43 @@ export class Chat {
     this.photosOf = new Map();
   }
 
+  private showMore(): void {
+    this.more.hidden = !this.earlier || !this.before;
+  }
+
+  /** The page before what is shown, above it, with what the person reads staying where it is. */
+  private async loadEarlier(): Promise<void> {
+    if (!this.earlier || !this.before || this.more.disabled) return;
+    const session = this.session;
+    this.more.disabled = true;
+    this.more.textContent = "Loading…";
+    try {
+      const page = await this.earlier(session, this.before);
+      if (session !== this.session) return;
+      this.before = page.before;
+      const fresh = this.toDraw(page.entries);
+      if (fresh.length) this.draw(fresh, false, true, () => this.earlierDrawn());
+      else this.earlierDrawn();
+    } catch {
+      this.more.disabled = false;
+      if (session === this.session) this.more.textContent = "Couldn't load. Try again";
+    }
+  }
+
+  /** The button going, when that was the last page, moves nothing the person reads: it goes only
+   *  now, with what came above it to hold the place. */
+  private earlierDrawn(): void {
+    const below = this.el.scrollHeight - this.el.scrollTop;
+    this.more.disabled = false;
+    this.more.textContent = LOAD_EARLIER;
+    this.showMore();
+    this.el.scrollTop = this.el.scrollHeight - below;
+  }
+
   private row(e: Entry): HTMLElement {
     const use = e.tool?.id;
     const row = rowOf(e, use !== undefined && this.unfold ? () => this.unfold!(use) : undefined);
+    if (e.result) this.alone.set(e.result.of, { row, result: e.result });
     const photos = this.photosOf.get(e.id);
     if (photos) row.prepend(photos);
     this.photosOf.delete(e.id);
@@ -301,12 +413,18 @@ export class Chat {
     const result = this.given.get(e.tool.id);
     if (result) gaveBack(row, result);
     this.given.delete(e.tool.id);
+    const alone = this.alone.get(e.tool.id);
+    if (alone) {
+      gaveBack(row, alone.result);
+      alone.row.remove();
+      this.alone.delete(e.tool.id);
+    }
     return row;
   }
 }
 
 function rowOf(e: Entry, unfold?: () => Promise<Unfolded>): HTMLElement {
-  const props = { "data-entry": e.id, "data-who": e.who };
+  const props = { "data-entry": e.id, "data-who": e.who, "data-at": String(e.at) };
   if (e.notice) return noticeRow(e.notice, props);
   if (e.tool) return toolRow(e.tool.name, e.tool.about, props, unfold);
   if (e.result) {

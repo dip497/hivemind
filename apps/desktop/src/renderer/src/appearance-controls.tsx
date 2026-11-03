@@ -410,7 +410,7 @@ export function GlassControls({ t }: { t: ThemeState }) {
           <Slider label="Panel opacity" value={Math.round(t.opacity * 100)} min={30} max={95} suffix="%" onChange={(v) => setTheme({ opacity: v / 100 })} />
           <Slider label="Blur" value={t.blur} min={8} max={24} suffix="px" onChange={(v) => setTheme({ blur: v })} />
           <div className="settings-row">
-            <div><label>Frost tool content</label><p>The background also shows through terminals and editors.</p></div>
+            <div><label>Frost tool content</label><p>The background also shows through terminals, editors and the chat on your phone.</p></div>
             <Switch on={t.contentGlass} onChange={(v) => setTheme({ contentGlass: v })} label="Frost tool content" />
           </div>
           {t.contentGlass && (

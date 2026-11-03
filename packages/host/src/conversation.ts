@@ -9,16 +9,30 @@ import { oneLine } from "@hivemind/agent-host/one-line";
 import { transcriptEntries, type AgentTranscript, type TranscriptEntry } from "@hivemind/agents/node";
 import type { ConversationEntry as Entry, ToolAsked, ToolUse } from "@hivemind/workspace-api/agents";
 
-/** The entries said, and how far into the file they go (bytes, at the end of a line). */
+/** The entries said, and how far into the file they go (bytes, at the end of a line). Read from no
+ *  cursor, `before` is where the line of the first of them begins: what was said earlier ends there. */
 export interface Said {
   entries: Entry[];
   cursor: number;
+  before?: number;
+}
+
+/** What was said just before a place in the file, and where the line of the first of it begins: 0
+ *  when nothing was said earlier. */
+export interface SaidEarlier {
+  entries: Entry[];
+  before: number;
 }
 
 /** How much of the end of the file is read, and how many of its entries kept, when asked from no
  *  cursor; and the most read past one. */
 export const TAIL_BYTES = 1024 * 1024;
 export const TAIL_ENTRIES = 200;
+/** The most read for one page of what was said earlier: a longer line is passed over. */
+export const EARLIER_BYTES_MAX = 16 * 1024 * 1024;
+/** A page of what was said earlier is read back until it holds this many entries, or this much was read. */
+const PAGE_ENTRIES = 50;
+const PAGE_BYTES_MAX = 4 * 1024 * 1024;
 
 /** The complete lines of `got` bytes read from byte `start` of a file, and where the last of them
  *  ends: what is after its last line break is a line still being written. */
@@ -40,6 +54,84 @@ function linesBetween(file: string, start: number, end: number): { lines: string
   }
 }
 
+/** The bytes of `file` from `start` to `end`, as whole lines and where each begins: read from inside
+ *  the file, what comes before the first line break is a piece of a line. Null with no whole line. */
+function placedLines(file: string, start: number, end: number): Array<{ text: string; at: number }> | null {
+  const fd = fs.openSync(file, "r");
+  try {
+    const bytes = Buffer.alloc(end - start);
+    const got = fs.readSync(fd, bytes, 0, bytes.length, start);
+    let at = 0;
+    if (start > 0) {
+      const first = bytes.subarray(0, got).indexOf(0x0a);
+      if (first < 0) return null;
+      at = first + 1;
+    }
+    const lines: Array<{ text: string; at: number }> = [];
+    while (at < got) {
+      const next = bytes.subarray(0, got).indexOf(0x0a, at);
+      if (next < 0) break;
+      if (next > at) lines.push({ text: bytes.subarray(at, next).toString("utf8"), at: start + at });
+      at = next + 1;
+    }
+    return lines.length || start === 0 ? lines : null;
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
+/** The last `keep` entries `lines` say, read back from the last line, and where the line of the first
+ *  of them begins; where the first line begins once all of them were read. */
+function lastSaid(format: AgentTranscript, lines: Array<{ text: string; at: number }>, keep: number): SaidEarlier {
+  const pieces: Entry[][] = [];
+  let count = 0;
+  let before = lines[0]?.at ?? 0;
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const said = transcriptEntries(format, [lines[i]!.text]);
+    if (!said.length) continue;
+    pieces.unshift(said);
+    count += said.length;
+    if (count >= keep) {
+      before = lines[i]!.at;
+      break;
+    }
+  }
+  return { entries: pieces.flat(), before };
+}
+
+/** What the session file `file`, read as `format` maps it, said just before byte `before`: a page of
+ *  up to 200 entries, read back until it holds 50 or 4 MiB was read, and on past that while it holds
+ *  none; a line too long for 16 MiB is passed over. */
+export function readEarlier(file: string, format: AgentTranscript, before: number): SaidEarlier {
+  let end: number;
+  try { end = Math.min(before, fs.statSync(file).size); } catch { return { entries: [], before: 0 }; }
+  const pieces: Entry[][] = [];
+  let count = 0;
+  let read = 0;
+  let window = TAIL_BYTES;
+  while (end > 0 && read < EARLIER_BYTES_MAX) {
+    const start = Math.max(0, end - window);
+    const lines = placedLines(file, start, end);
+    if (!lines) {
+      window *= 4;
+      if (window <= EARLIER_BYTES_MAX) continue;
+      // One line longer than any read here: passed over.
+      read += end - start;
+      end = start;
+      window = TAIL_BYTES;
+      continue;
+    }
+    read += end - start;
+    const said = lastSaid(format, lines, TAIL_ENTRIES - count);
+    pieces.unshift(said.entries);
+    count += said.entries.length;
+    end = said.entries.length ? said.before : (lines[0]?.at ?? start);
+    window = TAIL_BYTES;
+    if (count >= PAGE_ENTRIES || (count > 0 && read >= PAGE_BYTES_MAX)) break;
+  }
+  return { entries: pieces.flat(), before: end };
+}
+
 /** Where a conversation of a session file `size` bytes long is read from: after `cursor`, of the
  *  last 1 MiB. */
 export function conversationStart(size: number, cursor?: number): number {
@@ -53,10 +145,10 @@ export function readConversation(file: string, format: AgentTranscript, cursor?:
   try { size = fs.statSync(file).size; } catch { return { entries: [], cursor: cursor ?? 0 }; }
   const from = conversationStart(size, cursor);
   const { lines, through } = linesBetween(file, from, size);
+  if (cursor === undefined) return { ...lastSaid(format, placedLines(file, from, size) ?? [], TAIL_ENTRIES), cursor: through };
   // Read from inside the file, the first line is a piece of one: never a record.
   const whole = from === cursor || from === 0 ? lines : lines.slice(1);
-  const entries = transcriptEntries(format, whole);
-  return { entries: cursor === undefined ? entries.slice(-TAIL_ENTRIES) : entries, cursor: through };
+  return { entries: transcriptEntries(format, whole), cursor: through };
 }
 
 /** How much of the end of the file is read first for the last thing said; four times more each time
@@ -160,13 +252,13 @@ const TOOL_CHUNK = 4 * 1024 * 1024;
 
 /** The lines of `file` after byte `floor` that name `named`, read back from its end a chunk at a
  *  time, in the file's order: from the last chunk back to the first that gives what `enough` asks. */
-function linesNaming(file: string, named: Buffer, enough: (lines: string[]) => boolean, floor: number): string[] {
+function linesNaming(file: string, named: Buffer, enough: (lines: string[]) => boolean, floor: number, ceiling = Infinity): string[] {
   const fd = fs.openSync(file, "r");
   try {
     const found: string[] = [];
     // The start of the line the chunk after this one began inside of.
     let carry = Buffer.alloc(0);
-    for (let end = fs.fstatSync(fd).size; end > floor; ) {
+    for (let end = Math.min(ceiling, fs.fstatSync(fd).size); end > floor; ) {
       // From the byte before the floor, which says whether a whole line starts there.
       const start = Math.max(floor && floor - 1, end - TOOL_CHUNK);
       const bytes = Buffer.alloc(end - start + carry.length);
@@ -195,14 +287,14 @@ function linesNaming(file: string, named: Buffer, enough: (lines: string[]) => b
 }
 
 /** The tool use `use` in the session file `file`, read as `format` maps it, unfolded: the records
- *  that name it, read whole, back from the end of the file to the one that says it was used, not
- *  before byte `from`; undefined when none says it was. */
-export function toolUse(file: string, format: AgentTranscript, use: string, from = 0): ToolUse | undefined {
+ *  that name it, read whole, back from the end of the file (or byte `to`) to the one that says it was
+ *  used, not before byte `from`; undefined when none says it was. */
+export function toolUse(file: string, format: AgentTranscript, use: string, from = 0, to = Infinity): ToolUse | undefined {
   const named = Buffer.from(JSON.stringify(use));
   const usedIn = (lines: string[]) => transcriptEntries(format, lines, { full: true })
     .find((e): e is Extract<TranscriptEntry, { tool: unknown }> => "tool" in e && e.tool.id === use)?.tool;
   let lines: string[];
-  try { lines = linesNaming(file, named, (l) => !!usedIn(l), from); } catch { return undefined; }
+  try { lines = linesNaming(file, named, (l) => !!usedIn(l), from, to); } catch { return undefined; }
   const entries = transcriptEntries(format, lines, { full: true });
   const tool = entries.find((e): e is Extract<TranscriptEntry, { tool: unknown }> => "tool" in e && e.tool.id === use)?.tool;
   if (!tool) return undefined;

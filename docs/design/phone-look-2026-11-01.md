@@ -52,7 +52,8 @@ cover-fit there is drawn 2532 px tall, so a 4032×3024 camera photo is already d
   bar and open sheets are solid, since blur alone does not keep rows under them from showing, and a
   photo holds still, as nothing sees it move through the blur. Project headings scroll with their
   rows while a wallpaper shows. A photo or video gets the desktop's brightness layer and vignette.
-  Terminal and conversation screens stay solid.
+  A terminal stays solid, and so does a conversation unless the computer frosts tool content: then
+  it takes the desktop's content tint over the wallpaper, no blur, the wallpaper held still.
 
 ## Guest rule
 

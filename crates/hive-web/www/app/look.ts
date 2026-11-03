@@ -99,7 +99,7 @@ export class LookShown {
     void this.wallpaper();
   }
 
-  /** A solid screen (a conversation, a terminal) is shown over it: it holds still, unseen. */
+  /** A conversation or a terminal is shown over it: it holds still, what shows of it a frozen frame. */
   hide(hidden: boolean): void {
     if (hidden === this.behind) return;
     this.behind = hidden;
@@ -137,6 +137,8 @@ export class LookShown {
     root.classList.toggle("wallpaper-moving", kind === "video" || kind.startsWith("@"));
     root.classList.toggle("wp-static", !w?.motion);
     root.style.setProperty("--glass", `${w?.glass ?? 92}%`);
+    root.classList.toggle("content-glass", kind !== "none" && w?.contentTint != null);
+    root.style.setProperty("--content-tint", `${w?.contentTint ?? 0}%`);
     root.style.setProperty("--wp-brightness", String((w?.brightness ?? 85) / 100));
     this.layer.hidden = kind === "none";
     if (!held || !w || kind === "none") return void this.layer.replaceChildren();

@@ -7,7 +7,7 @@ import init, { Device, type Host, Homes, Term, type ViewSession, connectWith, de
 import type { Filter } from "./home.js";
 import type { Account, Computer } from "./accounts.js";
 import { deviceKey, get } from "./store.js";
-import type { Agent, BrowserAsk, Folders, Held, HeldLook, Offered, Others, Overview, PageNote, Paired, Photo, Piece, Places, Reply, Screen, Sent, Shown, SlashCommand, Start, Unfolded, ViewFile } from "./types.js";
+import type { Agent, BrowserAsk, EarlierPage, Folders, Held, HeldLook, Offered, Others, Overview, PageNote, Paired, Photo, Piece, Places, Reply, Screen, Sent, SentFile, Shown, SlashCommand, Start, Unfolded, ViewFile } from "./types.js";
 import { message } from "./words.js";
 
 /** What connecting shows, step by step (pair.ts). */
@@ -111,7 +111,7 @@ class Link {
   live = false;
   error: string | null = null;
   wake: (() => void) | null = null;
-  readonly followed = new Set<Followed | Watched>();
+  readonly followed = new Set<Followed | FilesFollowed | Watched>();
 
   constructor(
     readonly device: string,
@@ -477,6 +477,32 @@ export class Phone {
     };
   }
 
+  /** Follow the files `agent` sent, the whole list each time, again after each reconnection. What
+   *  it returns stops it. */
+  sentFiles(agent: Agent, listed: (files: SentFile[]) => void): () => void {
+    const f = new FilesFollowed(agent, listed);
+    const link = this.links.get(agent.device);
+    link?.followed.add(f);
+    if (link?.host) f.start(link.host);
+    return () => {
+      link?.followed.delete(f);
+      f.stop();
+    };
+  }
+
+  /** Fetch a file `agent` sent, from `from`: whether it came whole, false when the connection went
+   *  first. Throws why, when the computer refuses. */
+  async fetchSentFile(agent: Agent, file: SentFile, from: number, got: (piece: Uint8Array) => void): Promise<boolean> {
+    const host = this.links.get(agent.device)?.host;
+    if (!host) return false;
+    return host.fetchSentFile(agent.workspace, file.id, file.size, from, got);
+  }
+
+  /** What `agent` said in its session `session` just before byte `before`. */
+  async earlier(agent: Agent, session: string, before: number): Promise<EarlierPage> {
+    return (await this.on(agent.device).conversationBefore(agent.workspace, agent.tile, session, before)) as EarlierPage;
+  }
+
   /** Follow what `agent` and the person said, from the last of its session, again after each
    *  reconnection: `said` gets each piece, `ended` why it stopped. What it returns stops it. */
   conversation(agent: Agent, said: (p: Piece) => void, ended: (why: string) => void): () => void {
@@ -538,6 +564,21 @@ class Watched extends Following {
     const how = (await host.watch(this.workspace, this.tile, this.term, this.changed, until)) as { code: number | null } | null;
     if (how) this.ended(how.code === null ? "No session runs there." : `The session ended (${how.code}).`);
     return !!how;
+  }
+}
+
+class FilesFollowed extends Following {
+  constructor(
+    private readonly agent: Agent,
+    private readonly listed: (files: SentFile[]) => void,
+  ) {
+    // A computer that refuses shows no files: nothing else on the screen depends on them.
+    super(() => {});
+  }
+
+  protected async follow(host: Host, until: Promise<void>): Promise<boolean> {
+    await host.sentFiles(this.agent.workspace, this.agent.tile, this.listed, until);
+    return false;
   }
 }
 

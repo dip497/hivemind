@@ -718,6 +718,7 @@ async fn run(args: Args) -> Result<()> {
                             entries,
                             cursor,
                             session,
+                            ..
                         } = piece;
                         println!(
                             "{}",
@@ -782,6 +783,7 @@ async fn run(args: Args) -> Result<()> {
                             entries,
                             cursor,
                             session,
+                            ..
                         } = piece;
                         let said =
                             json!({ "entries": entries, "cursor": cursor, "session": session });

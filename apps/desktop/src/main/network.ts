@@ -584,6 +584,8 @@ function keepPaired(device: PairedDevice): void {
 /** The person's devices paired here that frames run on, workspaces are held on and hosting moves
  *  to: their computers and hosts. A phone runs nothing (spec/pairing.md 0.3). */
 const placesToRun = (): PairedDevice[] => pairedDevices().list().filter((d) => d.kind !== "phone");
+/** How many of the person's phones are paired here. */
+export const phonesPaired = (): number => pairedDevices().list().filter((d) => d.kind === "phone").length;
 
 /** The other machines a frame may run on: the saved machines and the person's computers and hosts. */
 export function machinesToRunOn(): Array<{ id: string; name: string }> {

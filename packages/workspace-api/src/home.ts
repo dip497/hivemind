@@ -80,7 +80,7 @@ export interface KeyedSnapshot<T> {
   rows: Array<[string, T]>;
 }
 
-/** How the computer looks, for the person's phone to look the same (0.5): its theme's colours,
+/** How the computer looks, for the person's phone to look the same (0.5, 0.6): its theme's colours,
  *  each `#rrggbb`, its terminal's, and its wallpaper as it draws it. */
 export interface HomeLook {
   mode: "dark" | "light";
@@ -103,6 +103,8 @@ export interface HomeWallpaper {
   motion: boolean;
   /** The panels' tint over it, in percent, while glass is on; else null. */
   glass: number | null;
+  /** Tool content's tint over it, in percent, while tool content is frosted; else null (0.6). */
+  contentTint: number | null;
   /** A photo's or video's file (`appearance.media`), named by a hash of its address. */
   media?: { revision: string; type: "image" | "video" };
 }
