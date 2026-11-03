@@ -9,6 +9,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+## [2026.11.2] — 2026-11-03
+
 - Added: **Search**: find any line in the project as you type, with match case, regular expression and fuzzy modes, and a result opens the editor at that line. **Add ▸ Search**, **Ctrl+Shift+F** in the Code tile, or `hive ctl open-tool @hivemind/code/search`. **Ctrl+P** (**⌘P**) goes to a file by part of its name, typos and all, the files you open most first. Built on fff's Rust search; where it cannot load, git's own search answers instead.
 - Added: the editor closes brackets and quotes as you open them, and offers the file's own words as you type.
 - Added: workspace API 0.40: `code.findFiles`, `code.picked` and `code.grep`, at the `view` role.
@@ -2257,7 +2259,8 @@ World, and sandboxed community views), and the e2e/perf harnesses gate every cha
 - **install.sh** — single script for both fresh install and in-place upgrade. Downloads prebuilt binaries from GitHub Releases by default; `--dev` flag clones and builds from source.
 - **GitHub Actions** — `release.yml` (tag-driven build + publish on `v*.*.*`), `ci.yml` (typecheck + build + unit tests on every push / PR).
 
-[Unreleased]: https://github.com/dip497/hivemind/compare/v2026.11.1...HEAD
+[Unreleased]: https://github.com/dip497/hivemind/compare/v2026.11.2...HEAD
+[2026.11.2]: https://github.com/dip497/hivemind/releases/tag/v2026.11.2
 [2026.11.1]: https://github.com/dip497/hivemind/releases/tag/v2026.11.1
 [2026.11.0]: https://github.com/dip497/hivemind/releases/tag/v2026.11.0
 [2026.10.8]: https://github.com/dip497/hivemind/releases/tag/v2026.10.8
