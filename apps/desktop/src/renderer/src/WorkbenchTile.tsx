@@ -9,12 +9,14 @@
  * Canvas owns the persisted open-tab list.
  */
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
-import { GripVertical, Files, GitCompare } from "./components/icons";
+import { GripVertical, Files, GitCompare, Search } from "./components/icons";
 import { Button } from "./components/ui/button";
 import { HeaderPinButton, type PinRect } from "./canvas-nodes";
 import { FileTreeTile } from "./FileTreeTile";
 import { EditorTile } from "./EditorTile";
-import type { HistoryRequest } from "./tiles/api";
+import type { EditorReveal, HistoryRequest } from "./tiles/api";
+import { FindPanel } from "./code/FindPanel";
+import { QuickOpen } from "./code/QuickOpen";
 
 const DiffTile = lazy(() => import("./DiffTile").then((m) => ({ default: m.DiffTile })));
 
@@ -37,9 +39,11 @@ interface Props {
   startOnChanges?: boolean;
   /** Changes compares these two branches (a hand-off) rather than the working tree. */
   compare?: { base: string; head: string };
+  /** A line to show, from the frame's Search tile. */
+  reveal?: EditorReveal;
 }
 
-type Panel = "explorer" | "changes";
+type Panel = "explorer" | "search" | "changes";
 
 const SIDEBAR_DEFAULT = 240;
 const SIDEBAR_MIN = 140;
@@ -48,7 +52,7 @@ const SIDEBAR_KEY = "hivemind:workbench-sidebar";
 const PANEL_KEY = "hivemind:workbench-panel";
 const clampW = (w: number) => Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, w));
 
-export function WorkbenchTile({ repoPath, tabs, onOpenFile, onOpenInBrowser, onCloseTab, onClose, pinned, onTogglePin, startOnChanges, compare }: Props) {
+export function WorkbenchTile({ repoPath, tabs, onOpenFile, onOpenInBrowser, onCloseTab, onClose, pinned, onTogglePin, startOnChanges, compare, reveal }: Props) {
   const [collapsed, setCollapsed] = useState(false);
   const [panel, setPanel] = useState<Panel>(
     () => startOnChanges || compare ? "changes" : (localStorage.getItem(PANEL_KEY) as Panel) || "explorer",
@@ -70,10 +74,26 @@ export function WorkbenchTile({ repoPath, tabs, onOpenFile, onOpenInBrowser, onC
   };
 
   const reqSeq = useRef(0);
-  const [activeReq, setActiveReq] = useState<{ path: string; seq: number; diff?: boolean } | null>(null);
-  const selectFile = (path: string, opts?: { diff?: boolean }) => {
+  const [activeReq, setActiveReq] = useState<{ path: string; seq: number; diff?: boolean; line?: number; col?: number } | null>(null);
+  const selectFile = (path: string, opts?: { diff?: boolean; line?: number; col?: number }) => {
     onOpenFile(path); // add as a tab (Canvas dedupes)
-    setActiveReq({ path, seq: ++reqSeq.current, diff: opts?.diff }); // and always focus it
+    setActiveReq({ path, seq: ++reqSeq.current, ...opts }); // and always focus it
+  };
+
+  // A line asked for from outside (the frame's Search tile): open that file there, once per ask.
+  useEffect(() => {
+    if (!reveal) return;
+    setActiveReq({ path: reveal.path, seq: ++reqSeq.current, line: reveal.line, col: reveal.col });
+    setPanel((p) => (p === "changes" ? "explorer" : p));
+  }, [reveal]);
+
+  // Go to file (Ctrl+P) and Find in files (Ctrl+Shift+F), as in VS Code, while focus is in this tile.
+  const [quickOpen, setQuickOpen] = useState(false);
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
+    const k = e.key.toLowerCase();
+    if (k === "p" && !e.shiftKey) { e.preventDefault(); e.stopPropagation(); setQuickOpen(true); }
+    else if (k === "f" && e.shiftKey) { e.preventDefault(); e.stopPropagation(); setPanel("search"); setCollapsed(false); }
   };
 
 
@@ -110,7 +130,7 @@ export function WorkbenchTile({ repoPath, tabs, onOpenFile, onOpenInBrowser, onC
   );
 
   return (
-    <div className="hm-glass-surface flex h-full flex-col rounded-xl border border-[var(--color-line)] bg-[var(--color-bg2)] overflow-hidden shadow-[var(--hm-shadow-float)]">
+    <div onKeyDown={onKeyDown} className="hm-glass-surface flex h-full flex-col rounded-xl border border-[var(--color-line)] bg-[var(--color-bg2)] overflow-hidden shadow-[var(--hm-shadow-float)]">
       {/* drag handle + tile chrome (the ONE header for the whole workbench) */}
       <header className="tile-drag-handle h-8 flex items-center gap-2 px-2.5 bg-[var(--color-bg3)] border-b border-[var(--color-line)] text-count font-mono text-[var(--color-fg2)] cursor-grab active:cursor-grabbing">
         <GripVertical size={13} className="text-[var(--color-fg3)] -ml-1 shrink-0" />
@@ -134,17 +154,20 @@ export function WorkbenchTile({ repoPath, tabs, onOpenFile, onOpenInBrowser, onC
         {/* activity bar — Explorer / Changes (VSCode left rail) */}
         <nav className="nodrag shrink-0 w-10 flex flex-col items-center gap-1 py-1.5 bg-[var(--color-bg3)] border-r border-[var(--color-line)]">
           {railBtn("explorer", "Explorer (files)", Files)}
+          {railBtn("search", "Search (Ctrl+Shift+F)", Search)}
           {railBtn("changes", "Changes (source control)", GitCompare)}
         </nav>
 
-        {!collapsed && panel === "explorer" && (
+        {!collapsed && panel !== "changes" && (
           <>
             <div
               className="shrink-0 min-w-0 border-r border-[var(--color-line)]"
               style={{ width: sidebarW }}
             >
               {/* Keyed on repoPath: moved into a frame of another repo, the tree starts over. */}
-              <FileTreeTile key={repoPath} repoPath={repoPath} onSelectFile={(p) => selectFile(p)} onShowHistory={(file) => showHistory({ file })} embedded />
+              {panel === "search"
+                ? <FindPanel key={repoPath} repoPath={repoPath} onOpen={(p, line, col) => selectFile(p, { line, col })} />
+                : <FileTreeTile key={repoPath} repoPath={repoPath} onSelectFile={(p) => selectFile(p)} onShowHistory={(file) => showHistory({ file })} embedded />}
             </div>
             {/* Resize handle — a WIDE (8px) grab zone with a thin centered line. */}
             <div
@@ -181,6 +204,7 @@ export function WorkbenchTile({ repoPath, tabs, onOpenFile, onOpenInBrowser, onC
             onShowHistory={showHistory}
             embedded
           />
+          <QuickOpen repoPath={repoPath} open={quickOpen} onOpenChange={setQuickOpen} onPick={(p) => selectFile(p)} />
           {/* Changes is the Diff tile itself, over the editor (kept mounted, so
               unsaved edits survive); opening a file edits it in the editor. */}
           {panel === "changes" && !collapsed && (

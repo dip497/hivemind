@@ -1,4 +1,4 @@
-# Workspace API (0.39)
+# Workspace API (0.40)
 
 What a workspace's host is asked for, and what it answers. The host is the machine the
 workspace's repo is on; today its callers are the app's windows (in the app, or in a browser tab it serves), peers on
@@ -66,7 +66,7 @@ and not read (a program that stopped reading) is closed.
 The first line says who connects: `{"hello": {"token", "workspace"?}}`.
 
 - **The install's token** (`hcp.token`) is the person at this machine. The host answers
-  `{"hello": {"api": "0.39", "as": "person"}}` and serves every method, as to a window of theirs.
+  `{"hello": {"api": "0.40", "as": "person"}}` and serves every method, as to a window of theirs.
 - **A grant's token** is a program the person let drive workspaces (`grant.create`), or a tool
   plugin's service, whose grant is made when it starts and taken back when it stops (`plugin` in
   `grant.list` names the plugin). It names one of the grant's workspaces by its folder, which may
@@ -206,6 +206,9 @@ sends, and one participant per device.
 | `git.fileHistory` | `repo`, `file`, `next`? | `{entries: [{oid, time, author, subject, path, renamedFrom?}], next}` (0.39): a file's commits, newest first, 100 a page; where the file was added under a path it was renamed to, the history goes on under the path it had (`renamedFrom`). `next` is opaque: hand it back as the third param | read |
 | `git.blame` | `repo`, `file`, `{contents?, from?, to?, moved?}`? | `{hunks: [{oid, start, lines, author, time, summary}], contents}` (0.39): who last changed each run of lines, of the editor's `contents` when given (lines not committed yet have `oid` null); `from`/`to` limit it to those lines; `moved` follows lines moved or copied. `contents` false when the committed file was blamed instead (git before 2.41, a repo on another machine) | read |
 | `git.commitInfo` | `repo`, `sha` | `{oid, parents, author, email, time, committer, committerTime, message, files: [{path, status, from?, add, del}]}` (0.39): against the first parent, renames found | read |
+| `code.findFiles` | `repo`, `query`, `limit`? | `{files: [{path, git?}], engine}` (0.40): files by a fuzzy name, best first (`limit` 1 to 500, 50 if left out); `git` is the file's git status where it is not clean; `engine` is `fff`, or `git` where fff cannot load (the `hive` binary, a repo on another machine) | read |
+| `code.picked` | `repo`, `query`, `file` | `null` (0.40): the person opened `file` for `query`, so it ranks higher for that query next time | read |
+| `code.grep` | `repo`, `query`, `{mode?, cursor?, caseSensitive?}`? | `{lines: [{path, line, col, text, ranges}], next, files, engine, note?}` (0.40): lines holding `query` (1 to 1000 characters), 200 a page; `mode` is `plain` (the default), `regex` or `fuzzy`; `ranges` are the matched columns of `text`; `next` is the `cursor` of the page after, `null` on the last; `note` says why a `regex` query fff could not read was searched as plain text. fff searches the files used most first and stops a page at 1.5 s, so a page can hold fewer than 200 lines and still have a `next` | read |
 | `git.stage` | `repo`, `files` | `null` | target `repo`, detail `N files` |
 | `git.unstage` | `repo`, `files` | `null` | target `repo`, detail `N files` |
 | `git.discard` | `repo`, `files` | `null` (a tracked file goes back to HEAD, an untracked one is removed) | target `repo`, detail `N files` |

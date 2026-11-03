@@ -52,7 +52,7 @@ import type { PinRect } from "./workspace/tile-surfaces";
 import { clampAnchor } from "./pin-anchor";
 import { pickEditorTile } from "./workspace/editor-target";
 import type { TileKind } from "./tile-kinds";
-import { tileKind, useTilesVersion, type HistoryRequest } from "./tiles";
+import { tileKind, useTilesVersion, type EditorReveal, type HistoryRequest } from "./tiles";
 import { kindsThatOpenNow } from "./tool-availability";
 import {
   loadLayout,
@@ -329,6 +329,7 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
     setTiles((ts) => ts.filter((t) => t.id !== id));
     setBrowserOpenReqs(withoutKey(id));
     setHistoryReqs(withoutKey(id));
+    setEditorReveals(withoutKey(id));
     setEditorTabs(withoutKey(id));
     setAgentTitles(withoutKey(id));
     setPositions(withoutKey(id));
@@ -810,6 +811,9 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
   const [browserOpenReqs, setBrowserOpenReqs] = useState<Record<string, { url: string; seq: number }>>({});
   const [historyReqs, setHistoryReqs] = useState<Record<string, HistoryRequest>>({});
   const historySeq = useRef(0);
+  // A line to show in an editor tile, by its id: a find result picked in a Search tile.
+  const [editorReveals, setEditorReveals] = useState<Record<string, EditorReveal>>({});
+  const revealSeq = useRef(0);
   // Text awaiting a claude target — set when something wants to deliver a prompt
   // ("Work on this", diff "send review") and 1+ claude tiles exist.
   const [agentPick, setAgentPick] = useState<{ text: string } | null>(null);
@@ -946,18 +950,23 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
     // Depend on the stable `.mutate` refs, NOT the mutation objects — those are
     // fresh on every isPending tick and would re-render every rail consumer.
   }), [frameOpen, onCreateWorktree, onAttachWorktree, bindWorkspace, arrangeFrame, updateFrameTitle, updateFrameColor, requestDeleteFrame, unbindBranch, unbindWorkspace, repoPath, repoOfFrame, gitPushMut.mutate, gitPullMut.mutate, sleepActions]);
-  const openFileFromTile = useCallback((sourceTileId: string, path: string) => {
+  const openFileFromTile = useCallback((sourceTileId: string, path: string, at?: { line: number; col?: number }) => {
     const sourceFrameId = frameOfRef.current[sourceTileId] ?? selectedFrameIdRef.current;
     const existing = pickEditorTile(tilesRef.current, frameOfRef.current, sourceFrameId);
+    const reveal = (id: string) => {
+      if (at) setEditorReveals((m) => ({ ...m, [id]: { path, line: at.line, col: at.col ?? 0, seq: ++revealSeq.current } }));
+    };
     if (existing) {
       openFileInTile(existing, path);
+      reveal(existing);
       setTimeout(() => { setSelectedTileId(existing); focusTile(existing); }, 0);
       return;
     }
     // No editor in that frame: the fresh one must still open the file the user
     // clicked — spawnTile mints its id, so the path rides in `opts.file`.
     const kind = kindsThatOpenNow("file")[0];
-    if (kind) spawnTile(kind, sourceFrameId ?? null, { file: path });
+    const id = kind ? spawnTile(kind, sourceFrameId ?? null, { file: path }) : null;
+    if (id) reveal(id);
   }, [openFileInTile, focusTile, spawnTile]);
 
   // History in the frame's Changes tile, started when it has none (a file's history from Files, a
@@ -1271,11 +1280,11 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
   // A plugin registering changes what a tile shows without changing the tile: start the cache afresh.
   const buildSurfaces = useMemo(() => createTileSurfaceBuilder(), [persistKey, tilesVersion]);
   const surfaces = useMemo(() => buildSurfaces({
-    repoPath, root, cwd, tiles, frames, frameOf, pinnedIds, editorTabs, browserOpenReqs, historyReqs, tileNames, agentTitles,
+    repoPath, root, cwd, tiles, frames, frameOf, pinnedIds, editorTabs, browserOpenReqs, historyReqs, editorReveals, tileNames, agentTitles,
     openFileInTile, openUrlInBrowser, openFileFromTile, showHistory, closeTabInTile, closeTile, renameTile, sleepTile, wakeTile,
     onTogglePin: togglePin,
   }), [
-    buildSurfaces, repoPath, root, cwd, tiles, frames, frameOf, pinnedIds, editorTabs, browserOpenReqs, historyReqs, tileNames, agentTitles,
+    buildSurfaces, repoPath, root, cwd, tiles, frames, frameOf, pinnedIds, editorTabs, browserOpenReqs, historyReqs, editorReveals, tileNames, agentTitles,
     openFileInTile, openUrlInBrowser, openFileFromTile, showHistory, closeTabInTile, closeTile, renameTile, sleepTile, wakeTile, togglePin,
   ]);
 

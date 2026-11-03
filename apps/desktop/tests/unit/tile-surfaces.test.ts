@@ -16,7 +16,7 @@ const noop = () => {};
 function ctx(over: Partial<TileSurfaceCtx>): TileSurfaceCtx {
   return {
     repoPath: "/base/repo", root: "/base/repo/.hivemind", cwd: "/base/repo",
-    tiles: [], frames: [], frameOf: {}, pinnedIds: new Set(), editorTabs: {}, browserOpenReqs: {}, historyReqs: {}, tileNames: {}, agentTitles: {},
+    tiles: [], frames: [], frameOf: {}, pinnedIds: new Set(), editorTabs: {}, browserOpenReqs: {}, historyReqs: {}, editorReveals: {}, tileNames: {}, agentTitles: {},
     openFileInTile: noop, openUrlInBrowser: noop, openFileFromTile: noop, showHistory: noop, closeTabInTile: noop,
     closeTile: noop, renameTile: noop, onTogglePin: noop,
     ...over,

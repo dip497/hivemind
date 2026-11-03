@@ -64,6 +64,7 @@ export const BUNDLED_TOOL_PLUGINS: readonly ToolPluginContribution[] = Object.fr
       // Its pieces, each on its own: the same components the Code tile puts together.
       Object.freeze({ key: "files", label: "Files", description: "The working tree, with what git says of each file; a file picked opens in the frame's editor.", tileKind: "files", singleton: true }),
       Object.freeze({ key: "changes", label: "Changes", description: "What changed in the working tree or between branches: stage, discard, commit, push, and comment for an agent.", tileKind: "changes", singleton: true }),
+      Object.freeze({ key: "search", label: "Search", description: "Go to a file by a fuzzy name and find any line in the workspace, with fff; a result opens in the frame's editor at its line.", tileKind: "search", singleton: true }),
     ]),
     // The review loop an agent cannot reach from a shell: comments live in the app.
     commands: Object.freeze([

@@ -67,6 +67,18 @@ On a large repository, Hivemind keeps git's commit-graph file, which makes histo
 faster. It is what `git gc` writes, kept current. To turn it off, switch off **Speed up history**
 in **Settings ▸ About**.
 
+## Find a file or a line
+
+**Search** finds any line in the project as you type, and opens the file at that line.
+
+1. Open **Search** (**Add ▸ Search**), or press **Ctrl+Shift+F** in the Code tile.
+2. Type what you are looking for. **Aa** matches case, **.\*** reads it as a regular expression, and
+   **~** finds close matches too.
+3. Click a result. Check: the editor opens the file with the cursor on that line.
+
+To open a file by its name, press **Ctrl+P** (**⌘P** on a Mac) in the Code tile or Search, and type
+part of it. A typo still finds it, and the files you open most come first.
+
 ## Leave notes on a web page
 
 1. In a Browser tile, open the page and press the notes button in its toolbar.

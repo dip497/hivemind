@@ -35,7 +35,9 @@ export interface TileHostState {
   openUrlInBrowser: (sourceTileId: string, url: string) => void;
   /** Open a file in the editor of the source tile's frame, starting one there if it has none: a path a
    *  terminal printed, a file picked in Files or in Changes, one a tool tile names. */
-  openFileFromTile: (sourceTileId: string, path: string) => void;
+  openFileFromTile: (sourceTileId: string, path: string, at?: { line: number; col?: number }) => void;
+  /** A line to show in an editor tile, by its id (a find result picked in Search). */
+  editorReveals: Record<string, EditorReveal>;
   closeTabInTile: (tileId: string, file: string) => void;
   /** History requests to a Changes tile, by its id: show a file's history, or a commit. */
   historyReqs: Record<string, HistoryRequest>;
@@ -51,6 +53,7 @@ export interface TileHostState {
 
 /** What a Changes tile is asked to show in History; a new `seq` is a new request. */
 export interface HistoryRequest { file?: string; sha?: string; seq: number }
+export interface EditorReveal { path: string; line: number; col: number; seq: number }
 
 export interface TileKindSpec {
   size: { width: number; height: number };

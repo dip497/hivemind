@@ -51,6 +51,9 @@ At the end, tell me how to stop the script and how to revoke the token: \`hive g
 | <a id="git-filehistory" />`git.fileHistory` | `repo`, `file`, `next`? | a file's commits through its renames, 100 a page, and `next` (0.39) | `["/home/you/work/api", "src/cart.ts"]` |
 | <a id="git-blame" />`git.blame` | `repo`, `file`, `{contents?, from?, to?, moved?}`? | `{hunks, contents}`: who last changed each run of lines (0.39) | `["/home/you/work/api", "src/cart.ts", {"from": 1, "to": 80}]` |
 | <a id="git-commitinfo" />`git.commitInfo` | `repo`, `sha` | a commit's message and its files, with lines added and removed (0.39) | `["/home/you/work/api", "3f2c1a9"]` |
+| <a id="code-findfiles" />`code.findFiles` | `repo`, `query`, `limit`? | files by a fuzzy name, best first (0.40) | `["/home/you/work/api", "chkcart"]` |
+| <a id="code-picked" />`code.picked` | `repo`, `query`, `file` | ranks a file higher for that query next time (0.40) | `["/home/you/work/api", "chkcart", "src/checkout/cart.ts"]` |
+| <a id="code-grep" />`code.grep` | `repo`, `query`, `{mode?, cursor?, caseSensitive?}`? | a page of matching lines and `next` (0.40) | `["/home/you/work/api", "TAX_RATE", {"mode": "plain"}]` |
 | <a id="worktree-list" />`worktree.list` | `repo` | the repository's worktrees | `["/home/you/work/api"]` |
 | <a id="file-read" />`file.read` | `repo`, `file` | a file's text, inside the workspace | `["/home/you/work/api", "package.json"]` |
 | <a id="issue-list" />`issue.list` | `root` | issues; `root` is the workspace's `.hivemind` folder | `["/home/you/work/api/.hivemind"]` |

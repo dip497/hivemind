@@ -11,6 +11,7 @@
     "test": "tsx --test tests/*.test.ts"
   },
   "dependencies": {
+    "@ff-labs/fff-node": "0.11.0",
     "@hivemind/agent-host": "workspace:*",
     "@hivemind/agents": "workspace:*",
     "@hivemind/core": "workspace:*",
@@ -19,6 +20,7 @@
     "@hivemind/workspace-api": "workspace:*",
     "@hivemind/workspace-doc": "workspace:*",
     "@hivemind/workspace-host": "workspace:*",
+    "fzf": "0.5.2",
     "simple-git": "catalog:"
   },
   "devDependencies": {

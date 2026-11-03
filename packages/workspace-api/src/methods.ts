@@ -5,6 +5,7 @@
 import type { Issue, IssuePatch, IssueState, IssueSummary, LinkType, NewIssue } from "@hivemind/core/types";
 import type { LinkResult, TransferResult } from "@hivemind/core/cross-repo";
 import type { PageBox, PageComment, ReviewComment, ReviewIntent } from "@hivemind/core/review";
+import type { FindFilesPage, GrepMode, GrepPage } from "./code.js";
 import type { BlameOptions, BlamePayload, CommitInfo, DiffPayload, DiffScope, FileHistoryCursor, FileHistoryPage, GitBranchList, GitRevision, GitStatusSnapshot, HandedOff, LogOptions, LogPage, WorktreeCreateOpts, WorktreeEntry } from "./git.js";
 import type { SleepAnswer, WakeAnswer } from "./agents.js";
 import type { AgentAnswer, AgentChange, Approval, Answerer, AgentChanges, AgentEvent, AgentItem, AgentRead, AgentSessions, ConversationEntry, SlashCommand, Folders, Links, PipeChange, Places, SpawnChange, StartAgent, StartImage, Startable, StatusChange, TileOpened, ToolUse } from "./agents.js";
@@ -74,6 +75,12 @@ export interface WorkspaceMethods {
   "git.pull": (repo: string) => void;
   "git.conflictedFile": (repo: string, file: string) => { raw: string; conflicts: number };
   "git.writeResolved": (repo: string, file: string, contents: string) => void;
+  /** (0.40) Files by a fuzzy name: what the person opens often and lately first. */
+  "code.findFiles": (repo: string, query: string, limit?: number) => FindFilesPage;
+  /** (0.40) The person picked `file` for `query`: ranked higher for it next time. */
+  "code.picked": (repo: string, query: string, file: string) => void;
+  /** (0.40) Lines by their text, a page at a time. */
+  "code.grep": (repo: string, query: string, opts?: { mode?: GrepMode; cursor?: number; caseSensitive?: boolean }) => GrepPage;
   /** A participant's branch, as a git bundle (base64), landed as `handoff/<who>/<branch>`, with a
    *  Diff tile on the board showing it against the branch checked out here (M4). */
   "git.handOff": (repo: string, branch: string, bundle: string) => HandedOff;
