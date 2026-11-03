@@ -103,6 +103,11 @@ has plain, regex and fuzzy modes with paging. OpenCode uses it for its agent sea
 
 ### 3.4 The view protocol
 
+Built 2026-11-03 as `code` (feature and permission `workspace:code`), the person's choice: the view
+draws VS Code's own quick open and Search side bar and asks the app for the results, rather than
+docking the app's Search tile. Calls `findFiles`, `grep`, `picked`, `open` (`{tileId}`), each
+naming a frame the view was shown; paths stay inside its folder. The two items below are not built.
+
 A view docks `files`, `changes` and `search` like any tile once they are spawnable kinds; nothing
 new is needed for that. Two additions, protocol 1.19, for the Code view:
 

@@ -18,6 +18,7 @@ import { clickWidget, pressWidget, watchViewWidgets } from "../board-objects/wid
 import { bandOver, followWidgetBand, widgetBand } from "../board-objects/widget-band";
 import type { HcpStatusEvent } from "../../../shared/ipc";
 import { issueService } from "./issue-service";
+import { codeService } from "./code-service";
 
 const TURN_ENDS = new Set(["done", "failed", "interrupted", "limited"]);
 
@@ -155,8 +156,13 @@ export function viewLinkServices(opts: {
   issueFolder: () => string | null;
   /** The box a view draws in, which the window's widget cards float over; a tool's tile has none. */
   box?: () => HTMLElement | null;
+  /** The folder a frame's code is in (on this machine or another; null: the workspace's), or null for none. */
+  frameRepo: (frameId: string | null) => string | null;
+  /** Open a file in the frame's editor (null: any), at a line when given: the editor tile's id. */
+  openFile: (frameId: string | null, path: string, at?: { line?: number; col?: number }) => Promise<string | null>;
 }): LinkServices {
   return {
+    code: codeService(opts.frameRepo, opts.openFile),
     ...(opts.box ? { widgetBand: bandOverView(opts.box) } : {}),
     issues: issueService(opts.issueRoot, opts.issueFolder),
     agentStatus: (tileId, cb) => subscribeHostedStatus(tileId, (s) => cb(viewAgentStatus(s))),
@@ -203,3 +209,4 @@ export function viewLinkServices(opts: {
     },
   };
 }
+

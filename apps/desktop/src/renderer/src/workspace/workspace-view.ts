@@ -94,6 +94,9 @@ export interface WorkspaceCommands {
   /** Open one of the app's own menus, as its toolbar does: the views beside `at` (window
    *  pixels), Add, the theme panel or Settings. */
   openHostMenu: (menu: HostMenu, at?: ViewRect) => void;
+  /** Open a file of a frame's folder in that frame's editor, at a line when given; starts an editor
+   *  there when it has none. The editor tile's id, or null when none could open it. */
+  openFile: (frameId: string | null, path: string, at?: { line?: number; col?: number }) => string | null;
   /** Live agent status, PER TILE, off the awareness bus. Deliberately not on
    *  the model: a status transition (~1 Hz while agents work) reaches only the
    *  subscribers of that tile — a 3D view colours one object, a rail recolours

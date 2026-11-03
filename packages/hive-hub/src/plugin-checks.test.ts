@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { checkPluginFolder, checkPluginListing, firstReads, listedFile, MAX_PLUGIN_FILE_BYTES, ownerProblem, planRead } from "./plugin-checks.js";
 import { THEME_FILE_LIMITS } from "@hivemind/core/theme-format";
 import { parseHubIndex, writeHubIndex } from "./index-format.js";
-import { laterOf, SINCE, sinceOf } from "./since.js";
+import { laterOf, PERMISSION_SINCE, SINCE, sinceOf } from "./since.js";
 
 const folder = (files: Record<string, string | Uint8Array>) =>
   Object.entries(files).map(([path, body]) => ({ path, bytes: typeof body === "string" ? new TextEncoder().encode(body) : body }));
@@ -304,6 +304,9 @@ describe("the oldest Hivemind a plugin needs", () => {
     // A view that fetches its own files says so, and an app before it would refuse the field.
     expect((await plugin(view({ files: true }))).minAppVersion).toBe(SINCE["view.files"]);
     expect((await plugin(view({ permissions: ["workspace:read"] }))).minAppVersion).toBeNull();
+    // A permission is a value, not a field: an app that does not know it refuses the manifest too.
+    expect((await plugin(view({ permissions: ["workspace:spawn", "workspace:code"] }))).minAppVersion).toBe(PERMISSION_SINCE["workspace:code"]);
+    expect((await plugin(view({ widgets: "left", permissions: ["workspace:code"] }))).minAppVersion).toBe(PERMISSION_SINCE["workspace:code"]);
     expect((await plugin(widget())).minAppVersion).toBeNull();
     const kit = (members: object, files: Record<string, string>) => plugin({
       "hivemind-package.json": JSON.stringify({ apiVersion: 2, id: "@ada/kit", name: "Kit", version: "1.0.0", ...members }), ...files });

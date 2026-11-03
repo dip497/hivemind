@@ -203,6 +203,13 @@ export function usePluginLink(o: PluginLinkOptions): PluginLink {
       confirmPrompt,
       issueRoot: () => optsRef.current.issueRoot?.() ?? rootRef.current,
       issueFolder: () => { const d = optsRef.current.issueFolder?.() ?? repoRef.current; return d && !isRemote(d) ? d : null; },
+      frameRepo: (frameId) => {
+        if (frameId === null) return repoRef.current;
+        const f = framesRef.current.find((x) => x.id === frameId);
+        return f ? f.worktreePath ?? f.workspacePath ?? repoRef.current : null;
+      },
+      // Through the batch other commands go through, so the editor it opens is there for the reveal after it.
+      openFile: (frameId, path, at) => new Promise((resolve) => enqueue(() => resolve(commandsRef.current.openFile(frameId, path, at)))),
       // A view fills the window's middle, where the widget cards float; a tool's tile and a widget do not.
       ...(o.record.kind === "view" ? { box: () => optsRef.current.root.current } : {}),
     }),

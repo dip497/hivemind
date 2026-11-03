@@ -9,6 +9,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Added: view protocol 1.19: a view with the new permission `workspace:code` finds a frame's files and lines with fff (`hm.code.findFiles`, `hm.code.grep`, a page at a time) and opens a file in the frame's editor at a line (`hm.code.open`). An older app refuses to install a view that asks for it.
+
 ## [2026.11.2] — 2026-11-03
 
 - Added: **Search**: find any line in the project as you type, with match case, regular expression and fuzzy modes, and a result opens the editor at that line. **Add ▸ Search**, **Ctrl+Shift+F** in the Code tile, or `hive ctl open-tool @hivemind/code/search`. **Ctrl+P** (**⌘P**) goes to a file by part of its name, typos and all, the files you open most first. Built on fff's Rust search; where it cannot load, git's own search answers instead.

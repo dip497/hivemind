@@ -7,4 +7,4 @@ export * from "./commands.js";
 export * from "./status.js";
 export * from "./wallpaper.js";
 export * from "./wallpaper-client.js";
-export { connect, createInvalidator, CLIENT_CALLS, CLIENT_VALUES, applyThemeVars, HostError, type ViewClient, type ViewIssues, type ViewIssuesStatus, type ConnectOptions, type StatusInfo } from "./client.js";
+export { connect, createInvalidator, CLIENT_CALLS, CLIENT_VALUES, applyThemeVars, HostError, type ViewClient, type ViewIssues, type ViewIssuesStatus, type ViewCode, type ConnectOptions, type StatusInfo } from "./client.js";

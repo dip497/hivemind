@@ -29,7 +29,7 @@ export const CLIENT_VALUES_UNTIL_KNOWN = {
 /** `workspace:edit` (protocol 1.2): rename a tile, bind a frame to a folder.
  *  `workspace:prompt` (1.4): give an agent an instruction the view wrote; the user confirms each one.
  *  `workspace:sessions` (1.4): see past agent sessions in a frame's folder and continue one. */
-export const VIEW_PERMISSIONS = ["workspace:spawn", "workspace:close", "workspace:edit", "workspace:prompt", "workspace:sessions", /** 1.8 */ "workspace:widgets", /** 1.9 */ "workspace:issues"] as const;
+export const VIEW_PERMISSIONS = ["workspace:spawn", "workspace:close", "workspace:edit", "workspace:prompt", "workspace:sessions", /** 1.8 */ "workspace:widgets", /** 1.9 */ "workspace:issues", /** 1.19 */ "workspace:code"] as const;
 export type ViewPermission = (typeof VIEW_PERMISSIONS)[number];
 
 /** What each permission lets a plugin do, in the words shown before it is installed (the app's
@@ -43,6 +43,7 @@ const PERMISSION_WORDS: Record<ViewPermission, string> = {
   // A widget's button can do what the widget may (start or close agents): pressing is asked for.
   "workspace:widgets": "press the workspace's widgets, as you would (what a widget does then, it does as you)",
   "workspace:issues": "read, create, change and delete the workspace's issues",
+  "workspace:code": "search the workspace's files, and read the lines found",
 };
 /** The permissions a plugin asks for, said as what they let it do; a name not known here is left out. */
 export const permissionWords = (perms: readonly string[]): string[] =>
@@ -161,7 +162,7 @@ export interface ViewTheme {
 
 /** What a host implements beyond 1.2, sent in `hello.features`. A host that predates 1.3 sends
  *  none, so read the field (`hm.hello.features ?? []`), never probe for a client method. */
-export const VIEW_FEATURES = ["since", "events", "activity", "presence", "history", "share", "agentStatus", "agents", "sessions", "prompt", /** 1.5 */ "participants", /** 1.6 */ "surfaces", /** 1.7 */ "settings", /** 1.8 */ "widgets", /** 1.9 */ "issues", /** 1.10 */ "invoke", /** 1.14 */ "sleep", /** 1.15 */ "hostMenu", /** 1.16 */ "tokens", /** 1.17 */ "fontFaces", "lineSlots", "ownFiles", /** 1.18 */ "widgetBand"] as const;
+export const VIEW_FEATURES = ["since", "events", "activity", "presence", "history", "share", "agentStatus", "agents", "sessions", "prompt", /** 1.5 */ "participants", /** 1.6 */ "surfaces", /** 1.7 */ "settings", /** 1.8 */ "widgets", /** 1.9 */ "issues", /** 1.10 */ "invoke", /** 1.14 */ "sleep", /** 1.15 */ "hostMenu", /** 1.16 */ "tokens", /** 1.17 */ "fontFaces", "lineSlots", "ownFiles", /** 1.18 */ "widgetBand", /** 1.19 */ "code"] as const;
 export type ViewFeature = (typeof VIEW_FEATURES)[number];
 
 export type JsonValue = null | boolean | number | string | JsonValue[] | { [k: string]: JsonValue };
@@ -334,6 +335,37 @@ export interface ViewWidget {
   images: Record<string, string>;
   placement: "board" | "screen";
 }
+
+// ── protocol 1.19 (additive) ────────────────────────────────────────────────
+// `code` in `hello.features`, permission `workspace:code`: find a frame's files by a fuzzy name and
+// its lines by their text (fff on the host, else git), tell the host which file was picked so it
+// ranks it higher next time, and open a file in the frame's editor at a line. The frame's folder is
+// the host's to resolve (its own worktree or folder, else the workspace's); the view names the frame,
+// or null for the workspace's own folder.
+
+/** A file found by name: its path in the frame's folder, and its git status where not clean. */
+export interface ViewFoundFile { path: string; git?: string }
+export interface ViewFindFilesPage { files: ViewFoundFile[]; engine: "fff" | "git" }
+export const GREP_MODES = ["plain", "regex", "fuzzy"] as const;
+export type ViewGrepMode = (typeof GREP_MODES)[number];
+/** A line found: 1-based `line`, 0-based `col`, its text (cut at 400 characters), and the matched
+ *  `[from, to)` columns of the text. */
+export interface ViewFoundLine { path: string; line: number; col: number; text: string; ranges: [number, number][] }
+/** A page of lines; `next` asks for the page after (null: the last). `note` says why a regex was
+ *  searched as plain text. */
+export interface ViewGrepPage { lines: ViewFoundLine[]; next: number | null; files: number | null; engine: "fff" | "git"; note?: string }
+/** One `code` request. */
+export type CodeCall =
+  | { call: "findFiles"; frameId: string | null; query: string; limit?: number }
+  | { call: "grep"; frameId: string | null; query: string; mode?: ViewGrepMode; cursor?: number; caseSensitive?: boolean }
+  | { call: "picked"; frameId: string | null; query: string; file: string }
+  /** Result `{ tileId }`: the editor tile it opened in (started there when the frame had none). */
+  | { call: "open"; frameId: string | null; file: string; line?: number; col?: number };
+export const CODE_CALLS = ["findFiles", "grep", "picked", "open"] as const;
+/** A query's length, a path's, and the most files one `findFiles` asks for. */
+export const CODE_QUERY_MAX = 1000;
+export const CODE_PATH_MAX = 1024;
+export const FIND_FILES_MAX = 500;
 
 // ── protocol 1.18 (additive) ────────────────────────────────────────────────
 // `widgetBand` in `hello.features`: the app floats widget cards over the view, stacked down the
@@ -549,7 +581,9 @@ export type PluginMessage =
    *  asleep is refused `ASLEEP` before the user is asked, as `hive ctl send` refuses it. */
   | { type: "request"; requestId: number; name: "prompt"; args: [{ tileId: string; text: string }] }
   /** 1.9: one of the workspace's issue methods; a writing one needs `workspace:issues`. Result: what it returns. */
-  | { type: "request"; requestId: number; name: "issue"; args: [{ call: IssueCall; args: unknown[] }] };
+  | { type: "request"; requestId: number; name: "issue"; args: [{ call: IssueCall; args: unknown[] }] }
+  /** 1.19, `workspace:code`: find, grep, picked or open in a frame's folder. */
+  | { type: "request"; requestId: number; name: "code"; args: [CodeCall] };
 
 export const MAX_SURFACE_RECTS = 16;
 /** 1.17: the most line slots a view asks for at once, and the least height of one. */
@@ -817,6 +851,11 @@ export function parsePluginMessage(raw: unknown): ParseResult<PluginMessage> {
         if (size > ISSUE_ARGS_MAX) return bad(`args must be JSON of at most ${ISSUE_ARGS_MAX} bytes`);
         return { ok: true, msg: { type: "request", requestId: raw.requestId, name: "issue", args: [{ call: o.call as IssueCall, args: o.args as unknown[] }] } };
       }
+      if (raw.name === "code") {
+        const c = codeCall(o);
+        if (typeof c === "string") return bad(c);
+        return { ok: true, msg: { type: "request", requestId: raw.requestId, name: "code", args: [c] } };
+      }
       return bad(`unknown request ${quoted(raw.name)}`);
     }
     default:
@@ -858,6 +897,12 @@ function refused(m: PluginMessage, host: HostScope): string | null {
     case "pressWidget":
       return host.capabilities.includes("workspace:widgets") ? null : 'pressWidget needs permission "workspace:widgets"';
     case "request":
+      if (m.name === "code") {
+        if (!host.features.includes("code")) return "code: not supported";
+        if (!host.capabilities.includes("workspace:code")) return `code ${m.args[0].call} needs permission "workspace:code"`;
+        const f = m.args[0].frameId;
+        return f === null || host.hasFrame(f) ? null : `code: unknown frame ${f}`;
+      }
       if (m.name !== "issue") return null;
       if (!host.features.includes("issues")) return "issue: not supported";
       return host.capabilities.includes("workspace:issues") ? null : `issue ${m.args[0].call} needs permission "workspace:issues"`;
@@ -965,3 +1010,49 @@ export function areFontFaces(v: unknown): v is ViewFontFace[] {
 
 /** The message the host posts to the iframe window to hand over the port. */
 export const PORT_HANDSHAKE = "hivemind-view:port";
+
+/** A path inside the frame's folder: relative, no `..`, no NUL. */
+const isInnerPath = (p: unknown): p is string =>
+  typeof p === "string" && p.length > 0 && p.length <= CODE_PATH_MAX && !p.startsWith("/") && !/^[A-Za-z]:/.test(p) && !p.includes("\0") && !p.split(/[\\/]/).includes("..");
+const isCount = (n: unknown, min: number, max: number): n is number => typeof n === "number" && Number.isInteger(n) && n >= min && n <= max;
+
+/** A `code` request's one argument, checked; or why it is refused. */
+function codeCall(o: Record<string, unknown>): CodeCall | string {
+  if (!(CODE_CALLS as readonly unknown[]).includes(o.call)) return `call must be one of ${CODE_CALLS.join(", ")}`;
+  if (!isIdOrNull(o.frameId)) return "frameId must be an id or null";
+  const frameId = o.frameId;
+  const query = (min: number) => (typeof o.query === "string" && o.query.length >= min && o.query.length <= CODE_QUERY_MAX ? o.query : null);
+  switch (o.call) {
+    case "findFiles": {
+      const q = query(0);
+      if (q === null) return `query must be at most ${CODE_QUERY_MAX} characters`;
+      if (o.limit !== undefined && !isCount(o.limit, 1, FIND_FILES_MAX)) return `limit must be a whole number from 1 to ${FIND_FILES_MAX}`;
+      return { call: "findFiles", frameId, query: q, ...(o.limit !== undefined ? { limit: o.limit as number } : {}) };
+    }
+    case "grep": {
+      const q = query(1);
+      if (q === null) return `query must be 1 to ${CODE_QUERY_MAX} characters`;
+      if (o.mode !== undefined && !(GREP_MODES as readonly unknown[]).includes(o.mode)) return `mode must be one of ${GREP_MODES.join(", ")}`;
+      if (o.cursor !== undefined && !isCount(o.cursor, 0, Number.MAX_SAFE_INTEGER)) return "cursor must be a page's next";
+      if (o.caseSensitive !== undefined && typeof o.caseSensitive !== "boolean") return "caseSensitive must be true or false";
+      return {
+        call: "grep", frameId, query: q,
+        ...(o.mode !== undefined ? { mode: o.mode as ViewGrepMode } : {}),
+        ...(o.cursor !== undefined ? { cursor: o.cursor as number } : {}),
+        ...(o.caseSensitive !== undefined ? { caseSensitive: o.caseSensitive as boolean } : {}),
+      };
+    }
+    case "picked": {
+      const q = query(0);
+      if (q === null) return `query must be at most ${CODE_QUERY_MAX} characters`;
+      if (!isInnerPath(o.file)) return "file must be a path inside the frame's folder";
+      return { call: "picked", frameId, query: q, file: o.file };
+    }
+    default: {
+      if (!isInnerPath(o.file)) return "file must be a path inside the frame's folder";
+      if (o.line !== undefined && !isCount(o.line, 1, 10_000_000)) return "line must be a whole number from 1";
+      if (o.col !== undefined && !isCount(o.col, 0, 1_000_000)) return "col must be a whole number from 0";
+      return { call: "open", frameId, file: o.file, ...(o.line !== undefined ? { line: o.line as number } : {}), ...(o.col !== undefined ? { col: o.col as number } : {}) };
+    }
+  }
+}
