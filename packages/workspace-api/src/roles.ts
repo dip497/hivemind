@@ -84,6 +84,7 @@ const LEAST: Record<string, Role> = {
   "agent.startable": "view",
   "agent.diff": "view",
   "agent.conversation": "view",
+  "agent.conversationBefore": "view",
   "agent.tool": "view",
   "agent.approval": "view",
   "agent.transcript": "view",
@@ -101,6 +102,11 @@ const LEAST: Record<string, Role> = {
   // reply and the sessions it keeps see it; opening a tool's tile edits the board (0.23).
   "agent.rename": "agents",
   "agent.keys": "agents",
+  // An agent's files for the person's phone: it may send and take back, from this computer alone
+  // (sent-files.ts); reading them is the owner's.
+  "agent.sendFile": "agents",
+  "agent.sentFiles": "agents",
+  "agent.takeBackFile": "agents",
   "link.connect": "agents",
   "link.disconnect": "agents",
   "agent.read": "view",

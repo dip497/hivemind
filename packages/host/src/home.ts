@@ -150,6 +150,7 @@ export function homeLook(a: SharedAppearance, shown: boolean): HomeLook {
       brightness: Math.round(a.wallpaper.brightness * 100),
       motion: a.glass.animate,
       glass: a.glass.enabled ? Math.round(a.glass.opacity * 100) : null,
+      contentTint: a.glass.enabled && a.glass.contentGlass ? Math.round(a.glass.contentOpacity * 100) : null,
       ...(media ? { media: { revision: media.revision, type: media.type } } : {}),
     },
   };

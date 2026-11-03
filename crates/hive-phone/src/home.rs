@@ -253,6 +253,9 @@ pub struct WallpaperLook {
     pub brightness: u8,
     pub motion: bool,
     pub glass: Option<u8>,
+    /// Tool content's tint over it, in percent, while tool content is frosted.
+    #[serde(default, rename = "contentTint")]
+    pub content_tint: Option<u8>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub media: Option<Media>,
 }
@@ -307,6 +310,7 @@ fn wallpaper_ok(w: &WallpaperLook) -> bool {
     is_wallpaper(&w.kind)
         && (40..=110).contains(&w.brightness)
         && w.glass.is_none_or(|g| g <= 100)
+        && w.content_tint.is_none_or(|t| t <= 100)
         && media_ok
 }
 

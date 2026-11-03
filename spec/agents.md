@@ -258,7 +258,14 @@ before the answer. Each entry is one of
 - `cursor` is how far into the file the entries go (in bytes, at the end of a line), and `session`
   the session whose file it is: given back, they answer only what comes after the cursor, as after
   a reconnect. Without them, or for a session the agent keeps no more, it answers the last 200
-  entries of the last 1 MiB of its file now.
+  entries of the last 1 MiB of its file now, and `before` (0.39), the byte where the line of the
+  first of them begins; 0 when nothing was said earlier.
+- `agent.conversationBefore(tile, session, before)` (0.39) answers `{entries, before}`: up to 200
+  entries just before that byte, read back until it holds 50 or 4 MiB was read, and on past that while
+  it holds none, at most 16 MiB (a longer line is passed over); and where the line of the first of them
+  begins, to ask from next. A tool use
+  it gave may be unfolded with `agent.tool`, with what it gave back when that is within 1 MiB of its
+  page. It is `NOT_FOUND` once the agent is in another session.
 - The session is the one last recorded for the agent's tile (by its tracker, or as it was started),
   else the one its manifest would resume. When the agent begins another while it is followed (as
   Claude Code's `/clear` does), and that session's file is there, the device follows that one

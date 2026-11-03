@@ -92,7 +92,9 @@ const NO_FACTS: AgentFacts = { program: () => undefined, decides: () => false, i
  *  until it goes (`terminal.fit`); never otherwise to size one, or to give or take a keyboard. */
 const PHONE_MAY = new Set([
   "agent.answer", "agent.send", "terminal.write", "terminal.keyboard.ask", "terminal.ack", "terminal.fit", "terminal.photo",
-  "agent.startable", "agent.places", "agent.folders", "agent.start", "agent.interrupt", "agent.close", "agent.diff", "agent.commands", "agent.conversation", "agent.tool", "agent.approval",
+  "agent.startable", "agent.places", "agent.folders", "agent.start", "agent.interrupt", "agent.close", "agent.diff", "agent.commands", "agent.conversation", "agent.conversationBefore", "agent.tool", "agent.approval",
+  // The files an agent sent it, as they are listed and in pieces by their ids; never a path.
+  "agent.files", "agent.filePiece",
   "view.list", "view.file", "view.open", "view.post", "view.screen", "view.close", "widget.press",
   // The computer's wallpaper, its photo or video and its live wallpaper's files, as Home names it.
   "appearance.media", "appearance.wallpaperFile",

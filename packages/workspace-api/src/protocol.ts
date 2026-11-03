@@ -30,6 +30,10 @@ export type ErrorCode =
   | "UNAVAILABLE"
   /** Something else is drawn over what it would show: the message names it. */
   | "OCCLUDED"
+  /** A file for the person's phone is larger than a phone takes (0.39). */
+  | "FILE_TOO_BIG"
+  /** No phone is paired here to send a file to (0.39). */
+  | "NO_PHONE"
   /** A note on a page needs a Browser tile: none is where it was asked for, or several are. */
   | "NO_BROWSER_TILE"
   | "SEVERAL_BROWSER_TILES"
@@ -42,7 +46,7 @@ export type ErrorCode =
 /** Every code, so that one added to the type must be added here. */
 const ERROR_CODES: Record<ErrorCode, true> = {
   BAD_REQUEST: true, UNKNOWN_METHOD: true, FORBIDDEN: true, NOT_FOUND: true, NO_AGENT: true, ASLEEP: true, UNSUPPORTED: true,
-  RATE_LIMITED: true, DEPTH_EXCEEDED: true, TIMEOUT: true, UNAVAILABLE: true, OCCLUDED: true, FAILED: true,
+  RATE_LIMITED: true, DEPTH_EXCEEDED: true, TIMEOUT: true, UNAVAILABLE: true, OCCLUDED: true, FILE_TOO_BIG: true, NO_PHONE: true, FAILED: true,
   NO_BROWSER_TILE: true, SEVERAL_BROWSER_TILES: true, NO_ELEMENT: true, SEVERAL_ELEMENTS: true,
 };
 /** Whether `code` is one of the codes a call fails with: what crossed a boundary untyped. */

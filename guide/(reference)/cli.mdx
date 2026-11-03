@@ -140,6 +140,10 @@ hive ctl close <tileId>                 # ends what runs in it; exit 5 if it is 
 hive ctl sleep [tile|frame] [--force]   # its process ends, its screen and conversation kept; none: every agent
 hive ctl wake [tile|frame]              # back in its conversation; awake already is exit 0; exit 7 if nothing woke for another reason
 hive ctl rename <tileId> ["name"]       # no name: back to what its agent says it is doing
+hive ctl send-file <file> [--tile t]    # a copy for the person's phone, in this agent's chat, kept 7 days; at most 32 MiB
+                                        # exit 7 with no phone paired or a file too big; "ready" does not mean it arrived
+hive ctl sent-files [--tile t]          # what this agent sent and is still kept
+hive ctl take-back-file <id>            # the phone no longer shows or fetches it; exit 5 if it is not kept
 hive ctl connect <src> <dst>            # src's finished replies go to dst's inbox; dst is told by one line typed into it, which starts a turn
 hive ctl disconnect <src> [<dst>]
 hive ctl open-tool <owner/name/tool> [--frame f] [--url https://…]

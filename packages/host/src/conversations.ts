@@ -10,7 +10,7 @@ import type { Connection, Domain } from "@hivemind/workspace-api/server";
 import { toBareId } from "@hivemind/workspace-api/tile-id";
 import type { ToolAsked } from "@hivemind/workspace-api/agents";
 import fs from "node:fs";
-import { conversationStart, followConversation, lastSaidSince, pendingTool, readConversation, toolUse, type Said } from "./conversation.js";
+import { TAIL_BYTES, conversationStart, followConversation, lastSaidSince, pendingTool, readConversation, readEarlier, toolUse, type Said } from "./conversation.js";
 import { runsIn, tileOn, type HeldBoard } from "./needs.js";
 
 /** A session an agent keeps its conversation in: its id (empty while none is known), its file
@@ -307,14 +307,14 @@ export interface ConversationsOptions {
 
 /** Whoever is on this machine: the person, or a program or agent on the drive socket. A device on
  *  the network (a phone, a guest) is not. */
-const onThisMachine = (from: Connection): boolean => from.actor.kind === "person" || (from.actor.kind === "peer" && !!from.actor.client);
+export const onThisMachine = (from: Connection): boolean => from.actor.kind === "person" || (from.actor.kind === "peer" && !!from.actor.client);
 
-export function conversations(o: ConversationsOptions): Domain<"agent.conversation" | "agent.tool" | "agent.transcript"> {
+export function conversations(o: ConversationsOptions): Domain<"agent.conversation" | "agent.conversationBefore" | "agent.tool" | "agent.transcript"> {
   /** What each caller follows, by tile: how to stop it. */
   const following = new WeakMap<Connection, Map<string, () => void>>();
   /** Where each caller's view of each agent's conversation begins, in which session: a tool use
    *  it opens is one it was shown, so it is looked for after that. */
-  const shown = new WeakMap<Connection, Map<string, { session?: string; from: number }>>();
+  const shown = new WeakMap<Connection, Map<string, { session?: string; from: number; earlier?: Map<string, { from: number; to: number }> }>>();
   const sizeOf = (file: string): number => { try { return fs.statSync(file).size; } catch { return 0; } };
   return {
     answers: {
@@ -339,6 +339,23 @@ export function conversations(o: ConversationsOptions): Domain<"agent.conversati
         mine.set(bare, followAgent(() => o.transcriptOf(bare), now, first.cursor, (said, of) => from.send({ event: "agent.said", params: [bare, said.entries, said.cursor, of] })));
         return now.file ? { ...first, session: now.session } : first;
       },
+      // What was said earlier in its session, a page at a time, asked for when the person wants it.
+      "agent.conversationBefore": (from, tile, session, before) => {
+        const bare = toBareId(text(tile, "tile"));
+        if (typeof before !== "number" || !Number.isSafeInteger(before) || before < 0) throw new ApiError("BAD_REQUEST", "before is a whole number of bytes");
+        const now = o.transcriptOf(bare);
+        if (!now?.file || now.session !== text(session, "session")) throw new ApiError("NOT_FOUND", "this agent is in another session now");
+        const page = readEarlier(now.file, now.format, before);
+        let seen = shown.get(from)?.get(bare);
+        if (!seen || seen.session !== now.session) {
+          if (!shown.has(from)) shown.set(from, new Map());
+          shown.get(from)!.set(bare, (seen = { session: now.session, from: before }));
+        }
+        // What it gave back comes soon after the use: looked for no further than a page on.
+        const earlier = (seen.earlier ??= new Map());
+        for (const e of page.entries) if ("tool" in e && e.tool) earlier.set(e.tool.id, { from: page.before, to: before + TAIL_BYTES });
+        return page;
+      },
       // The agent's own file, for a program here that reads its records: a path is true only here.
       "agent.transcript": (from, tile) => {
         const bare = toBareId(text(tile, "tile"));
@@ -352,8 +369,10 @@ export function conversations(o: ConversationsOptions): Domain<"agent.conversati
         const bare = toBareId(text(tile, "tile"));
         const now = o.transcriptOf(bare);
         const seen = shown.get(from)?.get(bare);
+        const asked = text(use, "use");
+        const place = seen && seen.session === now?.session ? seen.earlier?.get(asked) : undefined;
         const found = now?.file
-          ? toolUse(now.file, now.format, text(use, "use"), seen && seen.session === now.session ? seen.from : conversationStart(sizeOf(now.file)))
+          ? place ? toolUse(now.file, now.format, asked, place.from, place.to) : toolUse(now.file, now.format, asked, seen && seen.session === now.session ? seen.from : conversationStart(sizeOf(now.file)))
           : undefined;
         if (!found) throw new ApiError("NOT_FOUND", "no such tool use in what this agent said");
         return found;
