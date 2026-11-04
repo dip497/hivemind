@@ -5,7 +5,7 @@ import { createHash } from "node:crypto";
 import path from "node:path";
 import { app } from "electron";
 import { handle, handleEffect, type Caller } from "./app-ipc.js";
-import { appMeetsMinVersion, catalogAgentNeedsUpdate, catalogRepoHolds, fetchCatalog, fetchReadme, needsNewerApp, stageEntry } from "@hivemind/core/plugin-catalog";
+import { agentFilesBehind, appMeetsMinVersion, catalogAgentNeedsUpdate, catalogRepoHolds, fetchCatalog, fetchReadme, needsNewerApp, stageEntry } from "@hivemind/core/plugin-catalog";
 import type { CatalogEntry, SkippedEntry } from "@hivemind/hub";
 import { installAgent, readAgentManifest, removeAgent, userAgentsDir, AGENT_MANIFEST_FILE } from "@hivemind/agents/load";
 import { findBin, verifyAgent } from "@hivemind/agents/discover";
@@ -345,9 +345,10 @@ export async function autoUpdateCatalogAgents(listed: CatalogEntry[]): Promise<A
     // Nothing says where an outdated copy came from: its bytes do.
     const listedSha = entry.files.find((f) => f.path === AGENT_MANIFEST_FILE)?.sha256;
     const published = !fromCatalog && recorded === null && listedSha !== have && await catalogRepoHolds(entry, body);
+    const filesBehind = listedSha === have && await agentFilesBehind(entry, dir);
     if (!catalogAgentNeedsUpdate(entry, {
       fromCatalog, manifestSha: have, recordedSha: recorded,
-      appVersion: app.getVersion(), broken: !!installed.error, published,
+      appVersion: app.getVersion(), broken: !!installed.error, published, filesBehind,
     })) continue;
     let stage: string | null = null;
     try {

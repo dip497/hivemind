@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseHubIndex, type CatalogEntry } from "@hivemind/hub";
-import { appMeetsMinVersion, catalogAgentNeedsUpdate, catalogRepoHolds, fetchCatalog, noteInstall, stageEntry } from "./plugin-catalog.js";
+import { agentFilesBehind, appMeetsMinVersion, catalogAgentNeedsUpdate, catalogRepoHolds, fetchCatalog, noteInstall, stageEntry } from "./plugin-catalog.js";
 
 const ORBIT = JSON.stringify({ id: "@hivemind/orbit", name: "Orbit", entry: "orbit.js" });
 const sha = (s: string) => createHash("sha256").update(s).digest("hex");
@@ -152,6 +152,61 @@ test("an agent this app cannot load is repaired from the catalog, however it was
   expect(catalogAgentNeedsUpdate(entry, { ...broken, broken: false })).toBe(false);
   // Still never onto an app too old to run what the catalog lists.
   expect(catalogAgentNeedsUpdate(entry, { ...broken, appVersion: "2026.9.6" })).toBe(false);
+});
+
+test("an agent's other files follow the catalog when what it holds is the catalog's, and stay when someone edited one", async () => {
+  const listing = (files: Record<string, string>) => parseHubIndex({ version: 1, plugins: [{ id: "claude", type: "agent", name: "Claude", description: "d", author: "a",
+    version: "1.0.0", path: "agents/claude", source: `https://raw.githubusercontent.com/dip497/hivemind-plugins/${"1".repeat(40)}/`,
+    files: Object.entries(files).map(([path, body]) => ({ path, sha256: sha(body) })) }] }).plugins[0]!;
+  const copy = (files: Record<string, string>) => {
+    const dir = mkdtempSync(join(tmpdir(), "hm-agent-copy-"));
+    for (const [name, body] of Object.entries(files)) writeFileSync(join(dir, name), body);
+    return dir;
+  };
+  const blob = (s: string) => createHash("sha1").update(`blob ${Buffer.byteLength(s)}\0${s}`).digest("hex");
+  let asked = 0;
+  const published = async (bodies: string[], fn: () => Promise<boolean>): Promise<boolean> => {
+    const real = globalThis.fetch;
+    asked = 0;
+    globalThis.fetch = (async (u: URL | string) => {
+      asked += 1;
+      return new Response(null, { status: bodies.some((b) => String(u).endsWith(`/${blob(b)}`)) ? 200 : 404 });
+    }) as typeof fetch;
+    try { return await fn(); } finally { globalThis.fetch = real; }
+  };
+  const entry = listing({ "agent.yaml": "manifest", "hook.cjs": "new hook", "other.cjs": "other" });
+
+  // All current: nothing is asked of anyone.
+  const current = copy({ "agent.yaml": "manifest", "hook.cjs": "new hook", "other.cjs": "other" });
+  expect(await published([], () => agentFilesBehind(entry, current))).toBe(false);
+  expect(asked).toBe(0);
+
+  // An older hook the catalog published is behind; only the file that differs is looked up.
+  const older = copy({ "agent.yaml": "manifest", "hook.cjs": "old hook", "other.cjs": "other" });
+  expect(await published(["old hook"], () => agentFilesBehind(entry, older))).toBe(true);
+  expect(asked).toBe(1);
+
+  // The same copy, but those bytes were never published: someone edited it.
+  expect(await published([], () => agentFilesBehind(entry, older))).toBe(false);
+
+  // One published and one edited: the edit keeps the whole copy.
+  const mixed = copy({ "agent.yaml": "manifest", "hook.cjs": "old hook", "other.cjs": "mine" });
+  expect(await published(["old hook"], () => agentFilesBehind(entry, mixed))).toBe(false);
+
+  // A file the catalog added has nothing to lose, and nothing to look up.
+  const missing = copy({ "agent.yaml": "manifest", "other.cjs": "other" });
+  expect(await published([], () => agentFilesBehind(entry, missing))).toBe(true);
+  expect(asked).toBe(0);
+
+  // The manifest is not this question: it has rules of its own.
+  const manifest = copy({ "agent.yaml": "edited manifest", "hook.cjs": "new hook", "other.cjs": "other" });
+  expect(await published([], () => agentFilesBehind(entry, manifest))).toBe(false);
+  expect(asked).toBe(0);
+
+  const state = { fromCatalog: true, manifestSha: sha("manifest"), recordedSha: sha("manifest"), appVersion: "2026.9.6" };
+  expect(catalogAgentNeedsUpdate(entry, { ...state, filesBehind: true })).toBe(true);
+  expect(catalogAgentNeedsUpdate(entry, { ...state, filesBehind: false })).toBe(false);
+  expect(catalogAgentNeedsUpdate({ ...entry, minAppVersion: "2026.9.7" }, { ...state, filesBehind: true })).toBe(false);
 });
 
 test("a file is the catalog's when its repository on GitHub holds those exact bytes", async () => {

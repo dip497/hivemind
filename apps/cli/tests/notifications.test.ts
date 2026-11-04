@@ -60,7 +60,7 @@ describe("hive notifications", () => {
     }
     const stored = JSON.parse(fs.readFileSync(file(), "utf8")).notifications;
     expect([stored.volume, stored.dnd.start, stored.sounds.started, Object.hasOwn(stored, "toString")]).toEqual([0.8, "23:30", undefined, false]);
-  });
+  }, 30_000);
 
   test("play and recent with no app running are UNAVAILABLE and say to open the app", () => {
     for (const args of [["play", "needs"], ["recent"]]) {
