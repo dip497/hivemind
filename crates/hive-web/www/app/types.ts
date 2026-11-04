@@ -230,6 +230,7 @@ export interface HomeTile {
   machine?: string;
   interrupt?: boolean;
   conversation?: boolean;
+  background?: number;
 }
 
 export interface HomeFrame {

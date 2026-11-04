@@ -80,7 +80,7 @@
      "status": {
       "state": "idle",
       "subagents": [],
-      "background": 0,
+      "background": 2,
       "compacting": false,
       "source": "hooks",
       "since": 1790000002000
@@ -91,7 +91,7 @@
      "status": {
       "state": "exited",
       "subagents": [],
-      "background": 0,
+      "background": 1,
       "compacting": false,
       "source": "hooks",
       "since": 1790000003000
@@ -134,7 +134,8 @@
      "agent": "Agent 1",
      "state": "idle",
      "since": 1790000002000,
-     "machine": "desk"
+     "machine": "desk",
+     "background": 2
     },
     {
      "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",

@@ -67,7 +67,8 @@ test("claude turn end: the reply goes on its own request, then the turn end with
 test("claude turn end: what wakes claude when it finishes is counted apart from what merely runs", async () => {
   const left = (...types: string[]) => run("claude", "hive-turn-end.cjs", { background_tasks: types.map((type) => ({ type, status: "running" })) }, ok);
   const params = async (...types: string[]) => ((await left(...types)).got.at(-1) as { params: unknown }).params;
-  assert.deepEqual(await params("shell", "monitor", "teammate"), { background: 3, tileId: "hm:t1", event: "turn.ended" });
+  assert.deepEqual(await params("shell", "monitor", "teammate"), { background: 1, tileId: "hm:t1", event: "turn.ended" });
+  assert.deepEqual(await params("monitor", "teammate"), { tileId: "hm:t1", event: "turn.ended" });
   assert.deepEqual(await params("shell", "workflow", "subagent", "cloud session", "MCP task"), { background: 5, awaiting: 4, tileId: "hm:t1", event: "turn.ended" });
   const queued = await run("claude", "hive-turn-end.cjs", { background_tasks: [{ type: "subagent", status: "pending" }] }, ok);
   assert.deepEqual((queued.got.at(-1) as { params: unknown }).params, { awaiting: 1, tileId: "hm:t1", event: "turn.ended" });

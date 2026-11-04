@@ -31,7 +31,7 @@ import { Button } from "./components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from "./components/ui/dialog";
 import { Input } from "./components/ui/input";
 import { AGENT_TILE_KIND, isTerminalKind } from "./tile-kinds";
-import { CardLine, lineId, RowLine } from "./row-line";
+import { CardLine, lineId, RowLine, Running } from "./row-line";
 import type { SleepActions } from "./workspace/SleepAgents";
 import { tileKind } from "./tiles";
 import { KindMark } from "./tiles/mark";
@@ -273,6 +273,7 @@ const TileRow = memo(function TileRow({ t, depth, selected, actions, lines, star
         <span className="truncate">{t.name}</span>
         {lined && <RowLine tileId={t.id} />}
       </span>
+      <Running tileId={t.id} className={`shrink-0 ${COUNT} group-hover:hidden`} />
       {/* While Ctrl/⌘ is held: the number that jumps here, in place of its status. */}
       {jumpKey !== undefined ? (
         <kbd data-layer-jump={jumpKey} className="grid min-w-[18px] h-[18px] shrink-0 place-items-center rounded-keycap px-1 font-sans text-count leading-none tabular-nums text-[var(--color-fg2)] shadow-[inset_0_0_0_1px_var(--color-line2)]">

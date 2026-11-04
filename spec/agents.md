@@ -58,6 +58,8 @@ item who started it:
   `client:<grant id>` for a program on the drive socket (`workspace-api.md`, "Drive socket").
 - `interrupt` is `true` when its manifest says which keys interrupt its turn (`interrupt`), so
   `agent.interrupt` stops it; left out otherwise.
+- `background`: how many background tasks its last turn left running, as `status.md` counts them.
+  Left out when there are none or its program stopped.
 - `conversation` is `true` when its manifest maps its session file's records (`session.transcript`)
   and says where that file is (`session.resume.exists`), so `agent.conversation` can say what it and
   the person said to each other ("Conversation"); left out otherwise (0.4). The phone opens an agent

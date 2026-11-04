@@ -80,7 +80,8 @@ proceed. No answer: proceed.
 
 ## What a hook counts
 
-`background` on an event counts the payload's `background_tasks` with `status` `running`. `awaiting`
+`background` on an event counts the payload's `background_tasks` with `status` `running`, other than a
+`monitor` or a `teammate`: one only watches, and the other is `running` while it sits idle. `awaiting`
 counts those that come back to the agent when they finish: `status` `running` or `pending`, `type`
 `subagent`, `workflow`, `cloud session` or `MCP task`. A `shell` or a `monitor` may run for as long as
 it likes and a `teammate` is `running` while it sits idle, and a type not listed counts for nothing.

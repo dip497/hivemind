@@ -81,7 +81,7 @@
       "expect": {
         "tileId": "hm:t1",
         "event": "turn.ended",
-        "background": 7,
+        "background": 5,
         "awaiting": 4
       },
       "forbidden": [

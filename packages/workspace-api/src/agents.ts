@@ -291,6 +291,8 @@ export interface AgentItem {
   /** Who started it, when it reports to them (0.20): an agent's tile, or `client:<grant id>`, a
    *  program on the drive socket. */
   parent?: string;
+  /** How many background tasks its last turn left running, none when it left none (0.41). */
+  background?: number;
   /** Its manifest says which keys interrupt its turn. */
   interrupt?: true;
   /** Its manifest maps its session file's records, so `agent.conversation` can say what it and the

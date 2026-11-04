@@ -14,7 +14,8 @@ export function hookLines(spec: HookSpec, tileId: string, token: string, e: Reco
   if (e.agent_id != null) out.agentId = String(e.agent_id);
   if (typeof e.session_id === "string") out.sessionId = e.session_id;
   if (Array.isArray(e.background_tasks)) {
-    const running = e.background_tasks.filter((t: any) => t && t.status === "running").length;
+    // A monitor only watches, and a teammate is running while it sits idle: neither is work under way.
+    const running = e.background_tasks.filter((t: any) => t && t.status === "running" && t.type !== "monitor" && t.type !== "teammate").length;
     if (running > 0) out.background = running;
     // Those that come back to the agent. A shell or a watch may run as long as it likes, and a
     // teammate is running while it sits idle, so the agent waits on none of them.

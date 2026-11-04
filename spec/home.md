@@ -1,4 +1,4 @@
-# Home (0.6)
+# Home (0.7)
 
 What the person's phone shows first (`docs/design/phone-browser-2026-10-03.md` §11.2): every
 workspace the computer holds, its frames and its tiles, as the desktop's Layers panel lists them,
@@ -35,7 +35,7 @@ Each row has a key and is one of three:
   tile that started it when that is on the same board, and `terminal` (0.3) when it runs a terminal
   (an agent's or a shell), which the phone may show and type into.
 - An agent's tile also carries what `agents.md` says of it: `state`, `since`, `waiting` (with
-  `tool`, `asks`, `choose`), `program`, `machine`, `interrupt`, `conversation`.
+  `tool`, `asks`, `choose`), `program`, `machine`, `interrupt`, `conversation`, `background` (0.7).
 
 ## Following
 
