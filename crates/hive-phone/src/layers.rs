@@ -42,6 +42,9 @@ pub struct Prefs {
     pub sort_by: String,
     #[serde(default)]
     pub machines: Vec<String>,
+    /// `hide` leaves asleep tiles out of every list but Pinned; anything else shows them.
+    #[serde(default)]
+    pub asleep: String,
 }
 
 impl Default for Prefs {
@@ -52,6 +55,7 @@ impl Default for Prefs {
             group_by: "group".into(),
             sort_by: "canvas".into(),
             machines: vec![],
+            asleep: "show".into(),
         }
     }
 }

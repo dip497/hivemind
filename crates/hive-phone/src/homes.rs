@@ -96,6 +96,7 @@ pub fn shown(homes: &[Held], query: &str, machine: Option<&str>, view: &HomeView
         tree
     };
 
+    let hidden_asleep = each.iter().map(|(_, s)| s.hidden_asleep).sum();
     let mut marks = BTreeMap::new();
     for (_, s) in each {
         marks.extend(s.marks);
@@ -108,6 +109,7 @@ pub fn shown(homes: &[Held], query: &str, machine: Option<&str>, view: &HomeView
         machines: if machines.len() > 1 { machines } else { vec![] },
         tree,
         marks,
+        hidden_asleep,
     }
 }
 

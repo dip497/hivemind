@@ -169,6 +169,12 @@ pub struct TileRow {
         skip_serializing_if = "Option::is_none"
     )]
     pub background: Option<u64>,
+    #[serde(
+        default,
+        deserialize_with = "only_true",
+        skip_serializing_if = "Not::not"
+    )]
+    pub asleep: bool,
 }
 
 impl TileRow {
@@ -579,11 +585,12 @@ impl Home {
         others.sort_by_key(|m| m.to_lowercase());
         machines.extend(others);
         let on = |m: &str| machine.is_none_or(|chosen| chosen == m);
-        let listed: Vec<(&String, &TileRow)> = self
+        let hide_asleep = view.prefs.asleep == "hide";
+        let (hidden, listed): (Vec<(&String, &TileRow)>, Vec<(&String, &TileRow)>) = self
             .ordered_tiles()
             .into_iter()
             .filter(|(_, t)| found(t) && on(self.machine_of(t, computer)))
-            .collect();
+            .partition(|(_, t)| hide_asleep && t.asleep && !t.pinned);
         let entry = |key: &String, t: &TileRow, depth: u32| Entry::Tile {
             key: key.clone(),
             depth,
@@ -709,7 +716,8 @@ impl Home {
             .filter(|(k, _)| rank.contains_key(k.as_str()))
             .collect();
         let sorted = view.prefs.sort_by != "canvas";
-        let filtering = !q.is_empty() || machine.is_some() || chosen.filtering;
+        let filtering =
+            !q.is_empty() || machine.is_some() || chosen.filtering || !hidden.is_empty();
         let in_list = |list: &[(&String, &TileRow)]| -> Vec<(String, TileRow, u32)> {
             // Agents first, each kind in the desktop's order, and a tile under the one that started
             // it when that is in the list too.
@@ -1002,6 +1010,7 @@ impl Home {
             },
             tree,
             marks,
+            hidden_asleep: hidden.len() as u64,
         }
     }
 }
@@ -1218,6 +1227,9 @@ pub struct Shown {
     pub tree: Vec<Entry>,
     /// The mark of each agent a tile listed runs, by agent: drawn once, however many run it.
     pub marks: BTreeMap<String, Mark>,
+    /// How many asleep tiles the View menu left out.
+    #[serde(rename = "hiddenAsleep")]
+    pub hidden_asleep: u64,
 }
 
 /// Follow Home on the computer at the other end of `connection`, from the positions `at` (none:

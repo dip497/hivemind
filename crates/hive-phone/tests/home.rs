@@ -6,7 +6,7 @@
 
 use std::collections::BTreeMap;
 
-use hive_phone::home::{Entry, Home, HomeView};
+use hive_phone::home::{Entry, Home, HomeView, Row};
 use serde_json::{json, Value};
 
 /// The tree as the cases say it: a heading by its key, a frame or a tile by its key and depth.
@@ -272,6 +272,56 @@ fn home_carries_once_the_mark_of_each_agent_a_tile_listed_runs_as_absolute_paths
     );
     let searched = home.shown("zzz-nothing", None, &computer, &HomeView::default());
     assert!(searched.marks.is_empty(), "no tile listed, no mark");
+}
+
+#[test]
+fn hiding_asleep_tiles_leaves_them_out_of_all_but_pinned_counts_them_and_drops_a_frame_left_empty()
+{
+    let (mut home, computer) = whole_case();
+    let view = |asleep: &str| {
+        HomeView {
+        prefs: serde_json::from_value(json!({ "status": "all", "activity": "all", "groupBy": "group", "sortBy": "canvas", "asleep": asleep })).unwrap(),
+        ..HomeView::default()
+    }
+    };
+    // Everything in frame f1 and in f2 under it, and one pinned tile in f3.
+    let dozing: Vec<String> = home
+        .rows
+        .iter()
+        .filter_map(|(k, r)| match r {
+            Row::Tile(t) if matches!(t.frame_id.as_deref(), Some("f1" | "f2")) => Some(k.clone()),
+            _ => None,
+        })
+        .collect();
+    assert!(dozing.len() > 1);
+    let w = "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1";
+    let pinned = format!("t:{w}/t5");
+    for key in dozing.iter().chain([&pinned]) {
+        let Some(Row::Tile(t)) = home.rows.get_mut(key) else {
+            panic!("no tile {key}");
+        };
+        t.asleep = true;
+    }
+
+    let shown = home.shown("", None, &computer, &view("show"));
+    assert_eq!(shown.hidden_asleep, 0);
+    assert!(said(&shown.tree)
+        .iter()
+        .any(|s| s.starts_with(&format!("f:{w}/f2 "))));
+
+    let hidden = home.shown("", None, &computer, &view("hide"));
+    assert_eq!(hidden.hidden_asleep, dozing.len() as u64);
+    let tree = said(&hidden.tree);
+    let listed = |k: &str| tree.iter().any(|s| s.split(' ').next() == Some(k));
+    assert!(dozing.iter().all(|k| !listed(k)), "{tree:?}");
+    assert!(
+        !listed(&format!("f:{w}/f1")) && !listed(&format!("f:{w}/f2")),
+        "{tree:?}"
+    );
+    assert!(hidden
+        .pinned
+        .iter()
+        .any(|e| matches!(e, Entry::Tile { key, .. } if *key == pinned)));
 }
 
 #[test]

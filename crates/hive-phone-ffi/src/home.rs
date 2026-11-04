@@ -49,6 +49,7 @@ impl HomeChoices {
                 activity: self.activity.clone(),
                 group_by: self.group_by.clone(),
                 sort_by: self.sort_by.clone(),
+                asleep: String::new(),
                 machines: vec![],
             },
             folded: self.folded.clone(),
