@@ -5,7 +5,7 @@
  *
  * The feed tells every change of every agent, most of them of its state alone. A tile's entry is
  * given back as the same object while what a row says of it is the same (the wait's kind, `since`,
- * its tool and what that is about, its questions), so the row's listener is not called for the rest.
+ * its tool and what that is about, its questions, what it left running), so the row's listener is not called for the rest.
  */
 import type { AgentItem } from "@hivemind/workspace-api/agents";
 
@@ -15,6 +15,8 @@ export type AgentWait = NonNullable<AgentItem["waiting"]>;
 export interface TileWait {
   /** What it waits on, while it waits. */
   waiting?: AgentWait;
+  /** Background tasks its last turn left running. */
+  background?: number;
 }
 
 const waits = new Map<string, TileWait>();
@@ -32,8 +34,8 @@ function put(tile: string, next: TileWait | undefined): void {
 /** The feed told `agent` as it is now. */
 export function tellAgent(agent: AgentItem): void {
   const now = waits.get(agent.tile);
-  if (now && sameWait(now.waiting, agent.waiting)) return;
-  put(agent.tile, agent.waiting ? { waiting: agent.waiting } : {});
+  if (now && sameWait(now.waiting, agent.waiting) && now.background === agent.background) return;
+  put(agent.tile, { ...(agent.waiting ? { waiting: agent.waiting } : {}), ...(agent.background ? { background: agent.background } : {}) });
 }
 
 /** The agent in `tile` went. */

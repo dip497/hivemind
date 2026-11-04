@@ -230,6 +230,8 @@ export interface HomeTile {
   machine?: string;
   interrupt?: boolean;
   conversation?: boolean;
+  background?: number;
+  asleep?: boolean;
 }
 
 export interface HomeFrame {
@@ -281,6 +283,8 @@ export interface Shown {
   tree: HomeEntry[];
   /** The mark of each agent a tile listed runs, by agent. */
   marks: Record<string, Mark>;
+  /** None from a page that kept what Home showed before it counted them. */
+  hiddenAsleep?: number;
 }
 
 /** How a computer looks (spec/home.md 0.5): its colours by token, its terminal's, its wallpaper. */

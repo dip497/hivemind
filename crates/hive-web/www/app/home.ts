@@ -26,6 +26,7 @@ export class Home {
   private readonly accountChips = h("div", { class: "find", hidden: true, "data-home-accounts": "" });
   private readonly needsList = h("div", { class: "list", "data-needs": "" });
   private readonly clear = h("p", { class: "quiet", hidden: true, "data-clear": "" });
+  private readonly hiddenAsleep = h("button", { type: "button", class: "asleep-hidden", hidden: true, "data-asleep-hidden": "" });
   private readonly workingHead = h("h2", { class: "section", hidden: true }, "Working");
   private readonly workingList = h("div", { "data-working": "" });
   private readonly pinnedHead = h("h2", { class: "section", hidden: true }, "Pinned");
@@ -61,6 +62,12 @@ export class Home {
     const start = iconButton("plus", "Start an agent", () => (location.hash = "start"), { "data-start": "" });
     this.viewOpen.append(this.chosenDot);
     this.scrim.addEventListener("click", () => this.closeView());
+    this.hiddenAsleep.addEventListener("click", () => {
+      this.choices.choose("asleep", "show");
+      this.chosenDot.hidden = !this.choices.chosen();
+      this.drawView();
+      this.changed();
+    });
     this.el.append(
       h("h1", { class: "title" }, "Home", this.count, start),
       this.accountChips,
@@ -68,7 +75,7 @@ export class Home {
       this.needsList, this.clear,
       this.workingHead, this.workingList,
       this.pinnedHead, this.pinnedList,
-      this.treeList, this.none, this.sheet, this.scrim, this.viewSheet,
+      this.treeList, this.hiddenAsleep, this.none, this.sheet, this.scrim, this.viewSheet,
     );
     void this.choices.load().then(() => {
       this.chosenDot.hidden = !this.choices.chosen();
@@ -121,7 +128,9 @@ export class Home {
     this.pinnedHead.hidden = shown.pinned.length === 0;
     this.tree.set(shown.tree);
     this.none.hidden = shown.tree.length + shown.pinned.length > 0;
-    say(this.none, this.filter.query || this.filter.machine ? "Nothing matches." : "Nothing open on your computer yet.");
+    say(this.none, this.filter.query || this.filter.machine || shown.hiddenAsleep ? "Nothing matches." : "Nothing open on your computer yet.");
+    this.hiddenAsleep.hidden = !shown.hiddenAsleep;
+    say(this.hiddenAsleep, `${shown.hiddenAsleep} asleep hidden`);
     this.showMachines(shown.machines);
     // Each breathing dot is a layer the browser recomposes on every change: past a few, still.
     const still = o.working > STILL_PAST;
@@ -206,6 +215,7 @@ export class Home {
           t.since !== undefined && h("span", { class: "age", "data-since": t.since }, ago(t.since))),
         h("span", { class: "under" },
           h("span", { class: `status${t.waiting ? " waits" : ""}`, "data-line": "" }, ...lineOf(t, e.line)),
+          !!t.background && h("span", { class: "age", "data-running": "" }, `${t.background} running`),
           e.unread && h("span", { class: "unread", "aria-label": "Unread", "data-unread": "" }))),
     ];
     const row = h("div", {
@@ -342,6 +352,7 @@ function lineOf(t: HomeTile, line: string | undefined): Array<string | HTMLEleme
   if (w?.tool) return about ? [`${w.tool.name}: `, h("code", {}, about)] : [w.tool.name];
   if (w?.asks?.[0]) return [w.asks[0].question];
   if (w) return [kindLabel(w.kind)];
+  if (t.asleep) return ["Asleep"];
   if (line) return line.split("`").map((part, i) => (i % 2 ? h("code", {}, part) : part)).filter((p) => p !== "");
   if (t.state) return [[stateLabel(t.state), t.program?.label].filter(Boolean).join(" · ")];
   return [t.kind];

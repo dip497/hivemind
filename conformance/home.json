@@ -58,7 +58,8 @@
        {
         "id": "t3",
         "kind": "claude",
-        "label": "Claude #2"
+        "label": "Claude #2",
+        "sleeping": "/home/p/api"
        },
        {
         "id": "t4",
@@ -106,7 +107,8 @@
       "label": "Claude Code"
      },
      "interrupt": true,
-     "conversation": true
+     "conversation": true,
+     "background": 3
     },
     {
      "workspace": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
@@ -232,7 +234,8 @@
      },
      "machine": "desk",
      "interrupt": true,
-     "conversation": true
+     "conversation": true,
+     "background": 3
     },
     "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t2": {
      "of": "tile",
@@ -256,7 +259,8 @@
      "parent": "t1",
      "state": "working",
      "since": 1790000002000,
-     "machine": "desk"
+     "machine": "desk",
+     "asleep": true
     },
     "t:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1/t4": {
      "of": "tile",

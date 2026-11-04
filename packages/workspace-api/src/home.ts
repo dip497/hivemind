@@ -49,9 +49,12 @@ export interface HomeTile {
   pinned?: true;
   /** The tile that started it, when it is listed under that one. */
   parent?: string;
+  /** Its agent is asleep (0.8). */
+  asleep?: true;
   state?: AgentItem["state"];
   since?: number;
   waiting?: AgentItem["waiting"];
+  background?: AgentItem["background"];
   /** For an agent, as the agent list says: what runs it, the machine it runs on, and whether its
    *  turn can be interrupted and its conversation read. */
   program?: AgentItem["program"];

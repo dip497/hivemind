@@ -81,6 +81,7 @@ export function homeRows(s: HomeSource): Map<string, HomeRow> {
     const listed = new Map(shown?.order.map((id, i) => [id, i]));
     const pinned = new Set(shown?.pinned);
     const here = new Set(structure.tiles.map((t) => t.id));
+    const asleep = new Set(h.core?.tiles.filter((t) => t.sleeping).map((t) => t.id));
     const starter = new Map(structure.links?.spawns.filter((l) => here.has(l.parent)).map((l) => [l.child, l.parent]));
     structure.tiles.forEach((t, i) => {
       const a = agents.get(t.id);
@@ -92,8 +93,9 @@ export function homeRows(s: HomeSource): Map<string, HomeRow> {
         order: listed.get(t.id) ?? listed.size + i,
         ...(pinned.has(t.id) ? { pinned: true as const } : {}),
         ...(parent ? { parent } : {}),
+        ...(asleep.has(t.id) ? { asleep: true as const } : {}),
         ...(a ? {
-          state: a.state, since: a.since, ...(a.waiting ? { waiting: a.waiting } : {}),
+          state: a.state, since: a.since, ...(a.waiting ? { waiting: a.waiting } : {}), ...(a.background ? { background: a.background } : {}),
           ...(a.program ? { program: a.program } : {}), machine: a.machine,
           ...(a.interrupt ? { interrupt: true as const } : {}), ...(a.conversation ? { conversation: true as const } : {}),
         } : {}),

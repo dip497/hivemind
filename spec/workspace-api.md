@@ -1,4 +1,4 @@
-# Workspace API (0.40)
+# Workspace API (0.41)
 
 What a workspace's host is asked for, and what it answers. The host is the machine the
 workspace's repo is on; today its callers are the app's windows (in the app, or in a browser tab it serves), peers on
@@ -67,7 +67,7 @@ and not read (a program that stopped reading) is closed.
 The first line says who connects: `{"hello": {"token", "workspace"?}}`.
 
 - **The install's token** (`hcp.token`) is the person at this machine. The host answers
-  `{"hello": {"api": "0.40", "as": "person"}}` and serves every method, as to a window of theirs.
+  `{"hello": {"api": "0.41", "as": "person"}}` and serves every method, as to a window of theirs.
 - **A grant's token** is a program the person let drive workspaces (`grant.create`), or a tool
   plugin's service, whose grant is made when it starts and taken back when it stops (`plugin` in
   `grant.list` names the plugin). It names one of the grant's workspaces by its folder, which may
@@ -254,7 +254,7 @@ log.
 | `link.list` | | `{pipes: [{src, dst}], spawns: [{parent, child}]}` | read |
 | `link.connect` | `src`, `dst` | `null`: each reply of the agent in `src` is handed to the one in `dst` as its next prompt, as `hive ctl connect` (0.23) | target `src->dst` |
 | `link.disconnect` | `src`, `dst`? | `null`: that pipe gone, or every pipe out of `src` (0.23) | target `src` |
-| `agent.list` | `repo` | `{seq, agents}`: the workspace's agents as they are now, and the number of the last change (0.18), counted on from when the host began, in ms, so `agent.since` with a number from before it started again is null; a plan an agent waits on a review of is in its `waiting` (`plan`), answered with `agent.answer` (0.21: `plan.list`, `plan.decide` and the `plan.*` events are gone); each with the session it is in, `session`, when its agent has said (0.22, `agents.md` 0.6) | read |
+| `agent.list` | `repo` | `{seq, agents}`: the workspace's agents as they are now (each with `background`, 0.41: what its last turn left running), and the number of the last change (0.18), counted on from when the host began, in ms, so `agent.since` with a number from before it started again is null; a plan an agent waits on a review of is in its `waiting` (`plan`), answered with `agent.answer` (0.21: `plan.list`, `plan.decide` and the `plan.*` events are gone); each with the session it is in, `session`, when its agent has said (0.22, `agents.md` 0.6) | read |
 | `agent.since` | `repo`, `seq` | `{seq, changes, events}`: each change and event after `seq`, or null when the host no longer has them all: list again (0.18) | read |
 | `widget.all` | `repo` | what each widget in the workspace last drew, by its id: never stored, drawn again when its code next runs (0.18) | read |
 | `widget.run` | `repo` | whether the caller runs the workspace's widgets: a window of the person's, on the host's machine or on another of their devices with it open, the first to ask, until it lets go (`widget.release`) or goes; someone else's device never does (0.19) | — |

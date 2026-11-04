@@ -22,6 +22,7 @@ import { identifyAgent } from "./agent-state";
 import { agentById } from "@hivemind/agents";
 import { registerAgentTile, unregisterAgentTile, shouldDeliver, type SendToAgentDetail } from "./agent-send";
 import { peekWork, claimWork } from "./work-queue";
+import { Running } from "./row-line";
 import { publishStatus, clearStatus, setLabel, statusOf, subscribeTileStatus, type TileStatusKind } from "./agent-status-bus";
 import { typeKeys } from "@hivemind/agent-host/keys";
 import { SUBMIT_DELAY_MS, deliversPromptViaArgv } from "@hivemind/agent-host/agent-io";
@@ -1489,6 +1490,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
             starting
           </span>
         </span>
+        <Running tileId={tileId} className="text-chip text-[var(--color-fg3)]" />
         {onSleep && (
           <Button variant="ghost" size="icon-micro" className="nodrag" aria-label="put agent to sleep" title="Sleep: end its process, keep its screen and conversation" onClick={() => void onSleep().catch(() => {})}>
             <Moon />

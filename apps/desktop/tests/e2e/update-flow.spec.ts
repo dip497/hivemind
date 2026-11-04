@@ -14,8 +14,7 @@ let page: Page;
 
 const about = () => page.locator(".settings-dialog");
 
-async function launch(update: Record<string, unknown>, progress?: string[], installed?: string): Promise<void> {
-  const xdg = fs.mkdtempSync(path.join(root, "x-"));
+async function launch(update: Record<string, unknown>, progress?: string[], installed?: string, xdg = fs.mkdtempSync(path.join(root, "x-"))): Promise<void> {
   const appDir = fs.mkdtempSync(path.join(root, "app-"));
   if (installed) fs.writeFileSync(path.join(appDir, ".installed-version"), `${installed}\n`);
   const env = { ...process.env, XDG_CONFIG_HOME: xdg, HIVEMIND_APP_DIR: appDir, HIVEMIND_TEST_UPDATE: JSON.stringify({ ...update, ...(progress ? { progress } : {}) }) } as Record<string, string>;
@@ -67,6 +66,16 @@ test("nothing newer says so, and offers a check", async () => {
   await launch({ latest: "0.0.0" });
   await expect(about().getByText("Up to date")).toBeVisible();
   await expect(about().getByRole("button", { name: "Check now" })).toBeVisible();
+});
+
+test("the next start offers no update that the last start knew of", async () => {
+  const xdg = fs.mkdtempSync(path.join(root, "x-"));
+  await launch({ latest: "9999.1.0" }, undefined, undefined, xdg);
+  await expect(about().getByText(/Update available — v9999\.1\.0/)).toBeVisible();
+  await app!.close();
+  await launch({ latest: "0.0.0" }, undefined, undefined, xdg);
+  await expect(about().getByText("Up to date")).toBeVisible();
+  await expect(page.getByText(/Update available/)).toHaveCount(0);
 });
 
 test("while it works, the step is named and the bar fills to it; then a restart is offered", async () => {

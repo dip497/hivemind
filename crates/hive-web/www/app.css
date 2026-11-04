@@ -567,6 +567,8 @@ button { cursor: pointer; }
   background-position: calc(var(--depth, 0) * 16px + 8px) 0;
 }
 [data-tree] .agent:active { background: var(--panel); }
+.asleep-hidden { display: block; padding: 12px 20px; border: 0; background: none; font: 400 13px/18px var(--sans); color: var(--text3); }
+.asleep-hidden[hidden] { display: none; }
 [data-tree] .agent, [data-pinned] .agent { padding-left: calc(20px + var(--depth, 0) * 16px); }
 .frame, .project, .group-head { content-visibility: auto; }
 .frame { contain-intrinsic-size: auto 40px; }

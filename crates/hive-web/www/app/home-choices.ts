@@ -8,15 +8,16 @@ import { get, put } from "./store.js";
 export const VIEW_CHOICES = {
   status: [["all", "All"], ["needs-you", "Needs you"], ["unread", "Unread"], ["working", "Working"], ["idle", "Idle"], ["exited", "Exited"]],
   activity: [["all", "All"], ["hour", "Past hour"], ["today", "Today"], ["week", "This week"]],
+  asleep: [["show", "Show"], ["hide", "Hide"]],
   groupBy: [["group", "Project"], ["machine", "Machine"], ["date", "Date"], ["status", "Status"], ["agent", "Agent"], ["none", "None"]],
   sortBy: [["canvas", "Canvas order"], ["activity", "Last activity"], ["name", "Name"]],
 } as const satisfies Record<string, ReadonlyArray<readonly [string, string]>>;
 
-export const VIEW_GROUPS: Array<[ViewGroup, string]> = [["status", "Status"], ["activity", "Last activity"], ["groupBy", "Group by"], ["sortBy", "Sort by"]];
+export const VIEW_GROUPS: Array<[ViewGroup, string]> = [["status", "Status"], ["activity", "Last activity"], ["asleep", "Asleep agents"], ["groupBy", "Group by"], ["sortBy", "Sort by"]];
 
 export type ViewGroup = keyof typeof VIEW_CHOICES;
 type Prefs = Record<ViewGroup, string>;
-const DEFAULTS: Prefs = { status: "all", activity: "all", groupBy: "group", sortBy: "canvas" };
+const DEFAULTS: Prefs = { status: "all", activity: "all", asleep: "show", groupBy: "group", sortBy: "canvas" };
 const KEPT = "home-choices";
 /** Tiles whose last opening is kept; the oldest go past it. */
 const SEEN_KEPT = 1000;

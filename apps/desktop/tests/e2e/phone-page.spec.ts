@@ -156,6 +156,41 @@ test("of 200 tiles, the rows far below the screen are not rendered until scrolle
   await expect.poll(() => rendered(last)).toBe(true);
 });
 
+test("the View menu hides asleep agents, says how many, and that shows them again", async () => {
+  test.skip(!built(), "build the page first (crates/hive-web/build.sh)");
+  const page = await home();
+  await page.evaluate(() => {
+    const tile = (id: string, asleep: boolean) => [`t:w0/${id}`, { of: "tile", workspace: "w0", id, frameId: null, kind: "claude", name: id, agent: "claude", order: 0, ...(asleep ? { asleep: true } : { state: "idle", since: 1790000000000, machine: "desk" }) }];
+    (window as unknown as Driven).change({ t: "home", layout: { seq: 1, rows: [["w:w0", { of: "workspace", workspace: "w0", name: "api" }], tile("awake", false), tile("dozing", true), tile("sleeper", true)] }, lines: { seq: 1, rows: [] } });
+  });
+  const [row, hidden] = [page.locator('[data-tree] [data-row="t:w0/dozing"]'), page.locator("[data-asleep-hidden]")];
+  await expect(row.locator("[data-line]")).toHaveText("Asleep");
+  await expect(hidden).toBeHidden();
+
+  await page.locator("[data-view-open]").click();
+  await page.locator('[data-view="asleep"]').getByRole("button", { name: "Hide" }).click();
+  await page.locator("[data-view-done]").click();
+  await expect(row).toHaveCount(0);
+  await expect(page.locator('[data-tree] [data-row="t:w0/awake"]')).toBeVisible();
+  await expect(hidden).toHaveText("2 asleep hidden");
+
+  await hidden.click();
+  await expect(row).toBeVisible();
+  await expect(hidden).toBeHidden();
+});
+
+test("a row says what its agent left running in the background, and nothing when it left nothing", async () => {
+  test.skip(!built(), "build the page first (crates/hive-web/build.sh)");
+  const page = await home();
+  await page.evaluate(() => {
+    const tile = (id: string, background?: number) => [`t:w0/${id}`, { of: "tile", workspace: "w0", id, frameId: null, kind: "claude", name: id, agent: "claude", order: 0, state: "done", since: 1790000000000, machine: "desk", ...(background ? { background } : {}) }];
+    (window as unknown as Driven).change({ t: "home", layout: { seq: 1, rows: [["w:w0", { of: "workspace", workspace: "w0", name: "api" }], tile("builds", 2), tile("rests")] }, lines: { seq: 1, rows: [] } });
+  });
+  await expect(page.locator('[data-tree] [data-row="t:w0/builds"] [data-running]')).toHaveText("2 running");
+  await expect(page.locator('[data-tree] [data-row="t:w0/rests"]')).toBeVisible();
+  await expect(page.locator('[data-tree] [data-row="t:w0/rests"] [data-running]')).toHaveCount(0);
+});
+
 test("a working agent's spinner turns while a few work; past 40 working, every one is still", async () => {
   test.skip(!built(), "build the page first (crates/hive-web/build.sh)");
   const page = await home();
@@ -393,7 +428,7 @@ test("the View menu changes what Home lists: grouped by status, a heading for ea
   await expect(chosen).toBeHidden();
   await page.locator("[data-view-open]").click();
   const sheet = page.locator("[data-view-sheet]");
-  await expect(sheet.locator("[data-view] .label-small")).toHaveText(["Status", "Last activity", "Group by", "Sort by"]);
+  await expect(sheet.locator("[data-view] .label-small")).toHaveText(["Status", "Last activity", "Asleep agents", "Group by", "Sort by"]);
   await expect(sheet.locator('[data-view="groupBy"] .chip')).toHaveText(["Project", "Machine", "Date", "Status", "Agent", "None"]);
   await sheet.locator('[data-view="groupBy"] .chip', { hasText: "Status" }).click();
   await expect(sheet.locator('[data-view="groupBy"] .chip', { hasText: "Status" })).toHaveAttribute("aria-pressed", "true");
