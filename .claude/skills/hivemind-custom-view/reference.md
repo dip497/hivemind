@@ -45,7 +45,8 @@ own Review, never Allow; the computer's windows, not the phone) and `ownFiles` (
 `fetch` its own files: it says `"files": true`, and the screen is the app's window or a browser
 tab, not the phone nor another computer's view); 1.18 adds `widgetBand` (the app says how much
 of the view its floating widget cards take, `widgetBand`; the computer's windows, a guest's over
-the host's view too, not the phone).
+the host's view too, not the phone); 1.19 adds `code` (with `workspace:code`: `request code` finds
+a frame's files and lines with fff and opens a file in the frame's editor; the computer's windows).
 A host that predates 1.3 sends none. Check one with `hm.supports("sleep")`.
 
 `ViewEvent` kinds: `turn {inferred?, outcome? (1.4): done | failed | interrupted | limited}`, `needsInput {reason: permission | question | review |
@@ -77,6 +78,7 @@ compute one from a theme token yourself.
 | `watchActivity` (1.3) | `tileIds[]` | The whole watched set, ≤ 256 |
 | `subscribePresence` / `unsubscribePresence` (1.3) | — | |
 | `request` (1.3) | `requestId`, `name: history \| share`, `args` | `history [{day}]`; `share [{png: ArrayBuffer, suggestedName?}]` — the one non-JSON value |
+| `request` (1.19) | `name: code`, `args [{call, frameId, …}]` | `workspace:code`. `findFiles {query, limit? 1–500}` → `{files: [{path, git?}], engine: fff \| git}`; `grep {query 1–1000 chars, mode?: plain \| regex \| fuzzy, cursor?, caseSensitive?}` → `{lines: [{path, line, col, text, ranges}], next, files, engine, note?}`, 200 a page, `next` the next `cursor`; `picked {query, file}` → `null` (ranks it higher next time); `open {file, line?, col?}` → `{tileId}` (the frame's editor, started when it has none). `frameId` null is the workspace's own folder (a workspace with no frames). `file` is a path inside the folder; `..` and absolute paths are refused. `hm.code.*` |
 | `request` (1.4) | `name: agents \| sessions \| prompt` | `agents [{}]` → `{agents}`; `sessions [{agent, frameId}]` → `{sessions: [{id, updated?, prompt?}]}`; `prompt [{tileId, text}]` → `{outcome: sent \| cancelled}`; (1.14) a tile asleep is refused `ASLEEP` before the user is asked, as `hive ctl send` refuses it: wake it first |
 | `subscribeParticipants` / `unsubscribeParticipants` (1.5) | — | `onParticipants()` handles both ends |
 

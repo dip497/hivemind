@@ -596,3 +596,35 @@ test("1.17: a view is told it may fetch its own files only where the screen lets
   assert.ok(!link(false).features.includes("ownFiles"));
   assert.ok(!link().features.includes("ownFiles"));
 });
+
+test("1.19: code is refused without workspace:code or for a frame not there; with both, the call reaches the host and its answer the view", async () => {
+  const asked: unknown[] = [];
+  const services: LinkServices = { code: async (c) => { asked.push(c); return c.call === "open" ? { tileId: "ed1" } : { files: [], engine: "fff" }; } };
+  const h = harness([], ["t1"], services);
+  h.link.handle({ type: "ready", v: 1 });
+  h.link.handle({ type: "request", requestId: 1, name: "code", args: [{ call: "findFiles", frameId: "f1", query: "cart" }] });
+  await settle();
+  // Refused as a command it was not granted: counted against the view, nothing asked of the host.
+  assert.equal(h.link.stats.refused, 1);
+  assert.deepEqual(asked, []);
+
+  const g = harness(["workspace:code"], ["t1"], services);
+  g.link.handle({ type: "ready", v: 1 });
+  g.link.handle({ type: "request", requestId: 1, name: "code", args: [{ call: "findFiles", frameId: "f1", query: "cart" }] });
+  g.link.handle({ type: "request", requestId: 2, name: "code", args: [{ call: "open", frameId: "f1", file: "src/cart.ts", line: 3 }] });
+  g.link.handle({ type: "request", requestId: 3, name: "code", args: [{ call: "grep", frameId: "nope", query: "x" }] });
+  await settle();
+  const r = responses(g.sent);
+  assert.deepEqual(r.map((x) => [x.requestId, x.ok]).sort(), [[1, true], [2, true]]);
+  assert.equal(g.link.stats.refused, 1, "a frame the view was never shown is refused");
+  assert.deepEqual(r.find((x) => x.requestId === 2)!.result, { tileId: "ed1" });
+  assert.deepEqual(asked, [{ call: "findFiles", frameId: "f1", query: "cart" }, { call: "open", frameId: "f1", file: "src/cart.ts", line: 3 }]);
+
+  // A host that cannot search code does not say `code` in hello, and refuses a view that asks anyway.
+  const none = harness(["workspace:code"], ["t1"], {});
+  none.link.handle({ type: "ready", v: 1 });
+  none.link.handle({ type: "request", requestId: 1, name: "code", args: [{ call: "grep", frameId: "f1", query: "x" }] });
+  await settle();
+  assert.equal(none.link.stats.refused, 1);
+  assert.deepEqual(responses(none.sent), []);
+});

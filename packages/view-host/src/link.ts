@@ -23,7 +23,7 @@ import {
   ACTIVITY_MIN_INTERVAL_MS, EVENT_REPLAY_MAX, PROTOCOL_VERSION, customNameMatches, parsePluginMessage, refusal,
   type ActivityLevel, type CommandName, type HostMessage, type HostScope, type PluginMessage, type RequestErrorCode, type ShareOutcome, type SurfaceRect, type LineRect, type ViewEvent,
   type ViewEventKind, type ViewFeature, type ViewHistoryDay, type ViewParticipant, type ViewPermission, type ViewPresence, type ViewRect, type ViewWidget,
-  type ViewAgent, type ViewAgentStatus, type HostMenu, type ViewSession, type ViewStatus, type IssueCall, type ViewIssueSummary, type ViewWidgetBand,
+  type ViewAgent, type ViewAgentStatus, type HostMenu, type ViewSession, type ViewStatus, type IssueCall, type ViewIssueSummary, type ViewWidgetBand, type CodeCall,
 } from "@hivemind/view-sdk/protocol";
 import type { TileKind } from "@hivemind/workspace-doc/shapes";
 import type { TileStatusKind } from "@hivemind/agent-host/tile-status";
@@ -98,6 +98,9 @@ export interface LinkServices {
    *  has none. A guest's window floats the cards over the host's view and says it itself, so the
    *  session the host runs for it has none either. */
   widgetBand?: { subscribe(cb: (band: ViewWidgetBand) => void): () => void };
+  /** 1.19: find, grep, picked and open in a frame's folder (the link has checked the permission and
+   *  that the frame is the view's). Rejects `{ code: "UNSUPPORTED" }` for a frame with no folder. */
+  code?: (c: CodeCall) => Promise<unknown>;
 }
 
 export const SHARE_DECLINES_MAX = 3;
@@ -123,6 +126,7 @@ export function linkFeatures(s: LinkServices, placesSurfaces = false): ViewFeatu
   if (s.widgets) f.push("widgets");
   if (s.issues) f.push("issues");
   if (s.widgetBand) f.push("widgetBand");
+  if (s.code) f.push("code");
   f.push("invoke");
   if (placesSurfaces) f.push("surfaces");
   return f;
@@ -544,6 +548,15 @@ export class CommunityLink {
       },
     );
     const granted = (p: ViewPermission) => (this.deps.capabilities.includes(p) ? true : (this.fail(m.requestId, "DECLINED", `${m.name} needs permission "${p}"`), false));
+    if (m.name === "code") {
+      const code = this.services.code;
+      if (!code) { this.fail(m.requestId, "UNSUPPORTED", "this host cannot search code"); return; }
+      if (!granted("workspace:code")) return;
+      const frameId = m.args[0].frameId;
+      if (frameId !== null && !this.deps.hasFrame(frameId)) { this.fail(m.requestId, "BAD_REQUEST", `unknown frame ${frameId}`); return; }
+      void reply(code(m.args[0]));
+      return;
+    }
     if (m.name === "issue") {
       const issues = this.services.issues;
       if (!issues) { this.fail(m.requestId, "UNSUPPORTED", "this host has no issues"); return; }

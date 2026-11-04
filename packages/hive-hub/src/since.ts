@@ -21,6 +21,13 @@ export const SINCE = {
   "package.wallpapers": "2026.10.8",
 } as const satisfies Record<string, string>;
 
+/** The release that first accepts each permission a view or widget may ask for. An older app
+ *  refuses a manifest that asks for one it does not know, as it refuses an unknown field. */
+export const PERMISSION_SINCE: Readonly<Record<string, string>> = {
+  /** Search a frame's files and open one in its editor (view protocol 1.19, feature `code`). */
+  "workspace:code": "2026.11.3",
+};
+
 export type SinceKey = keyof typeof SINCE;
 /** What a manifest is: the part of a `SINCE` key before its dot. */
 export type Kind = "view" | "widget" | "package";
@@ -43,5 +50,7 @@ export const laterOf = (a: string | null, b: string | null): string | null =>
 /** The oldest app that accepts this view's, widget's or package's manifest as written: the highest entry
  *  of `SINCE` it uses, or null when it uses none. */
 export function sinceOf(kind: Kind, raw: unknown): string | null {
-  return used(kind, raw).reduce<string | null>((v, k) => laterOf(v, SINCE[k]), null);
+  const fields = used(kind, raw).reduce<string | null>((v, k) => laterOf(v, SINCE[k]), null);
+  const perms = kind === "package" ? [] : (raw as { permissions?: unknown } | null)?.permissions;
+  return (Array.isArray(perms) ? perms : []).reduce<string | null>((v, p) => laterOf(v, typeof p === "string" ? PERMISSION_SINCE[p] ?? null : null), fields);
 }

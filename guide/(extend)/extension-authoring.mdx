@@ -160,6 +160,7 @@ Check `hm.supports("<feature>")` before using a newer feature.
 | The canvas's widgets | `hm.onWidgets(cb)`, `hm.pressWidget(id, action)` (`widgets`) |
 | Keep clear of the widget cards over your view | `hm.onWidgetBand(({ edge, width }) => …)` (`widgetBand`): how far the cards reach in from your widget edge, the gap beside them included, or 0 when there are none. It comes at once, then each time cards come or go, start a second column, or the window is resized |
 | Issues | `hm.onIssues(cb)`, `hm.issues.read(id)`, `create`, `update`, … (`issues`) |
+| Find a frame's files and lines, and open one at its line | `await hm.code.findFiles(frameId, "chkcart")`, `hm.code.grep(frameId, "TODO", { mode, cursor })` (a page and its `next`), `hm.code.picked(frameId, query, path)` after the person opens one, `hm.code.open(frameId, path, { line, col })` (`code`, from 1.19); a `frameId` of null is the workspace's own folder |
 | Its settings | `hm.settings`, `hm.on("settings", cb)` (`settings`) |
 | Draw your own toolbar | `"toolbar": "off"`, then `hm.commands.openHostMenu("views", rect)`, `"add"`, `"appearance"` or `"settings"` opens the app's own (`hostMenu`) |
 | Messages from your scripts | `hm.onCustom("ci.*", cb)`, sent by `hive ctl view emit ci.build '{…}'` |
@@ -169,7 +170,7 @@ carries its `folder`, `branch`, `parentId` (a worktree under its project) and `m
 runs on another computer.
 
 A view never reads an agent's replies or terminal text, and never answers its permission
-questions. Every prompt a view writes opens a dialog showing the full text, with **Cancel** focused.
+questions. With `workspace:code` it reads the lines a search finds in a frame's files, and only those. Every prompt a view writes opens a dialog showing the full text, with **Cancel** focused.
 
 ### Colours
 
@@ -193,6 +194,7 @@ Selection and focus need none.
 | `workspace:sessions` | `sessions`, and `spawnAgent` with `resume` |
 | `workspace:widgets` | press and click widgets |
 | `workspace:issues` | read and change issues |
+| `workspace:code` | search a frame's files, read the lines found, and open a file in its editor (from 1.19; an older app refuses to install a view that asks) |
 
 ### Manifest fields
 

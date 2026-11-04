@@ -21,6 +21,7 @@ import {
   type ActivityLevel, type ViewFontFace, type PromptOutcome, type ViewAgent, type ViewAgentStatus, type ViewSession, type CommandName, type HostMessage, type PluginMessage, type RequestErrorCode, type ShareOutcome, type StatusTone, type SurfaceRect, type LineRect, type CommandKeys,
   type ViewCommands, type ViewDevice, type ViewEvent, type ViewEventKind, type ViewFeature, type ViewHistoryDay, type ViewParticipant, type ViewPermission, type ViewPresence, type ViewRect, type ViewStatus, type ViewTheme, type ViewWidget, type ViewWidgetBand,
   ISSUE_CALLS, type IssueCall, type ViewIssue, type ViewIssueAssignee, type ViewIssueState, type ViewIssueSummary,
+  type CodeCall, type ViewFindFilesPage, type ViewGrepMode, type ViewGrepPage,
 } from "./protocol.js";
 
 /** A request the host refused or could not answer (`UNSUPPORTED` when it lacks the feature). */
@@ -103,6 +104,9 @@ export interface ViewClient {
   onCommand(name: string, handler: (args: unknown) => unknown): () => void;
   /** 1.9: the workspace's issue methods. Like `onIssues`, they need `workspace:issues`. */
   readonly issues: ViewIssues;
+  /** 1.19 (feature `code`), `workspace:code`: find a frame's files and lines, and open one in its
+   *  editor. An app before 1.19 has no such methods: check `supports("code")` first. */
+  readonly code: ViewCode;
   /** 1.3: per-tile status intervals for a local day (YYYY-MM-DD). */
   history(day: string): Promise<ViewHistoryDay>;
   /** 1.3: ask the user to copy or save this PNG; resolves with what they chose. */
@@ -171,6 +175,19 @@ export interface ViewIssues {
   setUp(prefix: string): Promise<ViewIssuesStatus>;
 }
 
+/** 1.19: a frame's code, as the view may search and open it. Paths are inside the frame's folder;
+ *  a `frameId` of null is the workspace's own folder. */
+export interface ViewCode {
+  /** Files by a fuzzy name, best first (typos too; the ones the person opens most rank higher). */
+  findFiles(frameId: string | null, query: string, opts?: { limit?: number }): Promise<ViewFindFilesPage>;
+  /** Lines holding `query`, a page at a time: pass the last page's `next` as `cursor`. */
+  grep(frameId: string | null, query: string, opts?: { mode?: ViewGrepMode; cursor?: number; caseSensitive?: boolean }): Promise<ViewGrepPage>;
+  /** The person opened `file` for `query`: it ranks higher for that query next time. */
+  picked(frameId: string | null, query: string, file: string): Promise<null>;
+  /** Open `file` in the frame's editor, at `line` (1-based) and `col` (0-based) when given. */
+  open(frameId: string | null, file: string, at?: { line?: number; col?: number }): Promise<{ tileId: string | null }>;
+}
+
 /** Whether a workspace keeps issues: `ready` once set up; `folder` names where they would live. */
 export interface ViewIssuesStatus { ready: boolean; folder: string | null; suggested: string }
 
@@ -229,6 +246,12 @@ class Client implements ViewClient {
   private issueList: ViewIssueSummary[] | null = null;
   private issueCbs = new Set<(issues: ViewIssueSummary[]) => void>();
   private commandHandlers = new Map<string, (args: unknown) => unknown>();
+  readonly code: ViewCode = {
+    findFiles: (frameId, query, opts) => this.codeCall({ call: "findFiles", frameId, query, ...(opts?.limit !== undefined ? { limit: opts.limit } : {}) }) as Promise<ViewFindFilesPage>,
+    grep: (frameId, query, opts) => this.codeCall({ call: "grep", frameId, query, ...opts }) as Promise<ViewGrepPage>,
+    picked: (frameId, query, file) => this.codeCall({ call: "picked", frameId, query, file }) as Promise<null>,
+    open: (frameId, file, at) => this.codeCall({ call: "open", frameId, file, ...at }) as Promise<{ tileId: string | null }>,
+  };
   readonly issues: ViewIssues = Object.fromEntries(ISSUE_CALLS.map((call) => [call, (...args: unknown[]) => this.issueCall(call, args)])) as unknown as ViewIssues;
   private widgetCbs = new Set<(widgets: ViewWidget[]) => void>();
   private band: ViewWidgetBand | null = null;
@@ -548,6 +571,12 @@ class Client implements ViewClient {
     this.need("workspace:issues", `issues.${call}`);
     if (!this.supports("issues")) return Promise.reject(new HostError("UNSUPPORTED", "this host has no issues"));
     return this.request((requestId) => ({ type: "request", requestId, name: "issue", args: [{ call, args }] }), 30_000);
+  }
+
+  private codeCall(c: CodeCall): Promise<unknown> {
+    this.need("workspace:code", `code.${c.call}`);
+    if (!this.supports("code")) return Promise.reject(new HostError("UNSUPPORTED", "this host cannot search code"));
+    return this.request((requestId) => ({ type: "request", requestId, name: "code", args: [c] }), 30_000);
   }
 
   pressWidget(id: string, action: unknown): void {

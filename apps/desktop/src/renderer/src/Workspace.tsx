@@ -950,24 +950,29 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
     // Depend on the stable `.mutate` refs, NOT the mutation objects — those are
     // fresh on every isPending tick and would re-render every rail consumer.
   }), [frameOpen, onCreateWorktree, onAttachWorktree, bindWorkspace, arrangeFrame, updateFrameTitle, updateFrameColor, requestDeleteFrame, unbindBranch, unbindWorkspace, repoPath, repoOfFrame, gitPushMut.mutate, gitPullMut.mutate, sleepActions]);
-  const openFileFromTile = useCallback((sourceTileId: string, path: string, at?: { line: number; col?: number }) => {
-    const sourceFrameId = frameOfRef.current[sourceTileId] ?? selectedFrameIdRef.current;
-    const existing = pickEditorTile(tilesRef.current, frameOfRef.current, sourceFrameId);
+  // A file in a frame's editor (a path a terminal printed, a pick in Files or Search, a view's), at
+  // a line when asked; the frame's editor is started when it has none.
+  const openFileInFrame = useCallback((frameId: string | null, path: string, at?: { line?: number; col?: number }): string | null => {
+    const existing = pickEditorTile(tilesRef.current, frameOfRef.current, frameId);
     const reveal = (id: string) => {
-      if (at) setEditorReveals((m) => ({ ...m, [id]: { path, line: at.line, col: at.col ?? 0, seq: ++revealSeq.current } }));
+      if (at?.line) setEditorReveals((m) => ({ ...m, [id]: { path, line: at.line!, col: at.col ?? 0, seq: ++revealSeq.current } }));
     };
     if (existing) {
       openFileInTile(existing, path);
       reveal(existing);
       setTimeout(() => { setSelectedTileId(existing); focusTile(existing); }, 0);
-      return;
+      return existing;
     }
     // No editor in that frame: the fresh one must still open the file the user
     // clicked — spawnTile mints its id, so the path rides in `opts.file`.
     const kind = kindsThatOpenNow("file")[0];
-    const id = kind ? spawnTile(kind, sourceFrameId ?? null, { file: path }) : null;
+    const id = kind ? spawnTile(kind, frameId, { file: path }) ?? null : null;
     if (id) reveal(id);
+    return id;
   }, [openFileInTile, focusTile, spawnTile]);
+  const openFileFromTile = useCallback((sourceTileId: string, path: string, at?: { line: number; col?: number }) => {
+    void openFileInFrame(frameOfRef.current[sourceTileId] ?? selectedFrameIdRef.current, path, at);
+  }, [openFileInFrame]);
 
   // History in the frame's Changes tile, started when it has none (a file's history from Files, a
   // commit from blame); one per frame, as Changes is.
@@ -1350,9 +1355,10 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
     },
     // Module-level bus functions: stable identities, so status never enters the
     // memo deps — a status transition re-renders nothing here.
+    openFile: openFileInFrame,
     subscribeTileStatus: (tileId, cb) => subscribeTileStatus(tileId, (e) => cb(e.status, e)),
     tileStatus: statusOf,
-  }), [setSelectedTileId, setSelectedFrameId, focusTile, closeTile, spawnTile, spawnVis, spawnDefaultAgent, addFrame, renameTile, bindWorkspace, sleepActions]);
+  }), [setSelectedTileId, setSelectedFrameId, focusTile, closeTile, spawnTile, spawnVis, spawnDefaultAgent, addFrame, renameTile, bindWorkspace, sleepActions, openFileInFrame]);
 
 
   // The canvas plugin's private runtime access (milestone-1 seam).

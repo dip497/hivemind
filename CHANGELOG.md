@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Added: view protocol 1.19: a view with the new permission `workspace:code` finds a frame's files and lines with fff (`hm.code.findFiles`, `hm.code.grep`, a page at a time) and opens a file in the frame's editor at a line (`hm.code.open`). An older app refuses to install a view that asks for it.
 - Fixed: an agent from HiveHub now also updates when only its scripts changed, not just its `agent.yaml`. A script you edited keeps your copy as it is.
 - Added: on the phone page, **View** can hide asleep agents, as the desktop's Layers panel does, and an asleep agent's row says so. Home 0.8 adds `asleep`.
 - Added: an agent that left work running in the background says so, **1 running**, on its tile, its Layers row and the phone page, so a build still going no longer looks finished. Claude only for now. Workspace API 0.41 and Home 0.7 add `background`, and it no longer counts a monitor or a teammate.
