@@ -144,27 +144,46 @@ export function needsNewerApp(entry: Pick<CatalogEntry, "name" | "minAppVersion"
   return appMeetsMinVersion(appVersion, entry.minAppVersion) ? null : `${entry.name} needs Hivemind ${entry.minAppVersion} or newer; this is ${appVersion}.`;
 }
 
-/** Whether an installed agent should become the catalog's current one. Two cases: it is
+/** Whether an installed agent should become the catalog's current one. Three cases: it is
  *  `broken` — this app refuses its manifest, so it is doing nothing at all and the catalog's
  *  copy can only be better — or it is the catalog's copy and nobody edited it since: recorded
  *  so (`recordedSha` is the manifest hash the catalog installed, null for an install from before
- *  that was recorded), or `published`, its bytes a version the catalog published. Either way
- *  this app must be able to run what the catalog lists. */
+ *  that was recorded), or `published`, its bytes a version the catalog published — or its
+ *  manifest is current and `filesBehind` says its other files are not. Either way this app must
+ *  be able to run what the catalog lists. */
 export function catalogAgentNeedsUpdate(entry: CatalogEntry, installed: {
   fromCatalog: boolean; manifestSha: string; recordedSha: string | null; appVersion: string;
   /** The installed manifest does not load in this app. */
   broken?: boolean;
   /** The installed manifest is byte for byte a file of the catalog's repository (catalogRepoHolds). */
   published?: boolean;
+  /** The installed manifest is current and its other files are behind (agentFilesBehind). */
+  filesBehind?: boolean;
 }): boolean {
   if (entry.type !== "agent") return false;
   if (!appMeetsMinVersion(installed.appVersion, entry.minAppVersion)) return false;
   if (installed.broken) return true;
   const want = entry.files.find((f) => f.path === AGENT_MANIFEST_FILE)?.sha256;
-  if (!want || want === installed.manifestSha) return false;
+  if (!want) return false;
+  if (want === installed.manifestSha) return !!installed.filesBehind;
   if (installed.published) return true;
   if (!installed.fromCatalog) return false;
   return installed.recordedSha === null || installed.recordedSha === installed.manifestSha;
+}
+
+/** Whether an agent's files other than its manifest are behind what the catalog lists: some
+ *  differ, and each that differs is bytes the catalog published. One someone edited keeps the
+ *  whole copy as it is; one not there yet holds nothing to lose. */
+export async function agentFilesBehind(entry: CatalogEntry, dir: string): Promise<boolean> {
+  let behind = false;
+  for (const f of entry.files) {
+    if (f.path === AGENT_MANIFEST_FILE) continue;
+    const body = await fs.readFile(path.join(dir, f.path)).catch(() => null);
+    if (body && createHash("sha256").update(body).digest("hex") === f.sha256) continue;
+    if (body && !await catalogRepoHolds(entry, body)) return false;
+    behind = true;
+  }
+  return behind;
 }
 
 /** Whether `body` is a file the catalog's repository holds in some commit. A copy nobody recorded

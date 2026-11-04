@@ -159,6 +159,35 @@ caps:
   expect(fs.readFileSync(path.join(agents, "edited", "agent.yaml"), "utf8")).toBe(yaml("edited", "edited old"));
 });
 
+test("an agent whose manifest is current gets a file the catalog added, and keeps a script someone edited", async () => {
+  test.setTimeout(90_000);
+  const yaml = (id: string) => `manifestVersion: 2
+id: ${id}
+label: "${id}"
+bin: ${id}-cli
+enabled: true
+caps:
+  promptDelivery: typed
+  turnSignal: false
+  resume: none
+  supervise: human
+  blockedDetection: false
+`;
+  const agents = path.join(xdg, "hivemind", "agents");
+  for (const id of ["behind", "myhook"]) {
+    registry.add({ id, type: "agent", name: id, files: { "agent.yaml": yaml(id), "hook.cjs": "the catalog's hook\n" }, bin: `${id}-cli` });
+    fs.mkdirSync(path.join(agents, id), { recursive: true });
+    fs.writeFileSync(path.join(agents, id, "agent.yaml"), yaml(id));
+  }
+  // No repository to find those bytes in, so this hook is someone's own.
+  fs.writeFileSync(path.join(agents, "myhook", "hook.cjs"), "my hook\n");
+  fs.writeFileSync(settingsFile(), JSON.stringify({ agents: { fromCatalog: ["behind", "myhook"] } }));
+  await launch();
+  await expect(page.getByText(/Updated behind for this version of Hivemind/)).toBeVisible({ timeout: INSTALL_WAIT });
+  expect(fs.readFileSync(path.join(agents, "behind", "hook.cjs"), "utf8")).toBe("the catalog's hook\n");
+  expect(fs.readFileSync(path.join(agents, "myhook", "hook.cjs"), "utf8")).toBe("my hook\n");
+});
+
 test("an agent this app cannot load is repaired from the catalog, even though nothing recorded installing it", async () => {
   test.setTimeout(90_000);
   const id = "brokenagent";
