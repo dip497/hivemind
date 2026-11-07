@@ -1,0 +1,64 @@
+{
+ "columnConfig": {
+  "columns": [
+   {
+    "name": "To Do",
+    "statuses": [
+     {
+      "id": "1",
+      "self": "https://your-domain.atlassian.net/status/1"
+     },
+     {
+      "id": "4",
+      "self": "https://your-domain.atlassian.net/status/4"
+     }
+    ]
+   },
+   {
+    "max": 4,
+    "min": 2,
+    "name": "In progress",
+    "statuses": [
+     {
+      "id": "3",
+      "self": "https://your-domain.atlassian.net/status/3"
+     }
+    ]
+   },
+   {
+    "name": "Done",
+    "statuses": [
+     {
+      "id": "5",
+      "self": "https://your-domain.atlassian.net/status/5"
+     }
+    ]
+   }
+  ],
+  "constraintType": "issueCount"
+ },
+ "estimation": {
+  "field": {
+   "displayName": "Story Points",
+   "fieldId": "customfield_10002"
+  },
+  "type": "field"
+ },
+ "filter": {
+  "id": "1001",
+  "self": "https://your-domain.atlassian.net/filter/1001"
+ },
+ "id": 10000,
+ "location": {
+  "id": "10010",
+  "key": "PROJ",
+  "name": "name",
+  "self": "https://your-domain.atlassian.net/rest/api/3/project/10010",
+  "type": "project"
+ },
+ "name": "Board",
+ "ranking": {
+  "rankCustomFieldId": 10020
+ },
+ "self": "https://your-domain.atlassian.net/rest/agile/1.0/board/84/config"
+}

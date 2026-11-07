@@ -1,0 +1,17 @@
+{
+ "expand": [
+  "names"
+ ],
+ "fields": [
+  "summary",
+  "project",
+  "assignee"
+ ],
+ "fieldsByKeys": false,
+ "issueIdsOrKeys": [
+  "EX-1",
+  "EX-2",
+  "10005"
+ ],
+ "properties": []
+}

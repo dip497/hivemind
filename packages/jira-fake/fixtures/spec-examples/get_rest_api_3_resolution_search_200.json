@@ -1,0 +1,14 @@
+{
+ "isLast": true,
+ "maxResults": 50,
+ "startAt": 0,
+ "total": 1,
+ "values": [
+  {
+   "description": "This is what it is supposed to do.",
+   "id": "10001",
+   "isDefault": true,
+   "name": "Works as designed"
+  }
+ ]
+}

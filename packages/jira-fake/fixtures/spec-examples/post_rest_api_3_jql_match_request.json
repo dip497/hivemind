@@ -1,0 +1,12 @@
+{
+ "issueIds": [
+  10001,
+  1000,
+  10042
+ ],
+ "jqls": [
+  "project = FOO",
+  "issuetype = Bug",
+  "summary ~ \"some text\" AND project in (FOO, BAR)"
+ ]
+}

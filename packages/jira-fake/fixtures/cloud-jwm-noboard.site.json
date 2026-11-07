@@ -1,0 +1,72 @@
+{
+  "name": "cloud-jwm-noboard",
+  "description": "Cloud, Jira Work Management (business) project MKT with no board and no agile fields. Columns come from statuses ordered by category then name; the scope is project JQL. myself has no permission to transition or assign (guard check #8), and a user whose time zone is hidden (timeZone falls back to the site default).",
+  "deployment": "Cloud",
+  "restVersion": 3,
+  "baseUrl": "https://acme.atlassian.net",
+  "cloudId": "8c0b7e5a-3f1d-4b6e-9a2c-1d4e5f6a7b8c",
+  "serverInfo": { "version": "1001.0.0-SNAPSHOT", "versionNumbers": [1001, 0, 0], "buildNumber": 100300, "serverTimeZone": "Europe/Berlin" },
+  "myself": "5b10ac8d82e05b22cc7d4ef5",
+  "users": [
+    { "accountId": "5b10ac8d82e05b22cc7d4ef5", "displayName": "Ujjwal Solanki", "emailAddress": "ujjwal@example.com", "timeZone": "Europe/Berlin" },
+    { "accountId": "5b10a2844c20165700ede21g", "displayName": "Jane Doe", "emailAddress": null }
+  ],
+  "permissions": {
+    "MKT": ["BROWSE_PROJECTS", "ADD_COMMENTS"]
+  },
+  "statuses": [
+    { "id": "10300", "name": "To Do", "scopeProjectId": "10300", "statusCategory": { "id": 2, "key": "new", "colorName": "blue-gray", "name": "To Do" } },
+    { "id": "10301", "name": "In Progress", "scopeProjectId": "10300", "statusCategory": { "id": 4, "key": "indeterminate", "colorName": "yellow", "name": "In Progress" } },
+    { "id": "10302", "name": "Approval", "scopeProjectId": "10300", "statusCategory": { "id": 4, "key": "indeterminate", "colorName": "yellow", "name": "In Progress" } },
+    { "id": "10303", "name": "Done", "scopeProjectId": "10300", "statusCategory": { "id": 3, "key": "done", "colorName": "green", "name": "Done" } }
+  ],
+  "workflows": {
+    "MKT workflow": {
+      "name": "MKT workflow",
+      "statuses": ["10300", "10301", "10302", "10303"],
+      "initial": "10300",
+      "transitions": [
+        { "id": "11", "name": "To Do", "from": "*", "to": "10300" },
+        { "id": "21", "name": "In Progress", "from": "*", "to": "10301" },
+        { "id": "31", "name": "Approval", "from": "*", "to": "10302" },
+        { "id": "41", "name": "Done", "from": "*", "to": "10303" }
+      ]
+    }
+  },
+  "projects": [
+    {
+      "id": "10300", "key": "MKT", "name": "Marketing", "style": "next-gen", "simplified": true, "projectTypeKey": "business",
+      "issueTypes": [ { "id": "10300", "name": "Task", "subtask": false, "hierarchyLevel": 0, "workflow": "MKT workflow" } ]
+    }
+  ],
+  "resolutions": [ { "id": "10000", "name": "Done", "isDefault": true } ],
+  "priorities": [ { "id": "3", "name": "Medium" } ],
+  "fields": [
+    { "id": "summary", "key": "summary", "name": "Summary", "custom": false, "schema": { "type": "string", "system": "summary" }, "clauseNames": ["summary"] },
+    { "id": "status", "key": "status", "name": "Status", "custom": false, "schema": { "type": "status", "system": "status" }, "clauseNames": ["status"] },
+    { "id": "duedate", "key": "duedate", "name": "Due date", "custom": false, "schema": { "type": "date", "system": "duedate" }, "clauseNames": ["due", "duedate"] }
+  ],
+  "boards": [],
+  "sprints": [],
+  "issues": [
+    {
+      "id": "10600", "key": "MKT-1", "project": "MKT", "issueType": "10300", "status": "10301",
+      "summary": "Launch post for 2026.10", "description": { "adf": { "type": "doc", "version": 1, "content": [ { "type": "paragraph", "content": [ { "type": "text", "text": "Draft, review, publish." } ] } ] } },
+      "assignee": "5b10ac8d82e05b22cc7d4ef5", "reporter": "5b10a2844c20165700ede21g", "priority": "Medium",
+      "created": "2026-10-10T09:00:00.000+0000", "updated": "2026-10-23T09:00:00.000+0000"
+    },
+    {
+      "id": "10601", "key": "MKT-2", "project": "MKT", "issueType": "10300", "status": "10300",
+      "summary": "Unassigned: newsletter", "description": null,
+      "assignee": null, "reporter": "5b10a2844c20165700ede21g", "priority": "Medium",
+      "created": "2026-10-11T09:00:00.000+0000", "updated": "2026-10-11T09:00:00.000+0000"
+    },
+    {
+      "id": "10602", "key": "MKT-3", "project": "MKT", "issueType": "10300", "status": "10302",
+      "summary": "Jane's: partner email", "description": null,
+      "assignee": "5b10a2844c20165700ede21g", "reporter": "5b10a2844c20165700ede21g", "priority": "Medium",
+      "created": "2026-10-12T09:00:00.000+0000", "updated": "2026-10-20T09:00:00.000+0000"
+    }
+  ],
+  "faults": []
+}

@@ -1,0 +1,47 @@
+{
+ "hierarchy": [
+  {
+   "issueTypes": [
+    {
+     "avatarId": 10324,
+     "entityId": "ce32639b-8911-4689-81da-65681f451516",
+     "id": 10008,
+     "name": "Story"
+    },
+    {
+     "avatarId": 10324,
+     "entityId": "ffdbced5-fbfc-4370-a848-94e2ce3751af",
+     "id": 10001,
+     "name": "Bug"
+    }
+   ],
+   "level": 0,
+   "name": "Base"
+  },
+  {
+   "issueTypes": [
+    {
+     "avatarId": 10179,
+     "entityId": "80f20d47-34dc-4680-8937-936b7e762a35",
+     "id": 10007,
+     "name": "Epic"
+    }
+   ],
+   "level": 1,
+   "name": "Epic"
+  },
+  {
+   "issueTypes": [
+    {
+     "avatarId": 10573,
+     "entityId": "210b4879-15cc-414c-9746-f8f6b6be0a72",
+     "id": 10009,
+     "name": "Subtask"
+    }
+   ],
+   "level": -1,
+   "name": "Subtask"
+  }
+ ],
+ "projectId": 10030
+}

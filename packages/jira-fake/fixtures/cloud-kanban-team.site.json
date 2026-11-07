@@ -1,0 +1,139 @@
+{
+  "name": "cloud-kanban-team",
+  "description": "Cloud, team-managed (next-gen) Kanban project OPS with the Kanban backlog enabled (its first column is the backlog), project-scoped statuses next to a global status shared with other projects, team-managed field ids (Story point estimate, no Sprint), no AC custom field (AC lives in a description checklist), and OPS-7, which was PAY-112 before it moved from the PAY project (same issue id, new key).",
+  "deployment": "Cloud",
+  "restVersion": 3,
+  "baseUrl": "https://acme.atlassian.net",
+  "cloudId": "8c0b7e5a-3f1d-4b6e-9a2c-1d4e5f6a7b8c",
+  "serverInfo": { "version": "1001.0.0-SNAPSHOT", "versionNumbers": [1001, 0, 0], "buildNumber": 100300, "serverTimeZone": "Etc/UTC" },
+  "myself": "5b10ac8d82e05b22cc7d4ef5",
+  "users": [
+    { "accountId": "5b10ac8d82e05b22cc7d4ef5", "displayName": "Ujjwal Solanki", "emailAddress": "ujjwal@example.com", "timeZone": "Asia/Kolkata" },
+    { "accountId": "5b10a2844c20165700ede21g", "displayName": "Jane Doe", "emailAddress": null, "timeZone": "America/New_York" }
+  ],
+  "permissions": {
+    "OPS": ["BROWSE_PROJECTS", "TRANSITION_ISSUES", "ADD_COMMENTS", "LINK_ISSUES", "ASSIGNABLE_USER"]
+  },
+  "statuses": [
+    { "id": "10100", "name": "Backlog", "scopeProjectId": "10200", "statusCategory": { "id": 2, "key": "new", "colorName": "blue-gray", "name": "To Do" } },
+    { "id": "10101", "name": "Selected", "scopeProjectId": "10200", "statusCategory": { "id": 2, "key": "new", "colorName": "blue-gray", "name": "To Do" } },
+    { "id": "3", "name": "In Progress", "statusCategory": { "id": 4, "key": "indeterminate", "colorName": "yellow", "name": "In Progress" } },
+    { "id": "10102", "name": "Waiting on vendor", "scopeProjectId": "10200", "statusCategory": { "id": 4, "key": "indeterminate", "colorName": "yellow", "name": "In Progress" } },
+    { "id": "10103", "name": "Done", "scopeProjectId": "10200", "statusCategory": { "id": 3, "key": "done", "colorName": "green", "name": "Done" } },
+    { "id": "10104", "name": "Triage", "scopeProjectId": "10200", "statusCategory": { "id": 1, "key": "undefined", "colorName": "medium-gray", "name": "No Category" } }
+  ],
+  "workflows": {
+    "OPS team-managed workflow": {
+      "name": "OPS team-managed workflow",
+      "statuses": ["10104", "10100", "10101", "3", "10102", "10103"],
+      "initial": "10100",
+      "transitions": [
+        { "id": "1", "name": "Backlog", "from": "*", "to": "10100" },
+        { "id": "2", "name": "Selected", "from": "*", "to": "10101" },
+        { "id": "3", "name": "In Progress", "from": "*", "to": "3" },
+        { "id": "4", "name": "Waiting on vendor", "from": "*", "to": "10102" },
+        { "id": "5", "name": "Done", "from": "*", "to": "10103" },
+        { "id": "6", "name": "Triage", "from": "*", "to": "10104" }
+      ]
+    }
+  },
+  "projects": [
+    {
+      "id": "10200", "key": "OPS", "name": "Operations", "style": "next-gen", "simplified": true, "projectTypeKey": "software",
+      "projectKeys": ["OPS"],
+      "issueTypes": [
+        { "id": "10200", "name": "Task", "subtask": false, "hierarchyLevel": 0, "workflow": "OPS team-managed workflow" },
+        { "id": "10201", "name": "Bug", "subtask": false, "hierarchyLevel": 0, "workflow": "OPS team-managed workflow" },
+        { "id": "10202", "name": "Subtask", "subtask": true, "hierarchyLevel": -1, "workflow": "OPS team-managed workflow" },
+        { "id": "10203", "name": "Epic", "subtask": false, "hierarchyLevel": 1, "workflow": "OPS team-managed workflow" }
+      ]
+    }
+  ],
+  "resolutions": [ { "id": "10000", "name": "Done", "isDefault": true } ],
+  "priorities": [ { "id": "2", "name": "High" }, { "id": "3", "name": "Medium" }, { "id": "4", "name": "Low" } ],
+  "fields": [
+    { "id": "summary", "key": "summary", "name": "Summary", "custom": false, "schema": { "type": "string", "system": "summary" }, "clauseNames": ["summary"] },
+    { "id": "description", "key": "description", "name": "Description", "custom": false, "schema": { "type": "string", "system": "description" }, "clauseNames": ["description"] },
+    { "id": "status", "key": "status", "name": "Status", "custom": false, "schema": { "type": "status", "system": "status" }, "clauseNames": ["status"] },
+    { "id": "assignee", "key": "assignee", "name": "Assignee", "custom": false, "schema": { "type": "user", "system": "assignee" }, "clauseNames": ["assignee"] },
+    { "id": "parent", "key": "parent", "name": "Parent", "custom": false, "schema": { "type": "issuelink", "system": "parent" }, "clauseNames": ["parent"] },
+    { "id": "updated", "key": "updated", "name": "Updated", "custom": false, "schema": { "type": "datetime", "system": "updated" }, "clauseNames": ["updated"] },
+    { "id": "customfield_10019", "key": "customfield_10019", "name": "Rank", "custom": true, "schema": { "type": "any", "custom": "com.pyxis.greenhopper.jira:gh-lexo-rank", "customId": 10019 }, "clauseNames": ["cf[10019]", "Rank"] },
+    { "id": "customfield_10016", "key": "customfield_10016", "name": "Story point estimate", "custom": true, "schema": { "type": "number", "custom": "com.pyxis.greenhopper.jira:jsw-story-points", "customId": 10016 }, "clauseNames": ["cf[10016]", "Story point estimate"] },
+    { "id": "customfield_10021", "key": "customfield_10021", "name": "Flagged", "custom": true, "schema": { "type": "array", "items": "option", "custom": "com.atlassian.jira.plugin.system.customfieldtypes:multicheckboxes", "customId": 10021 }, "clauseNames": ["cf[10021]", "Flagged"] }
+  ],
+  "boards": [
+    {
+      "id": 34, "name": "OPS board", "type": "kanban", "projectKey": "OPS",
+      "filter": { "id": "10060", "jql": "project = OPS ORDER BY Rank ASC" },
+      "subQuery": "resolution = EMPTY OR resolution changed AFTER -2w",
+      "kanbanBacklog": true,
+      "columns": [
+        { "name": "Backlog", "statuses": ["10100"] },
+        { "name": "Selected", "statuses": ["10101"] },
+        { "name": "In Progress", "statuses": ["3", "10102"], "max": 3 },
+        { "name": "Done", "statuses": ["10103"] }
+      ],
+      "rankFieldId": 10019,
+      "features": { "BACKLOG": "ENABLED", "SPRINTS": "DISABLED", "ESTIMATION": "ENABLED" }
+    }
+  ],
+  "sprints": [],
+  "issues": [
+    {
+      "id": "10500", "key": "OPS-1", "project": "OPS", "issueType": "10200", "status": "10101",
+      "summary": "Rotate TLS certs",
+      "description": { "adf": { "type": "doc", "version": 1, "content": [
+        { "type": "paragraph", "content": [ { "type": "text", "text": "Certs expire on the 3rd." } ] },
+        { "type": "paragraph", "content": [ { "type": "text", "text": "Acceptance criteria", "marks": [ { "type": "strong" } ] } ] },
+        { "type": "bulletList", "content": [
+          { "type": "listItem", "content": [ { "type": "paragraph", "content": [ { "type": "text", "text": "New certs on every edge node" } ] } ] },
+          { "type": "listItem", "content": [ { "type": "paragraph", "content": [ { "type": "text", "text": "Old certs revoked" } ] } ] }
+        ] }
+      ] } },
+      "assignee": "5b10ac8d82e05b22cc7d4ef5", "reporter": "5b10a2844c20165700ede21g", "priority": "High", "estimate": 2,
+      "created": "2026-10-18T08:00:00.000+0000", "updated": "2026-10-23T08:00:00.000+0000"
+    },
+    {
+      "id": "10501", "key": "OPS-2", "project": "OPS", "issueType": "10201", "status": "10102",
+      "summary": "CDN purge is slow", "description": null,
+      "assignee": "5b10ac8d82e05b22cc7d4ef5", "reporter": "5b10a2844c20165700ede21g", "priority": "Medium",
+      "created": "2026-10-18T09:00:00.000+0000", "updated": "2026-10-22T09:00:00.000+0000"
+    },
+    {
+      "id": "10502", "key": "OPS-3", "project": "OPS", "issueType": "10200", "status": "10100",
+      "summary": "Backlog: move logs to object storage", "description": null,
+      "assignee": null, "reporter": "5b10a2844c20165700ede21g", "priority": "Low",
+      "created": "2026-10-01T09:00:00.000+0000", "updated": "2026-10-01T09:00:00.000+0000"
+    },
+    {
+      "id": "10503", "key": "OPS-4", "project": "OPS", "issueType": "10200", "status": "10103", "resolution": "Done",
+      "summary": "Finished three weeks ago (hidden by the board sub-filter)", "description": null,
+      "assignee": "5b10ac8d82e05b22cc7d4ef5", "reporter": "5b10a2844c20165700ede21g", "priority": "Low",
+      "created": "2026-09-20T09:00:00.000+0000", "updated": "2026-10-02T09:00:00.000+0000"
+    },
+    {
+      "id": "10504", "key": "OPS-5", "project": "OPS", "issueType": "10200", "status": "10104",
+      "summary": "In a status with no category", "description": null,
+      "assignee": "5b10ac8d82e05b22cc7d4ef5", "reporter": "5b10a2844c20165700ede21g", "priority": "Low",
+      "created": "2026-10-21T09:00:00.000+0000", "updated": "2026-10-21T09:00:00.000+0000"
+    },
+    {
+      "id": "10212", "key": "OPS-7", "previousKeys": ["PAY-112"], "project": "OPS", "issueType": "10200", "status": "3",
+      "summary": "Moved here from PAY", "description": null,
+      "assignee": "5b10ac8d82e05b22cc7d4ef5", "reporter": "5b10ac8d82e05b22cc7d4ef5", "priority": "Medium",
+      "created": "2026-10-05T09:00:00.000+0000", "updated": "2026-10-23T10:00:00.000+0000",
+      "changelog": [
+        { "id": "30001", "author": "5b10ac8d82e05b22cc7d4ef5", "created": "2026-10-23T10:00:00.000+0000", "items": [
+          { "field": "Key", "fieldId": "issuekey", "from": null, "fromString": "PAY-112", "to": null, "toString": "OPS-7" },
+          { "field": "project", "fieldId": "project", "from": "10100", "fromString": "Payments", "to": "10200", "toString": "Operations" },
+          { "field": "status", "fieldId": "status", "from": "10001", "fromString": "To Do", "to": "3", "toString": "In Progress" }
+        ] }
+      ]
+    }
+  ],
+  "faults": [
+    { "name": "quota exhausted (tenant)", "match": { "method": "POST", "path": "/rest/api/3/search/jql", "nth": 5 }, "status": 429,
+      "headers": { "Retry-After": "1800", "RateLimit-Reason": "jira-quota-tenant-based", "X-RateLimit-Reset": "2026-10-24T09:00:00Z" } }
+  ]
+}
