@@ -9,6 +9,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+## [2026.11.3] — 2026-11-19
+
 - Added: view protocol 1.19: a view with the new permission `workspace:code` finds a frame's files and lines with fff (`hm.code.findFiles`, `hm.code.grep`, a page at a time) and opens a file in the frame's editor at a line (`hm.code.open`). An older app refuses to install a view that asks for it.
 - Fixed: an agent from HiveHub now also updates when only its scripts changed, not just its `agent.yaml`. A script you edited keeps your copy as it is.
 - Added: on the phone page, **View** can hide asleep agents, as the desktop's Layers panel does, and an asleep agent's row says so. Home 0.8 adds `asleep`.
@@ -2265,7 +2267,8 @@ World, and sandboxed community views), and the e2e/perf harnesses gate every cha
 - **install.sh** — single script for both fresh install and in-place upgrade. Downloads prebuilt binaries from GitHub Releases by default; `--dev` flag clones and builds from source.
 - **GitHub Actions** — `release.yml` (tag-driven build + publish on `v*.*.*`), `ci.yml` (typecheck + build + unit tests on every push / PR).
 
-[Unreleased]: https://github.com/dip497/hivemind/compare/v2026.11.2...HEAD
+[Unreleased]: https://github.com/dip497/hivemind/compare/v2026.11.3...HEAD
+[2026.11.3]: https://github.com/dip497/hivemind/releases/tag/v2026.11.3
 [2026.11.2]: https://github.com/dip497/hivemind/releases/tag/v2026.11.2
 [2026.11.1]: https://github.com/dip497/hivemind/releases/tag/v2026.11.1
 [2026.11.0]: https://github.com/dip497/hivemind/releases/tag/v2026.11.0
