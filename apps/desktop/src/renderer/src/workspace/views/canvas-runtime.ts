@@ -12,7 +12,7 @@
  * may import this module. Phase 2 (docs/design/workspace-views.md) moves the
  * placement logic into a headless per-plugin layout engine and deletes it.
  */
-import { createContext, useContext, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
+import { createContext, useContext, type MutableRefObject } from "react";
 import type { Node } from "@xyflow/react";
 import type { PinRect } from "../tile-surfaces";
 import type { Board } from "../../board-objects/useBoard";
@@ -21,7 +21,6 @@ import type { Pins } from "../pins";
 
 export type Viewport = { x: number; y: number; zoom: number };
 export type FocusReq = { id: string; cx: number; cy: number; w: number; h: number; n: number; exact?: boolean } | null;
-export type FocusModeReq = { id: string | null; n: number } | null;
 
 export interface CanvasRuntime {
   // ── geometry (persisted by the runtime in the canvas view's layout blob) ──
@@ -34,14 +33,11 @@ export interface CanvasRuntime {
   /** Commit the post-pan viewport so the layout blob persists it. */
   setViewport: (vp: Viewport) => void;
   onNodeResizeCommit: (id: string, w: number, h: number, x?: number, y?: number) => void;
-  handleNodeDragStop: (e: unknown, node: Node) => void;
+  handleNodeDragStop: (e: unknown, node: Node, moved?: readonly Node[]) => void;
   /** Wipe this repo's canvas: tiles, frames, geometry (ZoomIsland reset). */
   resetCanvas: () => void;
   // ── camera requests (set by runtime commands, consumed by the camera children) ──
   focusReq: FocusReq;
-  focusModeReq: FocusModeReq;
-  setFocusModeReq: Dispatch<SetStateAction<FocusModeReq>>;
-  focusModeNonceRef: MutableRefObject<number>;
   selectedTileIdRef: MutableRefObject<string | null>;
   selectedFrameIdRef: MutableRefObject<string | null>;
   /** Agent-awareness "seen" tracking (selecting a tile clears its done-unseen). */

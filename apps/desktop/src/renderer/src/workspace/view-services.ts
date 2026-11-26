@@ -19,6 +19,11 @@ import { bandOver, followWidgetBand, widgetBand } from "../board-objects/widget-
 import type { HcpStatusEvent } from "../../../shared/ipc";
 import { issueService } from "./issue-service";
 import { codeService } from "./code-service";
+import { boardService, type BoardServiceOptions } from "./board-service";
+import { followBroadcast, setBroadcastGroup } from "./broadcast-input";
+import { followTileSeen } from "./tile-seen";
+import { onBoardWritten, onStoreChange } from "./workspace-store-client";
+import type { BoardObject } from "@hivemind/workspace-doc/shapes";
 
 const TURN_ENDS = new Set(["done", "failed", "interrupted", "limited"]);
 
@@ -122,6 +127,28 @@ const viewParticipant = (p: Participant): ViewParticipant => ({
 
 const coded = (code: "UNSUPPORTED" | "BAD_REQUEST", message: string) => Object.assign(new Error(message), { code });
 
+/** Only these objects of a board, as stored now (null: gone). */
+function boardObjects(repo: string, ids: string[]): Record<string, BoardObject | null> | null {
+  try { return window.hive.workspaceObjectsWithIdsSync(repo, ids); } catch { return null; }
+}
+
+/** The ids of what changes on the board of the workspace shown: others' writes as the store says
+ *  them, and this window's own. */
+function boardChanges(repo: () => string | null, cb: (ids: readonly string[]) => void): () => void {
+  const heard = (changed: string, ids: readonly string[] | null | undefined) => {
+    const shown = repo();
+    if (changed !== shown) return;
+    if (ids) { cb(ids); return; }
+    // Which is not known (an undo, a shallow document): every object is said changed, once.
+    let all: BoardObject[] | null = null;
+    try { all = window.hive.workspaceObjectsSync(shown); } catch { /* nothing to say */ }
+    if (all) cb(all.map((b) => b.id));
+  };
+  const stopOthers = onStoreChange((c) => { if (c.part === "board") heard(c.repo, c.objects); });
+  const stopOwn = onBoardWritten(heard);
+  return () => { stopOthers(); stopOwn(); };
+}
+
 /** The widget cards' band (1.18) as the view in `box` has it: now, then whenever the cards are laid
  *  out again or the view's box changes size; nothing once the view stops following it. */
 export function bandOverView(box: () => HTMLElement | null): NonNullable<LinkServices["widgetBand"]> {
@@ -160,12 +187,28 @@ export function viewLinkServices(opts: {
   frameRepo: (frameId: string | null) => string | null;
   /** Open a file in the frame's editor (null: any), at a line when given: the editor tile's id. */
   openFile: (frameId: string | null, path: string, at?: { line?: number; col?: number }) => Promise<string | null>;
+  /** Open an address or a frame's file where a click would (protocol 1.21). */
+  open: LinkServices["open"];
+  /** The board of the workspace the view shows (protocol 1.20); none: the view is not offered it. */
+  board?: Pick<BoardServiceOptions, "viewId" | "ask" | "frames" | "frameOf">;
+  /** The session a terminal tile's keys go to, or null for a tile that is not a terminal. */
+  ptyOf: (tileId: string) => string | null;
+  /** This view, which owns the group it types into until it goes. */
+  owner: object;
 }): LinkServices {
   return {
     code: codeService(opts.frameRepo, opts.openFile),
+    open: opts.open,
+    ...(opts.board ? { board: boardService({ ...opts.board, repo: opts.repo, objects: boardObjects, changes: (cb) => boardChanges(opts.repo, cb) }) } : {}),
     ...(opts.box ? { widgetBand: bandOverView(opts.box) } : {}),
     issues: issueService(opts.issueRoot, opts.issueFolder),
     agentStatus: (tileId, cb) => subscribeHostedStatus(tileId, (s) => cb(viewAgentStatus(s))),
+    seenOf: followTileSeen,
+    // Only terminals join; a group short of two is none, so nothing is half on.
+    broadcast: {
+      set: (ids) => setBroadcastGroup(ids.flatMap((tile) => { const pty = opts.ptyOf(tile); return pty ? [{ tile, pty }] : []; }), opts.owner),
+      follow: followBroadcast,
+    },
     widgets: {
       subscribe: (cb) => {
         const repo = opts.repo();

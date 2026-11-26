@@ -11,6 +11,7 @@ import type { LoroDoc, LoroMap, LoroTree, LoroTreeNode, TreeID } from "loro-crdt
 import { isMap, writeFields } from "./fields.js";
 import { firstOfEachId, isObject, type Fields } from "./input.js";
 import { readOrder, writeOrder } from "./order.js";
+import { parentsOf } from "./pages.js";
 import { rebaseCore } from "./rebase.js";
 import { FRAMES, META, ORDER, TILES, stampSchema } from "./schema.js";
 import type { CoreLayout, FrameRecord, TileRecord } from "./shapes.js";
@@ -95,8 +96,7 @@ export function addFrame(doc: LoroDoc, frame: FrameRecord): boolean {
   const parent = frame.parentFrameId === undefined ? undefined : nodes.get(frame.parentFrameId);
   if (frame.parentFrameId !== undefined && parent === undefined) throw new TypeError(`workspace doc: no frame ${frame.parentFrameId} to put a frame in`);
   stampSchema(doc);
-  const { parentFrameId: _nested, ...fields } = frame as FrameRecord & Fields;
-  writeFields(tree.createNode(parent).data, fields);
+  writeFields(tree.createNode(parent).data, frameFields(frame));
   const meta = doc.getMap(META);
   if (meta.get("core") !== true) meta.set("core", true);
   return true;
@@ -201,8 +201,7 @@ function writeFrames(tree: LoroTree, frames: FrameRecord[]): void {
         const node = tree.getNodeByID(id)!;
         if (node.parent()?.id !== parentNode || node.index() !== index) tree.move(id, parentNode, index);
       }
-      const { parentFrameId: _nested, ...fields } = frame as FrameRecord & Fields;
-      writeFields(tree.getNodeByID(id)!.data, fields);
+      writeFields(tree.getNodeByID(id)!.data, frameFields(frame));
       place(frame.id);
     });
   };
@@ -213,6 +212,12 @@ function writeFrames(tree: LoroTree, frames: FrameRecord[]): void {
   for (const [frameId, id] of nodes) {
     if (!kept.has(frameId) && !tree.isNodeDeleted(id)) tree.delete(id);
   }
+}
+
+/** A frame's own fields as stored: its parent is the tree's, and `page` is kept only as `true`. */
+function frameFields(frame: FrameRecord): Fields {
+  const { parentFrameId: _nested, page, ...fields } = frame as FrameRecord & Fields;
+  return page === true ? { ...fields, page } : fields;
 }
 
 /** Frame id → its node, the first in reading order when a merge left two. */
@@ -227,31 +232,13 @@ function frameNodes(tree: LoroTree): Map<string, TreeID> {
   return nodes;
 }
 
-/**
- * Each frame's parent, or undefined for the top level. A parent the layout does not have, or
- * one that would close a cycle, puts the frame at the top level.
- */
-function parentsOf(frames: FrameRecord[]): Map<string, string | undefined> {
-  const declared = new Map(frames.map((f) => [f.id, f.parentFrameId]));
-  const parent = new Map<string, string | undefined>();
-  for (const frame of frames) {
-    let p = declared.get(frame.id);
-    if (p !== undefined && !declared.has(p)) p = undefined;
-    for (let q = p, steps = 0; q !== undefined && steps <= frames.length; steps++) {
-      if (q === frame.id) { p = undefined; break; }
-      q = parent.has(q) ? parent.get(q) : declared.get(q);
-    }
-    parent.set(frame.id, p);
-  }
-  return parent;
-}
-
 function readFrames(tree: LoroTree): FrameRecord[] {
   const frames: FrameRecord[] = [];
   const seen = new Set<string>();
   const visit = (node: LoroTreeNode, parent: string | undefined): void => {
     const fields = node.data.toJSON() as Fields;
     if (typeof fields.id !== "string" || seen.has(fields.id)) return;
+    if (fields.page !== true) delete fields.page;
     seen.add(fields.id);
     frames.push((parent === undefined ? fields : { ...fields, parentFrameId: parent }) as unknown as FrameRecord);
     for (const child of node.children() ?? []) visit(child, fields.id);

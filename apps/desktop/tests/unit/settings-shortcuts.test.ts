@@ -21,8 +21,9 @@ const PC_MOD: Record<string, "ctrlKey" | "altKey" | "shiftKey" | "metaKey"> = { 
 const NAMED: Record<string, [string, string]> = {
   Esc: ["Escape", "Escape"], Tab: ["Tab", "Tab"], Enter: ["Enter", "Enter"], Space: [" ", "Space"],
   "⌫": ["Backspace", "Backspace"], Backspace: ["Backspace", "Backspace"], "⌦": ["Delete", "Delete"], Delete: ["Delete", "Delete"],
+  "←": ["ArrowLeft", "ArrowLeft"], "→": ["ArrowRight", "ArrowRight"], "↑": ["ArrowUp", "ArrowUp"], "↓": ["ArrowDown", "ArrowDown"],
 };
-const PLACE: Record<string, string> = { "`": "Backquote", ",": "Comma", ".": "Period", "=": "Equal", "-": "Minus", "−": "Minus", "+": "Equal", "\\": "Backslash" };
+const PLACE: Record<string, string> = { "`": "Backquote", ",": "Comma", ".": "Period", "=": "Equal", "-": "Minus", "−": "Minus", "+": "Equal", "\\": "Backslash", "[": "BracketLeft", "]": "BracketRight" };
 
 /** The key press a label names, read as a person on `os` would: "⌃⇧Tab" on a Mac, "Ctrl+Shift+Tab" elsewhere. */
 function pressOf(label: string, os: OS): KeyPress {

@@ -81,8 +81,12 @@ async function renderMermaid(container: HTMLElement, alive: () => boolean): Prom
 export function MarkdownPreview({
   source,
   className = "md-preview nowheel absolute inset-0 h-full w-full overflow-auto px-6 py-4",
+  onOpenLink,
 }: {
   source: string;
+  /** A link clicked, by its `href` as written, opened where the window's opener says; absent: the
+   *  system's browser opens web links. A `#section` link stays in the page. */
+  onOpenLink?: (href: string) => void;
   /** Override the container classes. Default = the editor's full-tile overlay;
    *  callers embedding it inline (e.g. the issue peek) pass a flow `md-preview`. */
   className?: string;
@@ -104,5 +108,11 @@ export function MarkdownPreview({
     };
   }, [source, mode]);
 
-  return <div ref={ref} className={className} />;
+  return <div ref={ref} className={className} onClick={onOpenLink && ((e) => {
+    const href = (e.target as Element).closest?.("a[href]")?.getAttribute("href");
+    if (!href || href.startsWith("#")) return;
+    e.preventDefault();
+    // A link to a file names it without the heading after "#"; an address keeps it.
+    onOpenLink(/^[a-z][a-z0-9+.-]*:/i.test(href) ? href : href.replace(/#.*$/, ""));
+  })} />;
 }

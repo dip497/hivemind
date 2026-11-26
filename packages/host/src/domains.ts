@@ -6,8 +6,10 @@
  */
 import { git } from "./git.js";
 import { code } from "./code.js";
+import { codeIntel } from "./code-intel.js";
 import { files } from "./files.js";
+import { fileFacts } from "./file-facts.js";
 import { issues } from "./issues.js";
 import { reviews } from "./reviews.js";
 
-export const workspaceDomains = [git, code, files, issues, reviews];
+export const workspaceDomains = [git, code, codeIntel, files, fileFacts, issues, reviews];

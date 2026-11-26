@@ -11,8 +11,20 @@ interface ChromeState {
   /** How far up from the window's bottom the island covers (px), 0 when it is not drawn there. A
    *  view that docks tiles keeps them above it, or the island hides their last lines. */
   bottomInset: number;
+  /** How far down from the window's top the island covers (px), 0 when it is not drawn there. */
+  topInset: number;
+  /** Where the canvas puts its drawing tools in the island: the Draw button, the row of tools,
+   *  and the chosen tool's options beside it. Null while the island is not drawn. */
+  drawButton: HTMLElement | null;
+  drawRow: HTMLElement | null;
+  drawOptions: HTMLElement | null;
+  /** The island is at the window's bottom: what opens from it opens upward. */
+  drawOpensUp: boolean;
 }
-let state: ChromeState = { suppressed: false, islandShown: true, layersShown: false, bottomInset: 0 };
+let state: ChromeState = {
+  suppressed: false, islandShown: true, layersShown: false, bottomInset: 0, topInset: 0,
+  drawButton: null, drawRow: null, drawOptions: null, drawOpensUp: false,
+};
 const listeners = new Set<() => void>();
 function set(patch: Partial<ChromeState>) {
   state = { ...state, ...patch };
@@ -30,6 +42,8 @@ export function openAppearanceSettings(): void {
 export function setChromeSuppressed(on: boolean): void { if (on !== state.suppressed) set({ suppressed: on }); }
 /** Host chrome says how much of the window's bottom its island covers. */
 export function setBottomInset(px: number): void { if (px !== state.bottomInset) set({ bottomInset: px }); }
+/** Host chrome says how much of the window's top its island covers. */
+export function setTopInset(px: number): void { if (px !== state.topInset) set({ topInset: px }); }
 /** Host chrome says whether its island is drawn. */
 export function setIslandShown(on: boolean): void { if (on !== state.islandShown) set({ islandShown: on }); }
 let layers = 0;
@@ -39,3 +53,8 @@ export function layersDrawn(): () => void {
   set({ layersShown: true });
   return () => { layers--; if (layers === 0) set({ layersShown: false }); };
 }
+/** The island's places for the drawing tools, as stable refs: React calls each on mount and unmount only. */
+export const drawButtonSlot = (el: HTMLElement | null): void => { if (el !== state.drawButton) set({ drawButton: el }); };
+export const drawRowSlot = (el: HTMLElement | null): void => { if (el !== state.drawRow) set({ drawRow: el }); };
+export const drawOptionsSlot = (el: HTMLElement | null): void => { if (el !== state.drawOptions) set({ drawOptions: el }); };
+export function setDrawOpensUp(up: boolean): void { if (up !== state.drawOpensUp) set({ drawOpensUp: up }); }

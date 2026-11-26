@@ -62,16 +62,24 @@ async function drag(page: Page, from: { x: number; y: number }, by: { x: number;
   await page.mouse.up();
 }
 
-/** A new frame is flown to (400ms): wait until it sits in the middle of the canvas. */
+/** A new frame is flown to (400ms): wait until it has landed across the middle of the canvas,
+ *  whole and below the tool island (the camera centres it in the room the island leaves). */
 async function frameInView(page: Page) {
   await expect(page.locator(".react-flow__node-frame")).toHaveCount(1);
   const at = () => page.evaluate(() => {
     const pane = document.querySelector(".react-flow")!.getBoundingClientRect();
+    const island = document.querySelector("[data-host-island='top'] > div")?.getBoundingClientRect();
     const r = document.querySelector(".react-flow__node-frame")!.getBoundingClientRect();
     return { x: r.x, y: r.y, width: r.width, height: r.height,
-      off: Math.hypot(r.x + r.width / 2 - (pane.x + pane.width / 2), r.y + r.height / 2 - (pane.y + pane.height / 2)) };
+      landed: Math.abs(r.x + r.width / 2 - (pane.x + pane.width / 2)) < 2 && r.y > (island?.bottom ?? pane.y) && r.bottom < pane.bottom };
   });
-  await expect.poll(async () => (await at()).off < 2).toBe(true);
+  let last = "";
+  await expect.poll(async () => {
+    const now = JSON.stringify(await at());
+    const still = now === last;
+    last = now;
+    return still && (JSON.parse(now) as { landed: boolean }).landed;
+  }).toBe(true);
   return at();
 }
 

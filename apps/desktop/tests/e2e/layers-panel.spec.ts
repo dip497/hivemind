@@ -94,12 +94,17 @@ test("the View menu groups by status or not at all; a filter that leaves nothing
   await expect(panel().locator('[data-layers-bucket="all"] [data-layer-tile]')).toHaveCount(2);
 });
 
-test("pins, the View menu and a folded section are as they were left after a restart", async () => {
+test("pins, the View menu, Show and a folded section are as they were left after a restart", async () => {
   await panel().locator('[data-layers-pinned] button[aria-expanded]').click();
   await expect(panel().locator("[data-layers-pinned] [data-layer-tile]")).toHaveCount(0);
+  await panel().locator("[data-layers-show-menu]").click();
+  await page.locator('[data-layers-show-choice="agents"]').click();
+  await expect(panel().locator("[data-layers-show-menu]")).toHaveAttribute("aria-label", "Show: Agents");
   await page.waitForTimeout(600); // the personal layout's debounced save
   await app.close();
   await launch();
+  await expect(panel().locator("[data-layers-show-menu]")).toHaveAttribute("aria-label", "Show: Agents");
+  await panel().locator("[data-layers-show-clear]").click();
   await expect(panel().locator("[data-layers-pinned] button[aria-expanded]")).toHaveAttribute("aria-expanded", "false");
   await expect(panel().locator('[data-layers-bucket="all"] [data-layer-tile]')).toHaveCount(2);
   await panel().locator('[data-layers-pinned] button[aria-expanded]').click();

@@ -233,7 +233,7 @@ export interface AgentRead {
 
 /** What another agent has for an agent (0.26): a turn's reply, a report, that it waits on an
  *  answer, or an approval it asks. */
-export type InboxKind = "reply" | "report" | "waiting" | "approval";
+export type InboxKind = "reply" | "report" | "waiting" | "approval" | "post" | "mention";
 
 /** One message in an agent's inbox, numbered across the machine in the order they came. */
 export interface InboxMessage {
@@ -245,6 +245,8 @@ export interface InboxMessage {
   kind: InboxKind;
   /** The turn of `from` it is the reply of. */
   turn?: number;
+  /** The channel a post or mention was made in. */
+  channel?: string;
   text: string;
 }
 

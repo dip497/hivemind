@@ -11,7 +11,7 @@ import { RowsSkeleton } from "./workspace/tile-skeletons";
 import { Button } from "./components/ui/button";
 import { X } from "./components/icons";
 import { HeaderPinButton, type PinRect } from "./canvas-nodes";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { FileTree, useFileTree, useFileTreeSearch } from "@pierre/trees/react";
 import type {
   ContextMenuItem,
@@ -30,6 +30,8 @@ interface Props {
   repoPath: string;
   /** Optional callback when a file row is selected (e.g., open a diff tile). */
   onSelectFile?: (path: string) => void;
+  /** The file an editor beside it shows: the row selected. */
+  shown?: string | null;
   /** When true, render only the tree — no outer tile chrome (border/shadow)
    *  and no internal header (the embedding host supplies its own). Defaults
    *  to false so the standalone tile keeps its full chrome. */
@@ -79,7 +81,7 @@ const STATUS_COLOR: Record<GitFileStatus, string> = {
   conflicted: "var(--color-err)",
 };
 
-export function FileTreeTile({ repoPath, onSelectFile, embedded = false, onClose, pinned, onTogglePin, onShowHistory }: Props) {
+export function FileTreeTile({ repoPath, onSelectFile, shown, embedded = false, onClose, pinned, onTogglePin, onShowHistory }: Props) {
   const { data: paths = [], isLoading, error: listError } = useGitListFiles(repoPath);
   const { data: status } = useGitStatus(repoPath);
 
@@ -108,6 +110,8 @@ export function FileTreeTile({ repoPath, onSelectFile, embedded = false, onClose
   }, [paths]);
 
   const repoName = repoPath.split("/").filter(Boolean).pop() ?? "files";
+  const shownRef = useRef(shown);
+  shownRef.current = shown;
 
   // useFileTree() creates the model once. Per-row decoration is configured here
   // (Pierre keeps it on the MODEL because the renderer needs it during virtualization).
@@ -133,6 +137,8 @@ export function FileTreeTile({ repoPath, onSelectFile, embedded = false, onClose
       // "internal/" never matched "internal//").
       if (first.endsWith("/")) return;
       if (isDirectory(first)) return;
+      // Marking the file already shown is not a pick: it must not take the selection from another tile.
+      if (first === shownRef.current) return;
       onSelectFile(first);
     },
     renderRowDecoration: ({ item }): FileTreeRowDecoration | null => {
@@ -153,6 +159,15 @@ export function FileTreeTile({ repoPath, onSelectFile, embedded = false, onClose
   useEffect(() => {
     model.setGitStatus(gitStatus);
   }, [model, gitStatus]);
+  useEffect(() => {
+    if (!shown) return;
+    const selected = model.getSelectedPaths();
+    if (selected.length === 1 && selected[0] === shown) return;
+    const row = model.getItem(shown);
+    if (!row) return;
+    for (const p of selected) model.getItem(p)?.deselect();
+    row.select();
+  }, [model, shown, paths]);
 
   // ⌘P / Ctrl+P → open Pierre's built-in search (the README's recommended hook).
   const search = useFileTreeSearch(model);

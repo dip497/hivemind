@@ -342,23 +342,22 @@ function tileBox(f: FrameGeom, mem: MemberRect[] | undefined, k: FrameLayoutCons
 }
 
 /**
- * Whole-canvas frame geometry, nesting-aware.
+ * Whole-canvas frame geometry, nesting-aware, to any depth.
  *
- * Two levels only (repo frame → worktree sub-frames). The algorithm:
+ * The algorithm, from the innermost frames out:
  *   1. Every frame's tile-derived box (`tileBox`).
- *   2. Separate each parent's CHILD frames among themselves (a sibling group),
- *      keeping the anchor fixed — children never overlap each other.
- *   3. Each parent's box = union(its own tiles, its children's separated
+ *   2. Separate each frame's CHILD frames among themselves (a sibling group),
+ *      keeping the anchor's line fixed — children never overlap each other.
+ *   3. A frame with children wraps (its own tiles, its children's separated
  *      boxes) inset by `nestPad` + header room, so children sit visually
- *      inside the parent below its title bar.
- *   4. Separate the TOP-LEVEL frames among themselves. A parent's delta
- *      cascades to its children (geometry + tile shift) so the nest moves as
- *      one body.
+ *      inside it below its title bar.
+ *   4. Separate the TOP-LEVEL frames among themselves. Each delta cascades to
+ *      everything inside (geometry + tile shift) so the nest moves as one body.
  *
  * Returns final per-frame geometry plus, per frame, the {dx,dy} the caller
  * must apply to that frame's MEMBER TILES (absolute) so the next derive lands
- * the frame at the separated spot. For a child frame this shift already folds
- * in its parent's delta.
+ * the frame at the separated spot. For a nested frame this shift already folds
+ * in every delta above it.
  */
 export function computeFrameLayout(
   frames: FrameGeom[],
@@ -382,91 +381,76 @@ export function computeFrameLayout(
     if (p) (childrenOf.get(p) ?? childrenOf.set(p, []).get(p)!).push(f);
   }
 
-  // 1) tile-derived box for every frame.
-  const tBox = new Map<string, Rect>();
-  for (const f of frames) tBox.set(f.id, tileBox(f, memberRects.get(f.id), k));
-
-  // The top-level pass must pin the anchor's PARENT (not the anchor itself) when
-  // the anchor is a worktree child — else spawning/dragging a child sets the
-  // anchor to the child id, which isn't in the top-level set, so the parent
-  // isn't pinned and the whole nest jumps when a sibling repo yields against it.
-  const anchorFrame = anchorId ? byId.get(anchorId) : undefined;
-  const topAnchor = anchorFrame ? (parentOf(anchorFrame) ?? anchorId) : anchorId;
-
-  // 2) separate sibling child frames within each parent.
-  const childDelta = new Map<string, { dx: number; dy: number }>();
-  for (const [, kids] of childrenOf) {
-    if (kids.length < 2) continue; // a lone child can't collide
-    const rects: LayoutRect[] = kids.map((c) => ({ id: c.id, ...tBox.get(c.id)! }));
-    const d = separateSiblingFrames(rects, anchorId, gap);
-    for (const c of kids) childDelta.set(c.id, d[c.id] ?? { dx: 0, dy: 0 });
+  // At each level the anchor's line is pinned: the anchor itself, or the frame holding it there,
+  // so spawning or dragging in a nested frame never makes the nest jump against a sibling.
+  const anchorLine = new Set<string>();
+  for (let a = anchorId ? byId.get(anchorId) : undefined, steps = 0; a && steps <= frames.length; steps++) {
+    anchorLine.add(a.id);
+    const p = parentOf(a);
+    a = p ? byId.get(p) : undefined;
   }
-  const childBox = (id: string): Rect => {
-    const b = tBox.get(id)!;
-    const d = childDelta.get(id) ?? { dx: 0, dy: 0 };
-    return { x: b.x + d.dx, y: b.y + d.dy, w: b.w, h: b.h };
+  const pinnedIn = (group: FrameGeom[]) => group.find((f) => anchorLine.has(f.id))?.id ?? anchorId;
+
+  // 1–3) each frame's desired box, children first; each child's delta inside its parent.
+  const desired = new Map<string, Rect>();
+  const childDelta = new Map<string, { dx: number; dy: number }>();
+  const visiting = new Set<string>();
+  const boxOf = (f: FrameGeom): Rect => {
+    const known = desired.get(f.id);
+    if (known) return known;
+    visiting.add(f.id);
+    const kids = (childrenOf.get(f.id) ?? []).filter((c) => !visiting.has(c.id));
+    const own = tileBox(f, memberRects.get(f.id), k);
+    let box = own;
+    if (kids.length > 0) {
+      const rects: LayoutRect[] = kids.map((c) => ({ id: c.id, ...boxOf(c) }));
+      const d = kids.length > 1 ? separateSiblingFrames(rects, pinnedIn(kids), gap) : {};
+      const boxes: Rect[] = (memberRects.get(f.id)?.length ?? 0) > 0 ? [own] : [];
+      for (const r of rects) {
+        const dc = d[r.id] ?? { dx: 0, dy: 0 };
+        childDelta.set(r.id, dc);
+        boxes.push({ x: r.x + dc.dx, y: r.y + dc.dy, w: r.w, h: r.h });
+      }
+      const minX = Math.min(...boxes.map((b) => b.x));
+      const minY = Math.min(...boxes.map((b) => b.y));
+      const maxR = Math.max(...boxes.map((b) => b.x + b.w));
+      const maxB = Math.max(...boxes.map((b) => b.y + b.h));
+      // Inset around the nest + extra header room so the title bar clears the frames below it.
+      box = { x: minX - nestPad, y: minY - k.header, w: maxR - minX + nestPad * 2, h: maxB - minY + k.header + nestPad };
+    }
+    visiting.delete(f.id);
+    desired.set(f.id, box);
+    return box;
   };
 
-  // 3) parent (top-level) desired box wraps own tiles + child boxes.
+  // 4) separate the top-level frames.
   const topLevel = frames.filter((f) => !parentOf(f));
-  const rootDesired = new Map<string, Rect>();
-  for (const f of topLevel) {
-    const kids = childrenOf.get(f.id);
-    const boxes: Rect[] = [];
-    const ownHasTiles = (memberRects.get(f.id)?.length ?? 0) > 0;
-    if (ownHasTiles) boxes.push(tBox.get(f.id)!);
-    if (kids) for (const c of kids) boxes.push(childBox(c.id));
-    if (boxes.length === 0) {
-      // No tiles, no children → collapsed placeholder at current origin.
-      rootDesired.set(f.id, { x: f.x, y: f.y, w: k.emptyW, h: k.emptyH });
-      continue;
-    }
-    const minX = Math.min(...boxes.map((b) => b.x));
-    const minY = Math.min(...boxes.map((b) => b.y));
-    const maxR = Math.max(...boxes.map((b) => b.x + b.w));
-    const maxB = Math.max(...boxes.map((b) => b.y + b.h));
-    if (kids?.length) {
-      // Inset around the nest + extra header room so the parent title bar
-      // clears the child frames sitting below it.
-      rootDesired.set(f.id, {
-        x: minX - nestPad,
-        y: minY - k.header,
-        w: maxR - minX + nestPad * 2,
-        h: maxB - minY + k.header + nestPad,
-      });
-    } else {
-      rootDesired.set(f.id, { x: minX, y: minY, w: maxR - minX, h: maxB - minY });
-    }
-  }
+  const rootRects: LayoutRect[] = topLevel.map((f) => ({ id: f.id, ...boxOf(f) }));
+  const rootDelta = resolveFrameCollisions(rootRects, pinnedIn(topLevel), gap);
 
-  // 4) separate the top-level frames (pinning the anchor's parent — see above).
-  const rootRects: LayoutRect[] = topLevel.map((f) => ({ id: f.id, ...rootDesired.get(f.id)! }));
-  const rootDelta = resolveFrameCollisions(rootRects, topAnchor, gap);
-
-  // 5) assemble final geometry + per-frame member-tile shift.
+  // 5) assemble final geometry + per-frame member-tile shift, every delta above folded in.
   const geometry = new Map<string, Rect>();
   const tileShift = new Map<string, { dx: number; dy: number }>();
-  for (const f of topLevel) {
-    const dp = rootDelta[f.id] ?? { dx: 0, dy: 0 };
-    const r = rootDesired.get(f.id)!;
-    geometry.set(f.id, { x: r.x + dp.dx, y: r.y + dp.dy, w: r.w, h: r.h });
-    tileShift.set(f.id, dp);
+  const place = (f: FrameGeom, total: { dx: number; dy: number }) => {
+    if (geometry.has(f.id)) return;
+    const r = desired.get(f.id)!;
+    geometry.set(f.id, { x: r.x + total.dx, y: r.y + total.dy, w: r.w, h: r.h });
+    tileShift.set(f.id, total);
     for (const c of childrenOf.get(f.id) ?? []) {
+      if (!desired.has(c.id)) continue;
       const dc = childDelta.get(c.id) ?? { dx: 0, dy: 0 };
-      const total = { dx: dp.dx + dc.dx, dy: dp.dy + dc.dy };
-      const cb = tBox.get(c.id)!;
-      geometry.set(c.id, { x: cb.x + total.dx, y: cb.y + total.dy, w: cb.w, h: cb.h });
-      tileShift.set(c.id, total);
+      place(c, { dx: total.dx + dc.dx, dy: total.dy + dc.dy });
     }
-  }
+  };
+  for (const f of topLevel) place(f, rootDelta[f.id] ?? { dx: 0, dy: 0 });
   return { geometry, tileShift };
 }
 
 /** Which frame contains the point (cx,cy)? Prefers the INNERMOST frame — a
  *  worktree child sits geometrically inside its repo parent, so a tile dropped
  *  there must join the CHILD (its PTY runs on the worktree's branch/cwd), not
- *  the parent. Among children / among parents, the first hit wins, so pass the
- *  frames z-DESCENDING for topmost-wins. Pure; used for drop-membership. */
+ *  the parent. Among frames as deep, the first hit wins, so pass the frames
+ *  z-DESCENDING for topmost-wins. Pure; used for drop-membership. */
 export function frameAtPoint(
   framesZDesc: Array<{ id: string; x: number; y: number; w: number; h: number; parentFrameId?: string }>,
   cx: number,
@@ -474,7 +458,17 @@ export function frameAtPoint(
 ): { id: string; x: number; y: number } | null {
   const hit = (f: { x: number; y: number; w: number; h: number }) =>
     cx >= f.x && cx <= f.x + f.w && cy >= f.y && cy <= f.y + f.h;
-  for (const f of framesZDesc) if (f.parentFrameId && hit(f)) return { id: f.id, x: f.x, y: f.y };
-  for (const f of framesZDesc) if (!f.parentFrameId && hit(f)) return { id: f.id, x: f.x, y: f.y };
-  return null;
+  const byId = new Map(framesZDesc.map((f) => [f.id, f]));
+  const depthOf = (f: { parentFrameId?: string }) => {
+    let d = 0;
+    for (let p = f.parentFrameId ? byId.get(f.parentFrameId) : undefined; p && d <= framesZDesc.length; p = p.parentFrameId ? byId.get(p.parentFrameId) : undefined) d++;
+    return d;
+  };
+  let best: { f: (typeof framesZDesc)[number]; d: number } | null = null;
+  for (const f of framesZDesc) {
+    if (!hit(f)) continue;
+    const d = depthOf(f);
+    if (!best || d > best.d) best = { f, d };
+  }
+  return best ? { id: best.f.id, x: best.f.x, y: best.f.y } : null;
 }

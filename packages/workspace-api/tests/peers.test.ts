@@ -49,7 +49,8 @@ const domain = {
     "agent.answer": (from: Connection, tile: unknown) => { ran.push({ what: "agent.answer", by: from.actor, args: [tile] }); return { answered: true }; },
     "agent.send": (from: Connection, tile: unknown) => { ran.push({ what: "agent.send", by: from.actor, args: [tile] }); return { sent: true }; },
     ...Object.fromEntries(["agent.startable", "agent.start", "agent.interrupt", "agent.close", "agent.diff", "agent.commands", "agent.conversation", "agent.tool", "agent.places", "agent.folders",
-      "agent.rename", "agent.keys", "agent.read", "agent.output", "agent.sessions", "terminal.photo", "agent.sleep", "agent.wake", "terminal.saved", "tool.open", "link.connect", "link.disconnect", "page.note", "plugin.call", "host.join", "tools.rescan", "tile.focus", "tile.look", "tile.watchLines", "tile.readLines", "notifications.play", "notifications.recentSounds"].map((what) => [
+      "agent.rename", "agent.keys", "agent.read", "agent.output", "agent.sessions", "terminal.photo", "agent.sleep", "agent.wake", "terminal.saved", "tool.open", "link.connect", "link.disconnect", "page.note", "plugin.call", "host.join", "tools.rescan", "tile.focus", "tile.look", "tile.watchLines", "tile.readLines", "notifications.play", "notifications.recentSounds",
+      "code.findFiles", "code.picked", "code.grep", "code.outline", "code.definition", "code.usages", "code.hover", "page.list", "page.new", "page.open", "board.keepImage", "board.read"].map((what) => [
       what, (from: Connection, at: unknown) => { ran.push({ what, by: from.actor, args: [at] }); return {}; },
     ])),
     // A view opened for the caller: what it is let do there is what the caller may call.
@@ -64,6 +65,7 @@ const domain = {
   notices: {
     "terminal.show": (from: Connection, tile: unknown) => { ran.push({ what: "terminal.show", by: from.actor, args: [tile] }); },
     "presence.set": (from: Connection, repo: unknown) => { ran.push({ what: "presence.set", by: from.actor, args: [repo] }); },
+    "code.cancel": (from: Connection, ask: unknown) => { ran.push({ what: "code.cancel", by: from.actor, args: [ask] }); },
     ...Object.fromEntries(["terminal.detach", "terminal.keyboard.ask", "terminal.keyboard.give", "terminal.keyboard.take", "view.post", "view.screen"].map((what) => [
       what, (from: Connection, at: unknown) => { ran.push({ what, by: from.actor, args: [at] }); },
     ])),
@@ -255,6 +257,36 @@ test("a guest names this workspace, by its id, and nothing else on the host: ano
 
   const mine = connect("owner");
   expect(await mine.client.call("file.read", "/elsewhere", "a.ts")).toBe("a.ts in /elsewhere");
+});
+
+test("asking about code and listing, making or opening pages name the workspace: another folder or workspace is refused and never runs; a board is the workspace's whole, not a folder in it", async () => {
+  const url = workspaceUrl(W);
+  const ask: Array<[string, (repo: string) => unknown[], Access, string?]> = [
+    ["code.findFiles", (r) => [r, "x"], "view"], ["code.picked", (r) => [r, "x", "a.ts"], "view"], ["code.grep", (r) => [r, "x"], "view"],
+    ["code.outline", (r) => [r, "a.ts"], "view"], ["code.definition", (r) => [r, "a.ts", { line: 1, col: 0 }], "view"],
+    ["code.usages", (r) => [r, "a.ts", { line: 1, col: 0 }], "view"], ["code.hover", (r) => [r, "a.ts", { line: 1, col: 0 }], "view"],
+    ["page.list", (r) => [r], "view"], ["page.new", (r) => [r, { title: "t" }], "edit"], ["page.open", (r) => [r, null], "agents", "in-1"],
+  ];
+  for (const [method, params, access, tile] of ask) {
+    const guest = connect(access, undefined, REPO, tile);
+    for (const elsewhere of ["/work/other", "/etc", `hive://${"f".repeat(32)}`, `${url}/../../etc`]) {
+      expect(`${method} ${await code(guest.client.call(method as "code.grep", ...(params(elsewhere) as [string, string])))}`).toBe(`${method} FORBIDDEN`);
+    }
+    expect(ran).toEqual([]);
+    await guest.client.call(method as "code.grep", ...(params(url) as [string, string]));
+    expect(ran.map((r) => [r.what, r.args[0]])).toEqual([[method, REPO]]);
+  }
+  // A folder inside the workspace is still the workspace for code, never a board of its own.
+  const editor = connect("edit");
+  await editor.client.call("code.grep", `${url}/src`, "x");
+  for (const [method, params] of [["board.keepImage", [`${url}/x1`, { type: "image/png", data: "" }]], ["board.read", [`${url}/src`]], ["page.new", [`${url}/src`, { title: "t" }]]] as const) {
+    expect(`${method} ${await code(editor.client.call(method as "board.read", ...(params as unknown as [string])))}`).toBe(`${method} FORBIDDEN`);
+  }
+  expect(ran.map((r) => r.what)).toEqual(["code.grep"]);
+  // Taking back a question names no workspace: it still reaches the host.
+  editor.client.notice("code.cancel", 7);
+  await new Promise((r) => setTimeout(r, PEER_FRAME_MS * 2));
+  expect(ran.map((r) => r.what)).toEqual(["code.grep", "code.cancel"]);
 });
 
 test("a view opened on a remote screen names the workspace after the view, a guest this one alone; what the view may do there is what the peer may, as its role and its device allow", async () => {

@@ -13,7 +13,7 @@ import type { FrameState } from "../../src/renderer/src/canvas-persistence.ts";
 /** A workspace with one frame and the lead agent in it, selected; what the window shows. */
 function workspace() {
   const frame = { id: "f1", x: 0, y: 0, w: 2520, h: 1780, title: "api", color: "#888", z: 0, workspacePath: "/work/api" } as FrameState;
-  const shown = { selected: "lead" as string | null, camera: null as { id: string } | null };
+  const shown = { selected: "lead" as string | null, camera: null as { exact?: boolean } | null };
   const ref = <T,>(current: T) => ({ current });
   const frameOf: Record<string, string> = { lead: "f1" };
   const positions: Record<string, { x: number; y: number }> = { lead: { x: 40, y: 60 } };
@@ -23,8 +23,8 @@ function workspace() {
     repoPathRef: ref("/work/api"), rootRef: ref(null), lastActiveFrameRef: ref(null), boardRef: ref([]),
     setFrameOf: () => {}, setPositions: () => {}, setFrames: () => {}, setSelectedFrameId: () => {}, setTiles: () => {}, setSpawnPick: () => {},
     setSelectedTileId: (v: unknown) => { shown.selected = typeof v === "function" ? v(shown.selected) : v; },
-    setFocusReq: (v: unknown) => { shown.camera = typeof v === "function" ? v(shown.camera) : v; },
-    focusTile: () => {}, openFileInTile: () => {}, renameTile: () => {},
+    focusTile: (_target: unknown, opts?: { exact?: boolean }) => { shown.camera = { exact: opts?.exact }; },
+    openFileInTile: () => {}, renameTile: () => {}, focusedRef: ref(null),
   } as unknown as SpawnCtx;
   let spawn!: ReturnType<typeof useSpawn>;
   renderToStaticMarkup(createElement(() => { spawn = useSpawn(ctx); return null; }));
@@ -37,7 +37,7 @@ test("an agent or a program starting an agent leaves the selection and the view 
   spawn.placeArrived("p-1", { background: false, by: "program" });
   assert.deepEqual([shown.selected, shown.camera, isOpenedUnread("w-1"), isOpenedUnread("p-1")], ["lead", null, true, true]);
   spawn.placeArrived("mine", { background: false, by: "person" });
-  assert.deepEqual([shown.selected, shown.camera?.id, isOpenedUnread("mine")], ["mine", "mine", false]);
+  assert.deepEqual([shown.selected, shown.camera?.exact, isOpenedUnread("mine")], ["mine", true, false]);
 });
 
 test("set to go to it, the window goes to an agent another agent starts; a background worker it still does not", () => {
@@ -47,7 +47,7 @@ test("set to go to it, the window goes to an agent another agent starts; a backg
     spawn.placeArrived("bg-1", { background: true, by: "agent" });
     assert.deepEqual([shown.selected, shown.camera], ["lead", null]);
     spawn.placeArrived("w-2", { background: false, by: "agent" });
-    assert.deepEqual([shown.selected, shown.camera?.id, isOpenedUnread("w-2")], ["w-2", "w-2", false]);
+    assert.deepEqual([shown.selected, shown.camera?.exact, isOpenedUnread("w-2")], ["w-2", true, false]);
   } finally {
     patchSettings("agents.whenAgentStartsAgent", "stay");
   }

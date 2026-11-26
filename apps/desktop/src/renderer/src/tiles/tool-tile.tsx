@@ -25,7 +25,7 @@ export type ToolTileData = {
   /** The `.hivemind` root of its frame, whose issues its `hm` is given. */
   root: string | null;
   glyph?: string;
-  openUrl: (url: string) => void; openFile: (path: string) => void;
+  openUrl: (url: string) => void; openFile: (path: string, at?: { line?: number; col?: number }) => void;
   onClose: () => void; pinned?: boolean; onTogglePin?: (id: string, rect: PinRect) => void;
 };
 
@@ -101,7 +101,7 @@ function LinkedTile({ data, selected, drawn, props }: { data: ToolTileData; sele
     get repoPath() { return dataRef.current.repoPath; },
     get cwd() { return dataRef.current.cwd; },
     run: (bin, args, opts) => window.hive.toolRun({ bin, args, cwd: dataRef.current.repoPath ?? dataRef.current.cwd, ...opts }),
-    openFile: (path) => dataRef.current.openFile(path),
+    openFile: (path, at) => dataRef.current.openFile(path, at),
     openUrl: (url) => { if (/^https?:\/\//i.test(url)) dataRef.current.openUrl(url); },
   }).current;
   return (

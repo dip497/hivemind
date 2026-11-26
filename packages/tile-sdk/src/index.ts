@@ -61,9 +61,10 @@ export interface TileHost {
    * answer that young between tiles asking the same thing (for reads, never for writes).
    */
   run(bin: string, args: string[], opts?: { maxAgeMs?: number; stdin?: string }): Promise<RunResult>;
-  /** Open a file of the repository in its editor, beside this tile. */
-  openFile(path: string): void;
-  /** Open a web page in the frame's browser. */
+  /** Open a file of the repository beside this tile where a click would: the Code tile at `line`
+   *  and `col` (both from 1), a picture in the Image tile. */
+  openFile(path: string, at?: { line?: number; col?: number }): void;
+  /** Open a web page where the person's link settings say: their browser or a Browser tile. */
   openUrl(url: string): void;
 }
 

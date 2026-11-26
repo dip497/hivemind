@@ -737,6 +737,17 @@ body.canvas-resizing .react-flow__node {
   contain: layout paint style;
 }
 
+/* Inside a frame (PagePath.tsx): everything outside it dims, still there and still clickable. */
+.react-flow__node.hm-outside-focus,
+[data-board-arrow].hm-outside-focus {
+  opacity: 0.3;
+  transition: opacity 160ms ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .react-flow__node.hm-outside-focus,
+  [data-board-arrow].hm-outside-focus { transition: none; }
+}
+
 /* THE per-frame cost of a drag or resize (xyflow #4711: "styles are recalculated
    every frame"): box-shadow and backdrop-filter on tiles are re-rasterised on every
    move / resize frame. Drop them (and any transition that would animate the change)
@@ -1535,8 +1546,45 @@ html.glass-on .u-eyebrow { color: var(--color-fg); }
   border-radius: 8px;
 }
 
+/* What is drawn takes the pointer only where it is drawn: a terminal under a stroke is still a
+   terminal. react-flow says `pointer-events: all` on the node itself. */
+.react-flow__node-shape { pointer-events: none !important; }
+.react-flow__node-shape :is(.react-flow__resize-control, [data-board-bar], textarea, [data-shape-text]) { pointer-events: auto; }
+/* A selected shape's bar: its rows keep their width, and a thin rule parts its groups. */
+.hm-board-bar { width: max-content; }
+.hm-shape-bar-rule {
+  align-self: stretch;
+  width: 1px;
+  margin: 2px;
+  background: var(--color-border);
+}
+/* The mark on a locked shape, at its corner. */
+.hm-shape-lock {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: var(--color-bg);
+  color: var(--color-fg);
+  border: 1px solid var(--color-border);
+  pointer-events: none;
+}
+.hm-shape-lock svg { width: 12px; height: 12px; }
+/* A drawing tool is on: the pointer is the tool's, whatever is under it. */
+.hm-drawing .react-flow__node { pointer-events: none !important; }
+[data-erasing] { opacity: 0.25; }
+[data-over-drawn], [data-over-drawn] * { cursor: move !important; }
+.hm-drawing, .hm-drawing .react-flow__pane { cursor: crosshair !important; }
+.hm-drawing[data-drawing-with="eraser"], .hm-drawing[data-drawing-with="eraser"] .react-flow__pane { cursor: cell !important; }
+
 /* A tile in a view's slot gets its body without the bar that only names it: the slot's own bar (the
    host's, slot-chrome.tsx), or the chrome a view draws around it with `chrome: "none"` as the Windows
    view's tabs do, already names it. Two bars would give it two ×, one undocking and one ending the
    agent, a few pixels apart. A browser's address bar stays. */
 [data-community-slot] [data-tile-titlebar] { display: none; }
+
+.hm-drawing[data-drawing-with="laser"], .hm-drawing[data-drawing-with="laser"] .react-flow__pane { cursor: pointer !important; }

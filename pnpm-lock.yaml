@@ -330,6 +330,9 @@ importers:
       '@hivemind/agents':
         specifier: workspace:*
         version: link:../../packages/hive-agents
+      '@hivemind/code-intel':
+        specifier: workspace:*
+        version: link:../../packages/code-intel
       '@hivemind/core':
         specifier: workspace:*
         version: link:../../packages/hive-core
@@ -348,6 +351,9 @@ importers:
       '@hivemind/workspace-host':
         specifier: workspace:*
         version: link:../../packages/workspace-host
+      '@vscode/tree-sitter-wasm':
+        specifier: 0.3.1
+        version: 0.3.1
       citty:
         specifier: 'catalog:'
         version: 0.2.2
@@ -448,6 +454,9 @@ importers:
       '@hivemind/agents':
         specifier: workspace:*
         version: link:../../packages/hive-agents
+      '@hivemind/code-intel':
+        specifier: workspace:*
+        version: link:../../packages/code-intel
       '@hivemind/core':
         specifier: workspace:*
         version: link:../../packages/hive-core
@@ -535,6 +544,9 @@ importers:
       '@tanstack/react-virtual':
         specifier: 3.14.25
         version: 3.14.25(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+      '@vscode/tree-sitter-wasm':
+        specifier: 0.3.1
+        version: 0.3.1
       '@xterm/addon-fit':
         specifier: 'catalog:'
         version: 0.12.0-beta.311(@xterm/xterm@6.1.0-beta.315(patch_hash=47ad25d1a5776c3d4455ebca38960bf9e7d7105208669d7f58801ef348acead6))
@@ -733,6 +745,25 @@ importers:
         specifier: 'catalog:'
         version: 7.0.2
 
+  packages/code-intel:
+    dependencies:
+      '@hivemind/agents':
+        specifier: workspace:*
+        version: link:../hive-agents
+      '@vscode/tree-sitter-wasm':
+        specifier: 0.3.1
+        version: 0.3.1
+    devDependencies:
+      '@hivemind/tsconfig':
+        specifier: workspace:*
+        version: link:../tsconfig
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.19.1
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+
   packages/hive-agents:
     dependencies:
       '@hivemind/agent-sdk':
@@ -834,6 +865,9 @@ importers:
       '@hivemind/agents':
         specifier: workspace:*
         version: link:../hive-agents
+      '@hivemind/code-intel':
+        specifier: workspace:*
+        version: link:../code-intel
       '@hivemind/core':
         specifier: workspace:*
         version: link:../hive-core
@@ -939,6 +973,9 @@ importers:
       '@hivemind/agent-host':
         specifier: workspace:*
         version: link:../agent-host
+      '@hivemind/code-intel':
+        specifier: workspace:*
+        version: link:../code-intel
       '@hivemind/core':
         specifier: workspace:*
         version: link:../hive-core
@@ -3188,6 +3225,9 @@ packages:
     engines: {node: ^14.18.0 || >=16.0.0}
     peerDependencies:
       vite: ^4.2.0 || ^5.0.0 || ^6.0.0 || ^7.0.0
+
+  '@vscode/tree-sitter-wasm@0.3.1':
+    resolution: {integrity: sha512-RJFoomET6FajjG511fmQxeBQfU6M24a0aFZPqpid+ttIxanWf1VGytBG0UmsGjt07qmIPJS8U31D+aecuCucsQ==}
 
   '@xmldom/xmldom@0.8.15':
     resolution: {integrity: sha512-/5NV/vDALVFDXgLmfsy9TRCBlKwO2LNBFzpzvb9iIj+jR+eSc6DLYYvVOdivT/jm7MtU6TebYuRmzEOI7w40UA==}
@@ -7462,6 +7502,8 @@ snapshots:
       vite: 6.4.3(@types/node@24.19.1)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.15)(yaml@2.9.1)
     transitivePeerDependencies:
       - supports-color
+
+  '@vscode/tree-sitter-wasm@0.3.1': {}
 
   '@xmldom/xmldom@0.8.15': {}
 

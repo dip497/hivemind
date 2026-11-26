@@ -4,7 +4,7 @@
  */
 import { test } from "bun:test";
 import assert from "node:assert/strict";
-import { isUnread, layersView, recentGroups, workspaceCounts, type ModelTile, type RecentsBy } from "./layers.js";
+import { FEW_ROWS, frameParts, isUnread, layersFound, layersView, recentGroups, workspaceCounts, type DrawingRow, type DrawingsByFrame, type LayersShow, type ModelTile, type RecentsBy } from "./layers.js";
 import { DEFAULT_LAYERS_PREFS, type LayersPrefs } from "./settings-schema.js";
 
 const NOW = new Date(2026, 9, 8, 15, 0).getTime();
@@ -189,4 +189,61 @@ test("recents grouped by agent or project, the group with the newest session fir
 test("a workspace's counts: its tiles, the ones that need the person, the ones at work", () => {
   assert.deepEqual(workspaceCounts(["working", "blocked", "question", "idle", null, "exited"]), { tiles: 6, needsYou: 2, working: 1 });
   assert.deepEqual(workspaceCounts([]), { tiles: 0, needsYou: 0, working: 0 });
+});
+
+test("Agents lists only agents' tiles, pinned ones too; Drawings and Pages list no tiles; each counts as filtering", () => {
+  const shown = (show: LayersShow, pinned: string[] = []) => {
+    const v = layersView({ tiles: TILES, pinned, prefs: DEFAULT_LAYERS_PREFS, show, now: NOW, agentLabel: (t) => t.agent ?? "Terminal" });
+    return { pinned: ids(v.pinned), rest: [...v.byFrame.values()].flat().map((t) => t.id).sort(), filtering: v.filtering };
+  };
+  assert.deepEqual(shown("agents", ["c-shell", "d-pi"]), { pinned: ["d-pi"], rest: ["a-codex", "b-claude"], filtering: true });
+  assert.deepEqual(shown("drawings", ["d-pi"]), { pinned: [], rest: [], filtering: true });
+  assert.deepEqual(shown("pages"), { pinned: [], rest: [], filtering: true });
+  assert.equal(shown("all").rest.length, 4);
+});
+
+const row = (key: string, frameId: string | null, text: string): DrawingRow => ({ key, name: text, frameId, objectId: `${key}-o`, text: text.toLowerCase(), detail: "", lockable: true, locked: false });
+const DRAWINGS: DrawingsByFrame = new Map<string | null, DrawingRow[]>([
+  ["f1", [row("d1", "f1", "Checkout flow\nretry queue"), row("shapes:f1", "f1", "Shapes")]],
+  [null, [row("d2", null, "Payments map")]],
+]);
+const PAGES = [{ id: "p1", title: "Payments" }, { id: "p2", title: "Infra" }];
+const found = (over: { query?: string; show?: LayersShow; prefs?: Partial<LayersPrefs> } = {}) => {
+  const f = layersFound({ drawings: DRAWINGS, pages: PAGES, prefs: { ...DEFAULT_LAYERS_PREFS, ...over.prefs }, show: over.show, query: over.query });
+  return { drawings: [...f.drawings.values()].flat().map((r) => r.key).sort(), pages: [...f.pages].sort(), same: f.drawings === DRAWINGS };
+};
+
+test("a search finds drawings by any text inside them and pages by title, in any case", () => {
+  assert.deepEqual(found({ query: "RETRY" }), { drawings: ["d1"], pages: [], same: false });
+  assert.deepEqual(found({ query: "payments" }), { drawings: ["d2"], pages: ["p1"], same: false });
+  assert.deepEqual(found(), { drawings: ["d1", "d2", "shapes:f1"], pages: ["p1", "p2"], same: true });
+});
+
+test("Drawings lists no pages, Pages no drawings, Agents neither", () => {
+  assert.deepEqual(found({ show: "drawings" }), { drawings: ["d1", "d2", "shapes:f1"], pages: [], same: true });
+  assert.deepEqual(found({ show: "pages", query: "infra" }), { drawings: [], pages: ["p2"], same: false });
+  assert.deepEqual(found({ show: "agents" }), { drawings: [], pages: [], same: false });
+});
+
+test("the tiles' own filters leave drawings and pages out under All, not when they are chosen", () => {
+  assert.deepEqual(found({ prefs: { status: "needs-you" } }), { drawings: [], pages: [], same: false });
+  assert.deepEqual(found({ prefs: { machines: ["m-1"] }, show: "drawings" }).drawings, ["d1", "d2", "shapes:f1"]);
+  assert.deepEqual(found({ prefs: { activity: "hour" }, show: "pages" }).pages, ["p1", "p2"]);
+});
+
+const parts = (counts: Partial<Record<"agents" | "tools" | "frames" | "pages" | "drawings", number>>) =>
+  frameParts({ agents: 0, tools: 0, frames: 0, pages: 0, drawings: 0, ...counts }).map((p) => `${p.part}${p.grouped ? "+" : ""}:${p.count}`);
+
+test("a frame's drawings fold under one heading once there are two; one stays a row of its own", () => {
+  assert.deepEqual(parts({ agents: 1, drawings: 17 }), ["tiles:1", "drawings+:17"]);
+  assert.deepEqual(parts({ drawings: 17 }), ["drawings+:17"]);
+  assert.deepEqual(parts({ agents: 2, drawings: 1 }), ["tiles:2", "drawings:1"]);
+});
+
+test("agents, tools and pages get a heading past a few rows when the frame holds more; frames never do", () => {
+  const many = FEW_ROWS + 1;
+  assert.deepEqual(parts({ agents: many, tools: 2, pages: many, frames: many }), [`agents+:${many}`, "tools:2", `frames:${many}`, `pages+:${many}`]);
+  assert.deepEqual(parts({ agents: FEW_ROWS, tools: FEW_ROWS, pages: 1 }), [`tiles:${FEW_ROWS * 2}`, "pages:1"]);
+  assert.deepEqual(parts({ agents: many + 5 }), [`tiles:${many + 5}`]);
+  assert.deepEqual(parts({}), []);
 });

@@ -10,7 +10,7 @@
 import type { Node } from "@xyflow/react";
 import type { BoardObject } from "@hivemind/workspace-doc/shapes";
 import { defaultSizeForKind } from "./canvas-sizing";
-import { isBox } from "./board-objects/board-model";
+import { isBox, paintedHere } from "./board-objects/board-model";
 import type { FrameState, TileInstance } from "./canvas-persistence";
 import type { FrameActions } from "./FrameMenu";
 import type { FrameNodeData } from "./FrameNode";
@@ -44,14 +44,20 @@ export interface NodeBuildCtx {
   onTogglePin: (id: string, rect: PinRect) => void;
   /** Persist a pinned panel's new anchor and/or size after a drag/resize. */
   onPinChange: (id: string, patch: { anchor?: { sx: number; sy: number }; size?: { w: number; h: number } }) => void;
+  /** The window is inside a frame: it and every frame in it (pages.framesWithin); what is outside dims. */
+  focus: ReadonlySet<string> | null;
+  /** Go inside a frame (a double-click on its label). */
+  enterFrame: (id: string) => void;
 }
 
+/** What a window inside a frame dims: every node outside it. */
+export const OUTSIDE_FOCUS = "hm-outside-focus";
 
 export function buildBaseNodes(ctx: NodeBuildCtx): Node[] {
   const {
     repoPath, tiles, frames, frameOf, pins, sizes, positions, objects, frameTiles,
     updateFrameTitle, bringFrameToFront, frameActions,
-    closeTile, onNodeResizeCommit, onTogglePin, onPinChange,
+    closeTile, onNodeResizeCommit, onTogglePin, onPinChange, focus, enterFrame,
   } = ctx;
 
   const out: Node[] = [];
@@ -110,25 +116,35 @@ export function buildBaseNodes(ctx: NodeBuildCtx): Node[] {
     return { width: Math.min(w, Math.max(640, vw - 80)), height: Math.min(h, Math.max(420, vh - 120)) };
   };
 
-  // Frames FIRST, PARENTS before their worktree CHILD frames (react-flow needs a
-  // parent node emitted before any node referencing it via parentId).
+  // Frames FIRST, each parent before what it holds (react-flow needs a parent node emitted
+  // before any node naming it as `parentId`), to any depth.
   const frameById = new Map(frames.map((f) => [f.id, f]));
-  const orderedFrames = [
-    ...frames.filter((f) => !f.parentFrameId || !frameById.has(f.parentFrameId)),
-    ...frames.filter((f) => f.parentFrameId && frameById.has(f.parentFrameId)),
-  ];
-  for (const f of orderedFrames) {
-    const parent = f.parentFrameId ? frameById.get(f.parentFrameId) : undefined;
-    // Child frame nests inside its parent: position RELATIVE to the parent.
-    // zIndex tiers: parent repo frame (≤40) < worktree child frame (50–90) <
-    // tiles (≥100) < selected (1000).
+  const nestedIn = (f: FrameState) => (f.parentFrameId ? frameById.get(f.parentFrameId) : undefined);
+  const depth = new Map<string, number>();
+  const depthOf = (f: FrameState): number => {
+    const known = depth.get(f.id);
+    if (known !== undefined) return known;
+    depth.set(f.id, 0);
+    const p = nestedIn(f);
+    const d = p ? depthOf(p) + 1 : 0;
+    depth.set(f.id, d);
+    return d;
+  };
+  const orderedFrames = frames.map((f) => [f, depthOf(f)] as const).sort((a, b) => a[1] - b[1]);
+  const outside = (frameId: string | undefined) => (focus && !(frameId !== undefined && focus.has(frameId)) ? { className: OUTSIDE_FOCUS } : {});
+
+  for (const [f, d] of orderedFrames) {
+    const parent = nestedIn(f);
+    // Placed from its parent; zIndex tiers: top frames (≤40) < each level nested deeper, 12 apart
+    // (50–97) < tiles (≥100) < selected (1000). The node's style sets its stacking, not its parent.
     const position = parent ? { x: f.x - parent.x, y: f.y - parent.y } : { x: f.x, y: f.y };
-    const zIndex = parent ? 50 + Math.min(f.z, 40) : Math.min(f.z, 40);
+    const zIndex = d > 0 ? 50 + Math.min(d - 1, 3) * 12 + Math.min(f.z, 11) : Math.min(f.z, 40);
     out.push({
       id: f.id,
       type: "frame",
       position,
       ...(parent ? { parentId: parent.id } : {}),
+      ...outside(f.id),
       style: { width: f.w, height: f.h, zIndex },
       data: {
         id: f.id,
@@ -146,6 +162,8 @@ export function buildBaseNodes(ctx: NodeBuildCtx): Node[] {
         onBringToFront: bringFrameToFront,
         actions: frameActions,
         tileIds: frameTiles.get(f.id) ?? NO_TILES,
+        onEnter: enterFrame,
+        ...(f.page ? { page: true } : {}),
       } satisfies FrameNodeData,
       // Its own class: a tile's title-bar styles (the frosted bar under glass) are not a frame's.
       dragHandle: ".frame-drag-handle",
@@ -160,7 +178,7 @@ export function buildBaseNodes(ctx: NodeBuildCtx): Node[] {
     if (!plugin || (tileKind(t.kind).needsRepo && !effectiveRepoOf(t.id, frameOf, frames, repoPath))) continue;
     const { width: w, height: h } = defaultSizeForKind(t.kind);
     const data: CanvasTileNodeData = { tileId: t.id, onClose: closeTile, onResize: onNodeResizeCommit };
-    out.push(mkTile({ id: t.id, type: plugin.surface, style: sized(t.id, w, h), data, dragHandle: ".tile-drag-handle" }, x, y));
+    out.push(mkTile({ id: t.id, type: plugin.surface, style: sized(t.id, w, h), data, dragHandle: ".tile-drag-handle", ...outside(frameOf[t.id]) }, x, y));
     x += (sizes[t.id]?.width ?? w) + gap;
   }
 
@@ -175,11 +193,15 @@ export function buildBaseNodes(ctx: NodeBuildCtx): Node[] {
       type: o.kind,
       position: frame ? { x: o.x - frame.x, y: o.y - frame.y } : { x: o.x, y: o.y },
       ...(frame ? { parentId: frame.id } : {}),
+      ...outside(o.frame),
       // Sized before it is measured, so it shows from its first frame: a box added to be
       // written in must be able to take focus at once.
       initialWidth: o.w,
       initialHeight: o.h,
       style: { width: o.w, height: o.h, zIndex: 150 + Math.min(Math.max(o.z ?? 0, 0), 750) },
+      // Painted with the rest of what is drawn (DrawnLayer) until it is selected.
+      ...(o.kind === "shape" && paintedHere(o) ? { hidden: true } : {}),
+      ...(o.kind === "shape" && o.locked ? { draggable: false } : {}),
       data: { object: o },
     });
   }

@@ -8,9 +8,12 @@ import type { ServiceState } from "@hivemind/host/services";
 import type { ActivityLevel, HostMessage, PluginMessage, ShareOutcome, SurfaceRect, ViewHistoryDay, ViewSession, ViewPresence, ViewStatus } from "@hivemind/view-sdk/protocol";
 import type { ViewScreen } from "@hivemind/workspace-api/views";
 import type { StartImage } from "@hivemind/workspace-api/agents";
+import type { FileStat } from "@hivemind/workspace-api/opener";
 import type { NotificationSettings } from "./notification-settings.js";
 import type { RecentSound, SoundMoment, SoundResult } from "@hivemind/workspace-api/notifications";
-import type { PageBox, PageElement, ReviewComment, ReviewIntent, ReviewStatus } from "@hivemind/core/review-shape";
+import type { BoardComment, BoardNoteAsked } from "@hivemind/workspace-api/board";
+import type { Params, Result } from "@hivemind/workspace-api/methods";
+import type { CodeAnchor, CodeComment, PageBox, PageElement, ReviewComment, ReviewIntent, ReviewStatus } from "@hivemind/core/review-shape";
 import type { MachineKind } from "@hivemind/core";
 import type { LegacyLayout, WorkspaceChange } from "@hivemind/workspace-host/layout";
 import type { Participant, PresenceState } from "@hivemind/workspace-host/presence";
@@ -157,6 +160,8 @@ export type {
   WorktreeEntry,
 } from "@hivemind/workspace-api/git";
 import type { FindFilesPage, GrepMode, GrepPage } from "@hivemind/workspace-api/code";
+import type { Answer as CodeAnswer, Place as CodePlace } from "@hivemind/code-intel/contract";
+import type { CodeAsk } from "@hivemind/workspace-api/methods";
 import type { BlameOptions, BlamePayload, CommitInfo, DiffPayload, DiffScope, FileHistoryCursor, FileHistoryPage, GitBranchList, GitStatusSnapshot, HandedOff, LogOptions, LogPage, WorktreeCreateOpts, WorktreeEntry } from "@hivemind/workspace-api/git";
 import type { LastLines, TerminalOpts, Typist } from "@hivemind/workspace-api/terminals";
 
@@ -743,8 +748,18 @@ export interface HiveIpc {
   // ── review comments ───────────────────────────────────────
   /** Every comment on this repo, resolved ones included. */
   reviewList(repoPath: string): Promise<ReviewComment[]>;
+  /** Pin a note on the board. */
+  boardNote(repoPath: string, note: BoardNoteAsked): Promise<BoardComment>;
+  /** A view's board call (view protocol 1.20): a write is written as `writer`, `view:<id>`. */
+  boardAsk<M extends "board.read" | "board.picture" | "board.draw" | "board.change" | "board.erase" | "board.undo">(method: M, writer: string, ...params: Params<M>): Promise<Result<M>>;
+  /** Keep a picture for the board of `repoPath` (`board.keepImage`), and fetch one by its hash (`board.image`). */
+  boardKeepImage(repoPath: string, image: StartImage): Promise<Result<"board.keepImage">>;
+  boardImage(repoPath: string, hash: string): Promise<Result<"board.image">>;
   /** Replace the whole list — what the diff tile does after an edit. Notes on pages are kept. */
   reviewSave(repoPath: string, comments: ReviewComment[]): Promise<void>;
+  /** A comment on lines of a file, and one moved to where its lines are now. */
+  reviewAdd(repoPath: string, comment: Omit<CodeComment, "id" | "at" | "author">): Promise<CodeComment>;
+  reviewMove(repoPath: string, id: string, to: CodeAnchor): Promise<ReviewComment>;
   /** One comment closed, reopened, answered or removed; refused when the rules say no. */
   reviewResolve(repoPath: string, id: string, summary?: string): Promise<ReviewComment>;
   reviewDismiss(repoPath: string, id: string, reason: string): Promise<ReviewComment>;
@@ -772,6 +787,15 @@ export interface HiveIpc {
   codeFindFiles(repoPath: string, query: string, limit?: number): Promise<FindFilesPage>;
   codePicked(repoPath: string, query: string, file: string): Promise<void>;
   codeGrep(repoPath: string, query: string, opts?: { mode?: GrepMode; cursor?: number; caseSensitive?: boolean }): Promise<GrepPage>;
+  /** Questions about code (workspace API 0.43): each answer says how sure it is; `file` is relative to the repo. */
+  codeOutline(repoPath: string, file: string, opts?: CodeAsk): Promise<CodeAnswer<"documentSymbol"> | null>;
+  codeDefinition(repoPath: string, file: string, at: CodePlace, opts?: CodeAsk): Promise<CodeAnswer<"definition"> | null>;
+  codeUsages(repoPath: string, file: string, at: CodePlace, opts?: CodeAsk): Promise<CodeAnswer<"references"> | null>;
+  codeHover(repoPath: string, file: string, at: CodePlace, opts?: CodeAsk): Promise<CodeAnswer<"hover"> | null>;
+  /** Take back a code question asked with `opts.ask`. */
+  codeCancel(ask: number): void;
+  /** Each better answer to a code question asked with `opts.ask`, as it comes. */
+  onCodeAnswered(cb: (ask: number, answer: CodeAnswer) => void): () => void;
   gitFileContents(
     repoPath: string,
     file: string,
@@ -795,9 +819,30 @@ export interface HiveIpc {
   fileRead(repoPath: string, relPath: string): Promise<string>;
   /** Write UTF-8 contents to a repo-relative file. Rejects path traversal. */
   fileWrite(repoPath: string, relPath: string, contents: string): Promise<void>;
+  /** A file or a folder and its size; null when nothing is there. On this computer only. */
+  fileStat(repoPath: string, relPath: string): Promise<FileStat | null>;
+  /** A file's bytes as base64 (at most 32 MB): a picture the Image tile shows. */
+  fileBytes(repoPath: string, relPath: string): Promise<{ base64: string; size: number }>;
   /** Open a path clicked in the terminal with the OS default app (xdg-open).
    *  Resolves relatives against `cwd`; must exist; refuses `.desktop` + remote. */
   openPathInApp?(cwd: string, target: string): Promise<{ ok: boolean; error?: string }>;
+  /** A path outside every workspace that the person clicked (absolute, or `~/`): a file or a folder,
+   *  its size and real path; null when nothing is there. In the app's windows only. */
+  outsideFileStat?(path: string): Promise<(FileStat & { path: string }) | null>;
+  /** The same, kept as opened by the person: only such a path is read, saved or handed to the system. */
+  personOpensOutside?(path: string): Promise<(FileStat & { path: string }) | null>;
+  /** A text file outside every workspace that the person opened, as `fileRead` reads one. */
+  outsideTextRead?(path: string): Promise<{ text: string } | { error: string; code?: "UNSUPPORTED" | "FILE_TOO_BIG" }>;
+  /** Save a text file outside every workspace that the person opened. */
+  outsideTextWrite?(path: string, contents: string): Promise<{ ok: boolean; error?: string }>;
+  /** A picture outside every workspace that the person opened, its bytes as base64 (at most 32 MB). */
+  outsidePicture?(path: string): Promise<{ base64: string; size: number }>;
+  /** Hand a folder or a viewable file outside every workspace to the system's app. */
+  openOutsideInApp?(path: string): Promise<{ ok: boolean; error?: string }>;
+  /** Hand a link to the system (`mailto:`, a kind the person allowed); never `file:` or a script. */
+  openLinkOutside?(url: string): Promise<{ ok: boolean; error?: string }>;
+  /** This computer's host name, as a shell names it in OSC 7. */
+  localHostName?(): Promise<string>;
 
   /** Append one diagnostics line to userData/render-diag.log (auto-rotated).
    *  Used by the terminal render-quality probe so blurry-text reports can be

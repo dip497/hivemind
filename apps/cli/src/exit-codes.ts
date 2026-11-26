@@ -15,9 +15,10 @@ const EXIT_CODES = [
   { name: "timeout", exit: 4, codes: ["TIMEOUT"], meaning: "the wait ran out" },
   { name: "notFound", exit: 5, codes: ["NOT_FOUND", "NO_AGENT", "NO_ROOT", "NO_BROWSER_TILE", "NO_ELEMENT", "ATTACHMENT_MISSING"], meaning: "what it names is not there, or was closed: a tile, agent, frame, issue or workspace; or the tile runs no agent" },
   { name: "unauthorized", exit: 6, codes: ["FORBIDDEN", "PERSON_ONLY"], meaning: "not yours to do: a bad token, or only the person may: ask them" },
-  { name: "refused", exit: 7, codes: ["RATE_LIMITED", "DEPTH_EXCEEDED", "UNSUPPORTED", "OCCLUDED", "PART_OF_A_PACKAGE", "SEVERAL_BROWSER_TILES", "SEVERAL_ELEMENTS", "ATTACHMENT_TYPE", "ATTACHMENT_TOO_BIG", "ATTACHMENT_NOT_A_NOTE", "REVIEW_PICTURES", "FILE_TOO_BIG", "NO_PHONE"], meaning: "refused for now, or the agent cannot do it: idle with nothing to read; something covers the tile `tile look` would picture; or the plugin changes only with its package" },
+  { name: "refused", exit: 7, codes: ["RATE_LIMITED", "DEPTH_EXCEEDED", "UNSUPPORTED", "OCCLUDED", "PART_OF_A_PACKAGE", "SEVERAL_BROWSER_TILES", "SEVERAL_ELEMENTS", "ATTACHMENT_TYPE", "ATTACHMENT_TOO_BIG", "ATTACHMENT_NOT_A_NOTE", "REVIEW_PICTURES", "FILE_TOO_BIG", "NO_PHONE", "CLAIMED", "NOTHING_TO_UNDO", "NOTHING_TO_REDO"], meaning: "refused for now, or the agent cannot do it: idle with nothing to read; something covers the tile `tile look` would picture; the plugin changes only with its package; or nothing of yours is left to undo or redo" },
   { name: "waiting", exit: 8, codes: ["WAITING"], meaning: "the agent stopped to wait on an answer" },
   { name: "asleep", exit: 9, codes: ["ASLEEP"], meaning: "the agent is asleep: wake it with `hive ctl wake <tile>`" },
+  { name: "problems", exit: 10, codes: [], meaning: "a check found something wrong: each problem is printed with its fix" },
 ] as const;
 
 type ExitName = (typeof EXIT_CODES)[number]["name"];

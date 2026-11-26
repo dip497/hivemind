@@ -4,8 +4,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import {
-  MAX_ATTACHMENT_BYTES, addComment, attachToComment, checkAttachment, deleteComment, dismissComment, listComments, markSeen, normalizeComments, pageFilePath, readComments, reopenComment,
-  replyTo, resolveComment, reviewPath, reviewRoot, statusOf, writeComments, writePicture, type PageComment,
+  MAX_ATTACHMENT_BYTES, addComment, attachToComment, boardNoteText, checkAttachment, deleteComment, dismissComment, listComments, markSeen, normalizeComments, pageFilePath, readComments, reopenComment, replyTo, resolveComment, reviewPath, reviewRoot, statusOf, type BoardComment, type PageComment, writeComments, writePicture,
 } from "./review.js";
 
 const root = async () => fs.mkdtemp(path.join(os.tmpdir(), "hm-review-"));
@@ -327,5 +326,40 @@ describe("review comments", () => {
     ]);
     expect(kept!.page.picture).toBe("c-1.png");
     expect(escaped!.page.picture).toBeUndefined();
+  });
+});
+
+describe("notes pinned on the board", () => {
+  const pin = { body: "here", author: "pi", board: { on: "shape-1", x: 1.6, y: 2, what: "API" } };
+
+  test("a note is kept with where it is pinned, and what is not a place is not kept as one", () => {
+    expect(normalizeComments([{ id: "c-1", at: "t", ...pin }, { id: "c-2", at: "t", body: "loose", author: "you", board: { x: "left", y: 2, on: 7 } }])).toEqual([
+      { id: "c-1", at: "t", body: "here", author: "pi", board: { on: "shape-1", x: 2, y: 2, what: "API" } },
+      { id: "c-2", at: "t", body: "loose", author: "you", board: { x: 0, y: 2 } },
+    ]);
+    expect(normalizeComments([{ id: "c-3", at: "t", body: "nowhere", author: "you", board: 7 }])).toEqual([]);
+  });
+
+  test("the list says which are on the board, and an agent's list of notes holds them with those on pages", async () => {
+    const dir = await root();
+    const note = await addComment(dir, pin);
+    const diff = await addComment(dir, { file: "a.ts", startLine: 1, endLine: 1, side: "additions", body: "rename", author: "you" });
+    expect((await listComments(dir, { on: "board" })).map((c) => c.id)).toEqual([note.id]);
+    expect((await listComments(dir, { on: "notes" })).map((c) => c.id)).toEqual([note.id]);
+    expect((await listComments(dir, { on: "diff" })).map((c) => c.id)).toEqual([diff.id]);
+    expect((await listComments(dir, { on: "page" })).map((c) => c.id)).toEqual([]);
+    expect((await listComments(dir, { file: "a.ts" })).map((c) => c.id)).toEqual([diff.id]);
+  });
+
+  test("answered and closed as any note is", async () => {
+    const dir = await root();
+    const note = await addComment(dir, pin);
+    await replyTo(dir, note.id, { author: "you", body: "go on", at: "t" });
+    await resolveComment(dir, note.id, "done it");
+    const [kept] = await readComments(dir);
+    expect(kept).toMatchObject({ resolved: true, summary: "done it", replies: [{ body: "go on" }], board: { on: "shape-1" } });
+    expect(boardNoteText(kept as BoardComment)).toContain('pinned on shape-1 "API"');
+    expect(boardNoteText(kept as BoardComment)).toContain("↳ you: go on");
+    expect(boardNoteText(kept as BoardComment)).toContain("left by an agent: pi");
   });
 });

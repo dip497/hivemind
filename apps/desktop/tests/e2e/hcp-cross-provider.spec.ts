@@ -52,7 +52,7 @@ const answer = (stdout: string, stderr: string) => lastJson(stdout) ?? lastJson(
 
 /** Run `hive …` as the person at this machine would, or as an agent with `asAgent`. */
 function hive(args: string[], env: Record<string, string> = {}) {
-  const r = spawnSync(onPath("bun"), [CLI, ...args], { encoding: "utf8", timeout: 120_000, env: hiveEnv(env) });
+  const r = spawnSync(onPath("bun"), [CLI, ...args], { cwd: repo, encoding: "utf8", timeout: 120_000, env: hiveEnv(env) });
   return { code: r.status, stdout: r.stdout, stderr: r.stderr, json: answer(r.stdout, r.stderr) };
 }
 
@@ -69,7 +69,7 @@ function inboxTexts(tile: string): string[] {
 
 function hiveLater(args: string[]): Promise<{ code: number | null; json: any }> {
   return new Promise((resolve) => {
-    const child = spawn(onPath("bun"), [CLI, ...args], { env: hiveEnv({}) });
+    const child = spawn(onPath("bun"), [CLI, ...args], { cwd: repo, env: hiveEnv({}) });
     let out = ""; let err = "";
     child.stdout.on("data", (d) => { out += d; });
     child.stderr.on("data", (d) => { err += d; });

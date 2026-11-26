@@ -10,7 +10,7 @@ import { build as viteBuild, type Plugin } from "vite";
 // into main/preload because node has no .ts loader at runtime. Their
 // transitive npm deps (gray-matter, yaml, zod)
 // stay externalized — they're plain JS and load fine from app.asar.
-const BUNDLE_INTERNAL = ["@hivemind/core", "@hivemind/core/storage", "@hivemind/core/settings", "@hivemind/core/settings-schema", "@hivemind/core/views", "@hivemind/agents", "@hivemind/agents/node", "@hivemind/agent-host", "@hivemind/agent-sdk", "@hivemind/host", "@hivemind/hub", "@hivemind/view-host", "@hivemind/view-sdk", "@hivemind/view-sdk/manifest", "@hivemind/view-sdk/protocol", "@hivemind/workspace-host", "@hivemind/workspace-host/store", "@hivemind/workspace-doc", "@hivemind/workspace-api"];
+const BUNDLE_INTERNAL = ["@hivemind/core", "@hivemind/core/storage", "@hivemind/core/settings", "@hivemind/core/settings-schema", "@hivemind/core/views", "@hivemind/agents", "@hivemind/agents/node", "@hivemind/agent-host", "@hivemind/agent-sdk", "@hivemind/host", "@hivemind/hub", "@hivemind/view-host", "@hivemind/view-sdk", "@hivemind/view-sdk/manifest", "@hivemind/view-sdk/protocol", "@hivemind/workspace-host", "@hivemind/workspace-host/store", "@hivemind/workspace-doc", "@hivemind/workspace-api", "@hivemind/code-intel"];
 
 // ---------------------------------------------------------------------------
 // shiki language / theme allowlist
@@ -112,6 +112,10 @@ export default defineConfig({
           "pty-daemon": path.resolve("../../packages/agent-host/src/pty-daemon.ts"),
           // The daemon's screens run on a worker thread, which loads this file beside it.
           "screen-worker": path.resolve("../../packages/agent-host/src/screen-worker.ts"),
+          // Code search runs off main in a process of its own, which loads this file beside it.
+          "code-search-process": path.resolve("../../packages/host/src/code-search-process.ts"),
+          // Questions about code (tree-sitter, language servers) run in a process of their own, loaded from beside it.
+          "code-sidecar": path.resolve("../../packages/code-intel/src/sidecar-main.ts"),
         },
       },
     },

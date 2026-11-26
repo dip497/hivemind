@@ -3,8 +3,26 @@
 html, body { margin: 0; height: 100%; overflow: hidden; background: transparent; color: var(--hm-color-fg, #e6e6e6);
   font: 12px/1.3 var(--hm-font-ui, system-ui, sans-serif); }
 /* The room the panes share, level with the Layers panel's card. */
-body { padding: 8px 8px 8px 0; }
-.w-room { position: relative; width: 100%; height: 100%; }
+body { padding: 8px 8px 8px 0; display: flex; flex-direction: column; gap: 6px; }
+.w-room { position: relative; flex: 1; min-height: 0; width: 100%; }
+
+/* The layouts to choose between, over the panes: All, then each frame or page. */
+.w-groups { flex: none; display: flex; align-items: center; gap: 2px; height: 28px; padding-right: 44px; overflow-x: auto; scrollbar-width: none; }
+.w-groups[hidden] { display: none; }
+.w-group, .w-group-by { flex: none; display: flex; align-items: center; gap: 6px; height: 26px; padding: 0 10px; border: 0; border-radius: 8px;
+  background: transparent; color: var(--hm-color-fg2, #b7bac1); font: inherit; cursor: pointer; }
+.w-group:hover, .w-group-by:hover { background: color-mix(in srgb, var(--hm-color-fg, #fff) 6%, transparent); color: var(--hm-color-fg, #e6e6e6); }
+.w-group[aria-pressed="true"] { background: color-mix(in srgb, var(--hm-color-fg, #fff) 10%, transparent); color: var(--hm-color-fg, #e6e6e6); }
+.w-group-name { font-weight: 500; white-space: nowrap; }
+.w-group-n { color: var(--hm-color-fg3, #80838a); font-variant-numeric: tabular-nums; }
+.w-group-by { margin-left: auto; color: var(--hm-color-fg3, #80838a); }
+.w-group:focus-visible, .w-group-by:focus-visible, .w-needs:focus-visible, .w-casting:focus-visible, .w-switch-close:focus-visible { outline: 2px solid color-mix(in srgb, var(--hm-color-fg, #fff) 40%, transparent); outline-offset: -2px; }
+
+/* Typing goes to several terminals: said in words in each one's bar, in the error colour, until it stops. */
+.w-casting { flex: none; align-self: center; height: 24px; margin-right: 2px; padding: 0 8px; border: 0; border-radius: 6px; white-space: nowrap;
+  color: var(--hm-color-err, #e5484d); background: color-mix(in srgb, var(--hm-color-err, #e5484d) 14%, transparent); font: inherit; font-weight: 500; cursor: pointer; }
+.w-casting[hidden] { display: none; }
+.w-pane[data-broadcast] { border-color: var(--hm-color-err, #e5484d); box-shadow: 0 0 0 1px var(--hm-color-err, #e5484d); }
 
 /* A pane: one card, its tabs on top and the shown tile under them. */
 .w-pane { position: absolute; display: flex; flex-direction: column; overflow: hidden; border-radius: 12px;
@@ -24,6 +42,21 @@ body { padding: 8px 8px 8px 0; }
 .w-mark { flex: none; display: grid; place-items: center; width: 16px; height: 16px; }
 .w-mark svg { width: 16px; height: 16px; }
 .w-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+/* What a tile asks of the person: the app's status mark (a shape, not colour alone), none when quiet. */
+.w-att { flex: none; display: grid; place-items: center; width: 10px; height: 10px; }
+.w-att:empty { display: none; }
+.w-att svg[data-status="attention"] { animation: w-pulse 1.6s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .w-att svg[data-status="attention"] { animation: none; } }
+@keyframes w-pulse { 50% { opacity: 0.45; } }
+.w-new { width: 6px; height: 6px; border-radius: 50%; border: 1.5px solid var(--hm-color-fg2, #b7bac1); }
+/* A pane holding a tab that needs the person: its edge says so, in the attention colour. */
+.w-pane[data-needs-you]:not([data-broadcast]) { border-color: var(--hm-status-attention, #f5a524); }
+.w-needs { flex: none; align-self: center; display: flex; align-items: center; gap: 6px; height: 24px; margin-right: 2px; padding: 0 8px; border: 0; border-radius: 6px;
+  background: color-mix(in srgb, var(--hm-status-attention, #f5a524) 14%, transparent); color: var(--hm-color-fg, #e6e6e6); font: inherit; font-weight: 500; cursor: pointer; }
+.w-needs[hidden] { display: none; }
+.w-needs:hover { background: color-mix(in srgb, var(--hm-status-attention, #f5a524) 24%, transparent); }
+.w-pane[data-corner] .w-needs { margin-right: 0; }
+.w-tab[data-broadcast] .w-name { color: var(--hm-color-err, #e5484d); }
 /* Minimize and close show on the tab under the pointer (or reached by keyboard) and take no room
    otherwise: every tab, the selected one too, keeps its width for its name. */
 .w-act { flex: none; display: none; place-items: center; width: 20px; height: 20px; border: 0; border-radius: 5px;
@@ -62,3 +95,26 @@ body { padding: 8px 8px 8px 0; }
   background: color-mix(in srgb, var(--hm-color-fg, #fff) 7%, transparent); border: 1px solid color-mix(in srgb, var(--hm-color-fg, #fff) 22%, transparent);
   transition: left 120ms cubic-bezier(0.2, 0, 0, 1), top 120ms cubic-bezier(0.2, 0, 0, 1), width 120ms cubic-bezier(0.2, 0, 0, 1), height 120ms cubic-bezier(0.2, 0, 0, 1); }
 .w-drop[data-kind="tabs"] { border: 0; border-radius: 1px; background: var(--hm-accent, #6b7a8f); transition: none; }
+
+/* The quick switcher: a field and the tiles it finds, needs-you first; 1 to 9 jump. */
+.w-switch { width: min(560px, calc(100vw - 48px)); max-height: min(440px, calc(100vh - 96px)); margin: 72px auto auto; padding: 0; overflow: hidden;
+  border-radius: 12px; border: 1px solid var(--hm-color-line, #2a2c33); background: var(--hm-color-bg2, #17181c); color: var(--hm-color-fg, #e6e6e6);
+  box-shadow: 0 16px 48px rgb(0 0 0 / 0.36); font: inherit; }
+.w-switch[open] { display: flex; flex-direction: column; }
+.w-switch:modal { overscroll-behavior: contain; }
+.w-switch::backdrop { background: rgb(0 0 0 / 0.28); overflow: hidden; overscroll-behavior: contain; }
+.w-switch-head { flex: none; display: flex; align-items: center; border-bottom: 1px solid var(--hm-color-line, #2a2c33); }
+.w-switch input { flex: 1; min-width: 0; height: 40px; padding: 0 14px; border: 0; outline: none; background: transparent; color: inherit; font: inherit; font-size: 13px; }
+.w-switch form { display: contents; }
+.w-switch-close { flex: none; height: 22px; margin-right: 10px; padding: 0 8px; border: 1px solid var(--hm-color-line, #2a2c33); border-radius: 6px;
+  background: transparent; color: var(--hm-color-fg3, #80838a); font: inherit; font-size: 11px; cursor: pointer; }
+.w-switch-close:hover { color: var(--hm-color-fg, #e6e6e6); }
+.w-switch ul { flex: 1; min-height: 0; margin: 0; padding: 4px; list-style: none; overflow-y: auto; overscroll-behavior: contain; }
+.w-opt { display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 10px; border-radius: 8px; cursor: pointer; }
+.w-opt[aria-selected="true"] { background: color-mix(in srgb, var(--hm-color-fg, #fff) 10%, transparent); }
+.w-opt:hover { background: color-mix(in srgb, var(--hm-color-fg, #fff) 6%, transparent); }
+.w-key { flex: none; width: 12px; color: var(--hm-color-fg3, #80838a); font-variant-numeric: tabular-nums; }
+.w-opt .w-att { width: 10px; }
+.w-opt-name { flex: none; max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+.w-opt-where { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--hm-color-fg3, #80838a); }
+.w-opt-none { padding: 10px; color: var(--hm-color-fg2, #b7bac1); }

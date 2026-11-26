@@ -73,6 +73,7 @@ A line without an `id` is an event, `{"event": "…", "params": [...]}`, about t
 - `terminal.data`: output of a terminal you opened.
 - `tile.lines`: the last line of terminals you watch (`tile.watchLines`) changed, at most every 250 ms.
 - `file.changed`: files changed in the workspace.
+- `board.changed`: a change to the board, to a caller that follows them ([`board.changes`](/api-methods#board-changes) with `follow`).
 
 ## Error codes
 

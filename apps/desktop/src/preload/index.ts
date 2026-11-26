@@ -36,5 +36,31 @@ if (appPage && isAppPage(location.href, appPage)) {
     window.dispatchEvent(new CustomEvent<string>("hivemind:focus-tile", { detail: tileId }));
   });
 
-  contextBridge.exposeInMainWorld("hive", api);
+  // An error crossing to the page keeps only its message, so a call's promise crosses settled and the
+  // page throws it again there with its `code` (NOT_FOUND, UNSUPPORTED …), which callers decide on.
+  const settled = (out: unknown): unknown => (out instanceof Promise
+    ? out.then((value: unknown) => ({ value }), (e: unknown) => {
+      const code = (e as { code?: unknown } | null)?.code;
+      return { failed: { message: e instanceof Error ? e.message : String(e), ...(typeof code === "string" ? { code } : {}) } };
+    })
+    : out);
+  const bridged = Object.fromEntries(Object.entries(api).map(([k, v]) => [k, typeof v === "function" ? (...a: unknown[]) => settled((v as (...a: unknown[]) => unknown)(...a)) : v]));
+  contextBridge.executeInMainWorld({
+    func: (bridge: Record<string, unknown>) => {
+      type Settled = { value?: unknown; failed?: { message: string; code?: string } };
+      const hive: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(bridge)) {
+        hive[k] = typeof v !== "function" ? v : (...a: unknown[]) => {
+          const out = (v as (...a: unknown[]) => unknown)(...a);
+          if (!out || typeof (out as Promise<unknown>).then !== "function") return out;
+          return (out as Promise<Settled>).then((s) => {
+            if (s.failed) throw Object.assign(new Error(s.failed.message), s.failed.code ? { code: s.failed.code } : {});
+            return s.value;
+          });
+        };
+      }
+      Object.defineProperty(window, "hive", { value: Object.freeze(hive), enumerable: true });
+    },
+    args: [bridged],
+  });
 }

@@ -1,0 +1,24 @@
+{
+  "name": "@hivemind/code-intel",
+  "version": "2026.11.2",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@hivemind/agents": "workspace:*",
+    "@vscode/tree-sitter-wasm": "0.3.1"
+  },
+  "devDependencies": {
+    "@hivemind/tsconfig": "workspace:*",
+    "@types/node": "catalog:",
+    "typescript": "catalog:"
+  },
+  "description": "Code intelligence: the provider contract, the order answers are taken in, the syntax provider (tree-sitter) and the language server host that runs beside the app.",
+  "license": "MIT"
+}

@@ -12,9 +12,8 @@ import { IS_MAC, runShortcut } from "./shortcut";
 import { actionsFor } from "../../shared/keymap";
 import type { TileInstance } from "./canvas-persistence";
 import type { Board } from "./board-objects/useBoard";
-import type { BoardChoice } from "./board-objects/board-model";
+import type { BoardChoice, DrawTool } from "./board-objects/board-model";
 
-type FocusModeReq = { id: string | null; n: number } | null;
 
 export interface CanvasShortcutsCtx {
   repoPath: string | null;
@@ -29,23 +28,45 @@ export interface CanvasShortcutsCtx {
   focusTile: (id: string) => void;
   closeTile: (id: string) => void;
   setSelectedTileId: Dispatch<SetStateAction<string | null>>;
-  setFocusModeReq: Dispatch<SetStateAction<FocusModeReq>>;
   selectedTileIdRef: MutableRefObject<string | null>;
   selectedFrameIdRef: MutableRefObject<string | null>;
-  focusModeNonceRef: MutableRefObject<number>;
   tilesRef: MutableRefObject<TileInstance[]>;
   /** The board as last rendered: the handler is installed once, so it reads through this. */
   boardRef: MutableRefObject<Board>;
   addBoard: (kind: BoardChoice) => void;
   /** The board is the canvas's: its keys do nothing in another view. */
   onCanvas: () => boolean;
+  /** Out of the frame the window is inside, to the one holding it or the whole canvas; false: inside none. Stable: read once. */
+  goOut: () => boolean;
+  /** Inside the selected frame; false: none is selected. Stable: read once. */
+  goInside: () => boolean;
+  /** Fit the whole canvas. Stable: read once. */
+  fitAll: () => void;
+}
+
+/** Open over the canvas and taking every key: a dialog, a menu, a list to pick from. */
+const TAKES_EVERY_KEY = '[role="dialog"], [role="alertdialog"], [role="menu"], [role="menubar"], [role="listbox"]';
+/** Moved through with the arrows and chosen with Enter or Space. */
+const MOVED_IN = 'select, [role="combobox"], [role="radio"], [role="tab"], [role="option"], [role="slider"], [role="menuitemradio"]';
+/** Pressed with Enter or Space. */
+const PRESSED = 'button, a[href], summary, [role="button"], [role="menuitem"], [role="checkbox"], [role="switch"]';
+const PRESS_KEYS = new Set(["Enter", " "]);
+const MOVE_KEYS = new Set([...PRESS_KEYS, "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Home", "End"]);
+
+/** The focused control acts on this key itself, so the canvas leaves it: a letter or Delete on a
+ *  clicked toolbar button is still the canvas's. */
+export function keyIsTheControls(target: EventTarget | null, key: string): boolean {
+  const el = target as Element | null;
+  if (!el?.closest) return false;
+  if (el.closest(TAKES_EVERY_KEY)) return true;
+  if (MOVE_KEYS.has(key) && el.closest(MOVED_IN)) return true;
+  return PRESS_KEYS.has(key) && !!el.closest(PRESSED);
 }
 
 export function useCanvasShortcuts(ctx: CanvasShortcutsCtx) {
   const {
     repoPath, spawnDefaultAgent, spawnSelectedAgent, spawnVis, spawnBrowser, addFrame, frameOpen, focusTile, closeTile,
-    setSelectedTileId, setFocusModeReq, selectedTileIdRef, selectedFrameIdRef,
-    focusModeNonceRef, tilesRef, boardRef, addBoard, onCanvas,
+    setSelectedTileId, selectedTileIdRef, selectedFrameIdRef, tilesRef, boardRef, addBoard, onCanvas, goOut, goInside, fitAll,
   } = ctx;
 
   useEffect(() => {
@@ -60,7 +81,7 @@ export function useCanvasShortcuts(ctx: CanvasShortcutsCtx) {
       if (typeof which === "string" && (which === "tree" || canSpawnKind(which))) spawnVis(which);
     };
     const onKey = (e: KeyboardEvent) => {
-      if (e.defaultPrevented || inEditable(e.target)) return;
+      if (e.defaultPrevented || inEditable(e.target) || keyIsTheControls(e.target, e.key)) return;
       // Writing in a board object: its field may not have focus yet (a node just added is
       // shown once measured), and a key typed meanwhile is text, never a tool.
       if (boardRef.current.editingId) return;
@@ -78,7 +99,7 @@ export function useCanvasShortcuts(ctx: CanvasShortcutsCtx) {
     const focusSelected = () => {
       const id = selectedTileIdRef.current ?? selectedFrameIdRef.current;
       if (!id) return false;
-      setFocusModeReq({ id, n: ++focusModeNonceRef.current });
+      focusTile(id);
     };
     const send = (name: string, detail?: unknown) => { window.dispatchEvent(new CustomEvent(name, { detail })); };
     /** Each action of the keymap the canvas owns. False: nothing to do, the key goes on. Tiles are
@@ -123,11 +144,31 @@ export function useCanvasShortcuts(ctx: CanvasShortcutsCtx) {
         // The board's history: undo and redo take back board edits only (the store's rule).
         case "undo": if (!onCanvas()) return false; return board.undo();
         case "redo": if (!onCanvas()) return false; return board.redo();
-        case "duplicate": if (!onCanvas() || !board.selectedId) return false; return board.duplicate(board.selectedId);
-        case "remove-selected": if (!onCanvas() || !board.selectedId) return false; return board.remove(board.selectedId);
+        case "duplicate": if (!onCanvas() || !board.selectedId) return false; return board.selectedIds.length > 1 ? board.duplicateSelected() : board.duplicate(board.selectedId);
+        case "remove-selected": if (!onCanvas() || !board.selectedId) return false; return board.removeSelected();
+        case "select-all-shapes": if (!onCanvas() || board.tool !== "select") return false; return board.selectAll();
+        case "to-front": if (!onCanvas() || !board.selectedId) return false; return board.toFront(board.selectedIds);
+        case "to-back": if (!onCanvas() || !board.selectedId) return false; return board.toBack(board.selectedIds);
+        case "nudge-left": case "nudge-right": case "nudge-up": case "nudge-down":
+        case "nudge-left-far": case "nudge-right-far": case "nudge-up-far": case "nudge-down-far": {
+          if (!onCanvas() || !board.selectedId) return false;
+          const by = action.endsWith("-far") ? 10 : 1;
+          const dx = action.includes("left") ? -by : action.includes("right") ? by : 0;
+          const dy = action.includes("up") ? -by : action.includes("down") ? by : 0;
+          return board.nudge(board.selectedIds, dx, dy);
+        }
+        case "stop-tool": if (board.tool === "select") return false; return board.setTool("select");
+        case "toggle-drawing": if (!onCanvas()) return false; return board.setDrawing(!board.drawing);
         case "stop-arrow": if (board.arrowFrom === undefined) return false; return board.cancelArrow();
+        case "tool-select": case "tool-pen": case "tool-rect": case "tool-ellipse": case "tool-diamond":
+        case "tool-line": case "tool-arrow": case "tool-text": case "tool-eraser": case "tool-note":
+        case "tool-marker": case "tool-laser":
+          if (!onCanvas()) return false;
+          return board.setTool(action.slice("tool-".length) as DrawTool);
         case "deselect": if (!board.selectedId) return false; return board.select(null);
-        case "fit-all": return setFocusModeReq({ id: null, n: ++focusModeNonceRef.current });
+        case "fit-all": return fitAll();
+        case "go-out": if (!onCanvas() || board.selectedId) return false; return goOut();
+        case "go-inside": if (!onCanvas()) return false; return goInside();
         case "rename-frame": {
           const sel = selectedFrameIdRef.current;
           if (!sel) return false;

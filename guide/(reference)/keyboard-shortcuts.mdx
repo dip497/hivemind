@@ -38,6 +38,8 @@ These work even while a terminal has focus.
 | ⌃⇧Tab / Ctrl+Shift+Tab | Previous tile |
 | ⌘, / Ctrl+, | Settings |
 | ⌘. / Ctrl+. | Focus the selected tile |
+| ⌥⌘A / Ctrl+Alt+A | Go to the tile that most recently started waiting on you |
+| ⇧⌘M / Ctrl+Shift+M | The overview: every page and frame as a card, and back |
 | ⇧⌘F / Ctrl+Shift+F | Fit the selected terminal to the screen, and back |
 | ⇧⌘0 / Ctrl+Shift+0 | Size the selected terminal's text to the screen |
 | ⌘B / — | Show or hide the Layers panel. Windows and Linux keep Super+B for themselves: use Ctrl+B on the canvas. |
@@ -57,14 +59,40 @@ These work when no terminal or editor has focus.
 | 3 | The Code tile, on its files |
 | 6 | New frame |
 | 7 | New browser |
-| ⌫ / Backspace | Delete the selected widget or arrow. ⌦ / Delete does too. |
+| ⌫ / Backspace | Delete the selected widget or arrow. ⌦ / Delete does too. With nothing selected, go out of the page or frame you are inside. |
+| ⌘↑ / Ctrl+↑ | Go out of the page or frame you are inside |
+| Enter | Go inside the selected page or frame |
 | ⌘D / Ctrl+D | Duplicate the selected widget |
 | ⌘Z / Ctrl+Z | Undo on the board |
 | ⇧⌘Z / Ctrl+Shift+Z | Redo on the board. ⌘Y / Ctrl+Y does too. |
 | ⌘= / Ctrl+= | Zoom in |
 | ⌘- / Ctrl+- | Zoom out |
 | ⌘0 / Ctrl+0 | Zoom to 100% |
-| Esc | The first that applies: stop drawing an arrow, leave full screen, deselect on the board, or fit everything in view |
+| X | Show or hide the drawing tools |
+| V | Select tool |
+| P | Draw with the pen |
+| R | Draw a rectangle |
+| O | Draw an ellipse |
+| D | Draw a diamond |
+| L | Draw a line |
+| A | Draw an arrow |
+| T | Write text on the canvas |
+| E | Eraser |
+| M | Draw with the marker |
+| K | Point with the laser |
+| N | Pin a note on the canvas |
+| ⌘A / Ctrl+A | Select every shape on the board |
+| ] | Bring the selection to the front |
+| [ | Send the selection to the back |
+| ← | Move the selection left |
+| → | Move the selection right |
+| ↑ | Move the selection up |
+| ↓ | Move the selection down |
+| ⇧← / Shift+← | Move the selection left by 10 |
+| ⇧→ / Shift+→ | Move the selection right by 10 |
+| ⇧↑ / Shift+↑ | Move the selection up by 10 |
+| ⇧↓ / Shift+↓ | Move the selection down by 10 |
+| Esc | The first that applies: stop drawing and go back to Select, stop drawing an arrow, leave full screen, deselect on the board, go out of the page or frame you are inside, or fit everything in view |
 | ⇧Esc / Shift+Esc | Undock a tile from a scene view |
 | ⌘O / Ctrl+O | Open a folder as the project |
 | ⌘R / Ctrl+R | Open a recent project |
@@ -100,6 +128,13 @@ These work when no terminal or field has focus: there the key is the program's.
 | `⌘⇧\` / `Ctrl+Shift+\` | Split the pane down |
 | ⌘⌥ + arrow / Ctrl+Alt + arrow | Move to the pane in that direction |
 | ⌘⇧Enter / Ctrl+Shift+Enter | Show the pane alone, or bring the others back |
+| ⌥⌘P / Ctrl+Alt+P | Go to a tile: type part of its name, agent or folder. The ones that need you come first, then the most recent. With nothing typed, 1 to 9 pick a row. |
+| ⌥⌘O / Ctrl+Alt+O | Go back to the tile shown before this one |
+| ⌥⌘] / Ctrl+Alt+] | The pane's next tab. With `[`, the one before. |
+| ⌥⇧⌘] / Ctrl+Alt+Shift+] | Move the shown tab to the next pane. With `[`, the pane before. With one pane, it splits off. |
+| ⌥⌘S / Ctrl+Alt+S | Swap what this pane shows with the next pane |
+| ⌥⌘= / Ctrl+Alt+= | Make every pane the same size |
+| ⌥⌘B / Ctrl+Alt+B | Type into every terminal the panes show at once, or stop. Esc stops it too. |
 
 ## In a terminal
 
@@ -115,6 +150,7 @@ Every other key goes to the program.
 | ⌘- / Ctrl+- | Smaller text |
 | ⌘0 / Ctrl+0 | Text back to its size |
 | ⇧⌘K / Ctrl+Shift+K | Take back the keyboard from a guest |
+| ⇧⌘O / Ctrl+Shift+O | Pick a link or a path on the screen to open |
 
 ⌘ + click / Ctrl + click opens a link.
 

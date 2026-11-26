@@ -415,3 +415,45 @@ test("frameAtPoint: among same-level frames, the first (topmost-z) hit wins", ()
   const framesZDesc = [wf("top", 0, 0, 300, 300), wf("bottom", 0, 0, 300, 300)];
   assert.equal(frameAtPoint(framesZDesc, 50, 50)!.id, "top");
 });
+
+// Frames nest to any depth on one canvas, a page among them like any other frame.
+test("three levels deep: each frame holds the next, and the innermost fits what it holds", () => {
+  const frames: FrameGeom[] = [
+    { id: "pay", x: 0, y: 0, w: 460, h: 200 },
+    { id: "checkout", x: 0, y: 0, w: 460, h: 200, parentFrameId: "pay" },
+    { id: "cart", x: 0, y: 0, w: 460, h: 200, parentFrameId: "checkout" },
+  ];
+  const members = new Map<string, MemberRect[]>([["cart", [mem(1000, 1000, 600, 400)]]]);
+  const { geometry } = computeFrameLayout(frames, members, null, K);
+  const [pay, checkout, cart] = ["pay", "checkout", "cart"].map((id) => geometry.get(id)!);
+  assert.ok(cart, "the innermost frame is laid out");
+  assert.ok(contains(cart!, { x: 1000, y: 1000, w: 600, h: 400 }), "the innermost holds its tile");
+  assert.ok(contains(checkout!, cart!), `checkout ${JSON.stringify(checkout)} holds cart ${JSON.stringify(cart)}`);
+  assert.ok(contains(pay!, checkout!), `pay ${JSON.stringify(pay)} holds checkout ${JSON.stringify(checkout)}`);
+});
+
+test("three levels deep: a top-level push moves everything inside, tiles of the innermost too", () => {
+  const frames: FrameGeom[] = [
+    { id: "infra", x: 0, y: 0, w: 460, h: 200 },
+    { id: "pay", x: 0, y: 0, w: 460, h: 200 },
+    { id: "checkout", x: 0, y: 0, w: 460, h: 200, parentFrameId: "pay" },
+    { id: "cart", x: 0, y: 0, w: 460, h: 200, parentFrameId: "checkout" },
+  ];
+  const members = new Map<string, MemberRect[]>([["infra", [mem(28, 36, 600, 400)]], ["cart", [mem(100, 100, 600, 400)]]]);
+  const { geometry, tileShift } = computeFrameLayout(frames, members, "infra", K);
+  const push = tileShift.get("pay")!;
+  assert.ok(push.dx !== 0 || push.dy !== 0, "pay yields to infra");
+  assert.deepEqual(tileShift.get("cart"), push, "the innermost frame's tiles move with the nest");
+  assert.ok(contains(geometry.get("pay")!, geometry.get("cart")!));
+});
+
+test("a drop lands in the innermost frame under it, however deep", () => {
+  const frames = [
+    { id: "pay", x: 0, y: 0, w: 1000, h: 1000 },
+    { id: "checkout", x: 100, y: 100, w: 800, h: 800, parentFrameId: "pay" },
+    { id: "cart", x: 200, y: 200, w: 400, h: 400, parentFrameId: "checkout" },
+  ];
+  assert.equal(frameAtPoint(frames, 300, 300)?.id, "cart");
+  assert.equal(frameAtPoint(frames, 150, 150)?.id, "checkout");
+  assert.equal(frameAtPoint(frames, 50, 50)?.id, "pay");
+});

@@ -57,6 +57,8 @@ const app = {
   close: async (a) => (window.calls.push(["close", a.tile]), true),
   browserAsks: async () => window.asks ?? [],
   answerBrowserAsk: async (a, ask, to) => (window.calls.push(["answerBrowserAsk", ask, to]), window.asks = [], true),
+  drawings: async () => { if (window.noDrawings) throw new Error("gone"); return window.drawings ?? []; },
+  drawingPicture: async (a, id) => { window.calls.push(["drawingPicture", id]); if (window.noPicture) throw new Error("gone"); return window.picture; },
   notes: async (a) => (window.calls.push(["notes", a.workspace]), window.notes ?? []),
   changeNote: async (a, id, to, reason) => (window.calls.push(["changeNote", id, to, reason ?? null]), true),
   sendNotes: async (a, ids) => (window.calls.push(["sendNotes", a.tile, ids]), true),
@@ -107,6 +109,45 @@ test("an agent just started shows as starting until the computer lists it, never
   await open(page, "t5");
   await expect(notice).toHaveText("No agent runs there now.");
   await expect(notice).toBeVisible();
+});
+
+test("the menu lists what is drawn in the workspace; a tap shows its picture as an image, and a picture that did not come says so", async () => {
+  test.skip(!built(), "build the page first (crates/hive-web/build.sh)");
+  const page = await screen();
+  await page.evaluate(() => Object.assign(window, {
+    drawings: [{ id: "d1", title: "Login flow", objects: 6 }, { id: "d2", title: "", objects: 1 }],
+    picture: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100" width="200" height="100"><rect width="200" height="100" fill="#123"/></svg>`,
+  }));
+  await open(page, "t1");
+  await show(page, overview(agent("t1", "Phone test")));
+  await page.locator("[data-more]").click();
+  await page.locator("[data-open-drawings]").click();
+  const rows = page.locator("[data-drawing]");
+  await expect(rows).toHaveText(["Login flow", "Untitled drawing", "Everything drawn"]);
+  const picture = page.locator("[data-drawing-picture]");
+  await expect(picture).toBeHidden();
+
+  await rows.first().click();
+  await expect(picture).toBeVisible();
+  expect(await picture.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth)).toBe(200);
+  await expect(picture).toHaveAttribute("alt", "Login flow");
+  // A tap shows it at full size, to scroll round; again, fitted.
+  await expect(picture).not.toHaveClass(/full/);
+  await picture.click();
+  await expect(picture).toHaveClass(/full/);
+
+  await rows.last().click();
+  await expect.poll(() => page.evaluate(() => (window as unknown as { calls: unknown[][] }).calls.filter((c) => c[0] === "drawingPicture").map((c) => c[1]))).toEqual(["d1", null]);
+
+  await page.evaluate(() => Object.assign(window, { noPicture: true }));
+  await rows.first().click();
+  await expect(page.locator("[data-drawings-told]")).toHaveText("The computer did not send that picture.");
+
+  await page.evaluate(() => Object.assign(window, { noDrawings: true }));
+  await page.locator("[data-close-notes]").click();
+  await page.locator("[data-more]").click();
+  await page.locator("[data-open-drawings]").click();
+  await expect(page.locator("[data-page-notes]")).toContainText("The computer did not say what is drawn.");
 });
 
 test("a message held until the agent's turn ends shows as queued, with Send now, which stops the turn", async () => {
@@ -739,6 +780,7 @@ test("a permission names its tool in sans and shows its command in mono on a pan
 });
 
 test("a question on a Browser tile is answered from the agent's screen", async () => {
+  test.skip(!built(), "no page build: run crates/hive-web/build.sh");
   const page = await screen();
   await page.evaluate(() => {
     (window as unknown as { asks: object[] }).asks = [{ ask: 7, tile: "b1", by: "Claude", kind: "sign-in", name: "github", site: "https://github.com", username: "me@example.com" }];
@@ -753,6 +795,7 @@ test("a question on a Browser tile is answered from the agent's screen", async (
 });
 
 test("the notes left on pages in the agent's workspace: open ones sent to it, each done, dismissed with a reason, or reopened", async () => {
+  test.skip(!built(), "no page build: run crates/hive-web/build.sh");
   const page = await screen();
   await page.evaluate(() => {
     (window as unknown as { notes: object[] }).notes = [

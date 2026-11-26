@@ -28,13 +28,13 @@ export const code: Domain<"code.findFiles" | "code.picked" | "code.grep"> = {
   answers: {
     "code.findFiles": (_, repo, query, limit) => findFiles(repoOf(repo), queryOf(query, true), limit == null ? 50 : whole(limit, "limit", 1, 500)),
     "code.picked": (_, repo, query, file) => { const r = repoOf(repo); return pickedFile(r, queryOf(query, true), inRepo(r, text(file, "file"))); },
-    "code.grep": (_, repo, query, opts) => {
+    "code.grep": (from, repo, query, opts) => {
       const o = opts == null ? {} : fields(opts, "opts");
       return grep(repoOf(repo), queryOf(query), {
         ...(o.mode != null ? { mode: oneOf(o.mode, "opts.mode", ["plain", "regex", "fuzzy"] as const) } : {}),
         ...(o.cursor != null ? { cursor: whole(o.cursor, "opts.cursor", 0, Number.MAX_SAFE_INTEGER) } : {}),
         ...(o.caseSensitive != null ? { caseSensitive: flag(o.caseSensitive, "opts.caseSensitive") } : {}),
-      });
+      }, from);
     },
   },
   effects: {},

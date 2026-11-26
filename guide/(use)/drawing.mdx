@@ -1,0 +1,180 @@
+---
+title: "Draw on the canvas"
+description: "Draw beside your terminals by hand, have your agents draw diagrams on the board, and point at anything with a note."
+---
+
+You and your agents draw on the same canvas as your terminals. A drawing stays with the workspace, moves with its frame, and can point at a live tile.
+
+<AgentPrompt description="Paste this into your coding agent to have it draw a diagram on your Hivemind board." page="drawing">{`
+Draw how this project's main parts fit together on the Hivemind board, next to your tile.
+
+1. Check you are in a Hivemind tile: \`hive ctl whoami --json\` answers.
+2. Read the project, then pick at most 12 parts, and what connects to what.
+3. Draw them: pipe JSON to \`hive ctl draw --json\`, as \`{"title": "…", "boxes": [{"id": "api", "text": "API"}], "links": [["web", "api", "calls"]]}\`. Boxes are placed for you, and \`me\` in a link is your own tile.
+4. Look at it: \`hive ctl board --drawing <drawing> --png /tmp/board.png --json\`, then read the picture.
+5. If \`overlaps\` is not empty or the picture is a mess, draw it again with \`--replace <drawing>\`.
+
+At the end, tell me the drawing's title and id. \`hive ctl erase --drawing <id>\` removes it.
+`}</AgentPrompt>
+
+## Draw by hand
+
+Press **Draw** (the pencil beside Settings in the tool island at the top), or X: the island grows a second row with the tools, and the chosen tool's colours and line sit just below it. Picking a tool by its key turns **Draw** on too. Turn it off and the row goes away and the pointer selects again. Hivemind remembers whether it was on. **Zen mode** hides the tools.
+
+| Tool | Key | What it does |
+|---|---|---|
+| **Select** | V | Click, drag, resize. Drag across the empty canvas to take in several. |
+| **Pen** | P | Draw freely. It stays on until you pick another tool. |
+| **Rectangle**, **Ellipse**, **Diamond** | R, O, D | Drag out a shape, or click for one of a set size. Hold Shift to make its sides equal. **Fill** tints it. |
+| **Line** | L | Drag from one point to another. |
+| **Arrow** | A | Drag from one thing to another, and the arrow follows them both. |
+| **Text** | T | Click and type. |
+| **Eraser** | E | Drag over what you want gone. |
+| **Pin a note** | N | Click anything and say what you mean. See below. |
+
+A tool can start over a terminal, so you can circle something on its screen. What you draw takes clicks only where it is drawn, so the terminal under it still works. Esc goes back to **Select**, and the wheel, Space-drag and right-drag still move the canvas.
+
+Double-click a shape to write in it. A selected shape shows its colours, **Fill**, duplicate and delete. ⌘Z / Ctrl+Z takes back what you drew, as it does for anything on the board.
+
+## Have an agent draw
+
+An agent runs `hive ctl draw` and says what connects to what. Hivemind places the boxes beside its tile, in its frame, on free canvas, and tells you with **Show** to fly there.
+
+```bash
+hive ctl draw --json <<'JSON'
+{
+  "title": "Login flow",
+  "boxes": [
+    { "id": "web", "text": "Web app" },
+    { "id": "api", "text": "API", "color": "blue" },
+    { "id": "db", "text": "Database", "form": "ellipse" }
+  ],
+  "links": [["web", "api", "login"], ["api", "db"], ["api", "me", "this agent works here"]]
+}
+JSON
+```
+
+- A link may end on a box, or on any tile, frame or object on the board. `me` is the agent's own tile.
+- `shapes` draw anything else, with their own places: `{"form": "line", "points": [[0, 0], [80, 40]], "head": true}`.
+- Colours are `ink`, `blue`, `green`, `yellow`, `orange`, `red` and `purple`, so each theme can draw them well.
+- A box's `form` is `rect`, `ellipse`, `diamond`, `triangle`, `hexagon`, `cylinder`, `cloud`, `star` or `parallelogram`. It also takes `dash` (`solid`, `dashed`, `dotted`), `weight` (`thin`, `medium`, `thick`) and `rough: true` for the hand-drawn look.
+- A link written as `{"from": "web", "to": "api", "label": "login", "route": "elbow", "dash": "dashed", "tail": true}` chooses its `route` (`straight`, `elbow` or `curve`), its line, and an arrowhead at both ends.
+- One call draws at most 500 things, and a board holds at most 5000 shapes.
+
+### Draw from flowchart text
+
+`--text` takes one statement a line instead of JSON:
+
+```bash
+hive ctl draw --text - --json <<'TEXT'
+direction down
+web[Web app] --> api{Signed in?}: login
+api -->|yes| db((Database))
+api -.-> log[Audit log]
+TEXT
+```
+
+`[Box]`, `((Round))` and `{Choice}` name a node the first time it appears; after that its id is enough. A bare id that is already on the board, such as `me` or a tile's id, is where the link ends, not a new box. `-->` and `---` link two nodes, `-.->` is dashed, and a label goes after a colon or between bars. `direction down` or `direction right` says which way it runs, as `--direction` does for JSON. A `group Name` … `end` block keeps its nodes and draws no box round them.
+
+### Check what was drawn
+
+Every `hive ctl draw` answers with `problems`: boxes that sit on each other, words that do not fit their box, an arrow that ends on nothing, and boxes too small to read. Each one names the ids, says what is wrong in `say` and what to do in `fix`. An empty list means nothing was found.
+
+```bash
+hive ctl board --check --json               # the whole canvas; exit 0 when nothing is wrong, 10 when something is
+hive ctl board --check --page <page> --json # inside one page or frame
+```
+
+`--check` also finds shapes that sit outside their frame.
+
+Selecting one shape of a drawing selects the whole drawing, so it moves and deletes as one. Double-click a shape to work on it alone.
+
+The agent can see what it did, and change it:
+
+```bash
+hive ctl board --json                                  # frames, tiles, drawings and objects, in canvas coordinates
+hive ctl board --drawing <id> --json                   # one drawing in full
+hive ctl board --drawing <id> --png /tmp/board.png     # a picture to look at; --svg works on `hive host` too
+hive ctl board move <id> --to 400,200 --json           # move one shape, or a whole drawing by its id
+hive ctl board style <id>,<id> --color red --dash dashed --weight thick --rough yes --json
+hive ctl board connect <from> <to> --label "calls" --route elbow --json
+hive ctl erase --drawing <id> --json                   # or ids, or --mine for all this agent drew
+```
+
+### Change a drawing in place
+
+Print a drawing as flowchart text, edit it, and send it back with `--update`:
+
+```bash
+hive ctl board --drawing <id> --as text > flow.txt     # each box by its key, links, and `keep` for what text cannot say
+hive ctl draw --update <id> --text flow.txt --json     # added, changed and erased say what it did
+```
+
+A box keeps its id when its key, or its id, is in the text. It stays where it is, at the size it is, with any colour or form you gave it; only what the text says of it changes. A new box is placed beside the box it links to. What the text leaves out is erased, except what you locked. The arrows of a new or bigger box are drawn again. Text read and sent back unchanged changes nothing. One `hive ctl board undo` takes the whole update back. `--update` takes JSON too, the same as a new drawing.
+
+### See what you selected and changed
+
+```bash
+hive ctl board --selected --json                       # what you have selected now, in each window
+hive ctl board changes --json                          # where the board's change feed is now: its seq
+hive ctl board changes --since <seq> --json            # each change since, who made it (person, agent, view) and what it changed
+hive ctl board changes --since <seq> --follow --json   # and each one after, as it comes, until Ctrl+C
+```
+
+The feed starts the first time anything asks for it, and keeps the last 500 changes.
+
+The buttons on a selected shape have a command each, so an agent does what you would:
+
+```bash
+hive ctl board lock <ids> --json                       # unlock takes it off
+hive ctl board front <ids> --json                      # or back
+hive ctl board align <ids> --how left --json           # centre, right, top, middle, bottom, spread-across, spread-down
+hive ctl board duplicate <ids> --by 40,0 --json        # copies, 24,24 away if --by is left out
+hive ctl board undo --json                             # take back the agent's own last change; redo puts it back
+```
+
+Undo takes back only what that agent changed through `hive ctl`, newest first, up to 100 steps, while the app runs. Your ⌘Z / Ctrl+Z takes back only what you did.
+
+A shape you locked stays where it is: an agent cannot move, restyle or erase it.
+
+A big drawing is easier to read split into [pages](/pages), one page per part. `hive ctl draw`, `hive ctl board`, `board --check` and `board --png` take `--page <page>` to work inside one.
+
+The full list is in the [CLI reference](/cli) and the [API methods](/api-methods).
+
+## Images on the board
+
+Put a screenshot or a picture in a flow: copy it and press ⌘V / Ctrl+V on the canvas, drop the file on the canvas, or choose **More shapes → Image…** in the drawing tools. It lands at the pointer, inside the frame or page under it, no larger than 640 pixels on its long side. Arrows end on it like on a box; you can move, lock, delete and undo it, and resizing keeps its shape.
+
+The board takes PNG, JPEG, WebP and GIF files of up to 10 MB, not SVG. A picture larger than 4096 pixels on its long side is made smaller when it is added (a GIF then keeps only its first frame). The picture is kept by the computer that hosts the workspace, so people you share the workspace with and your phone see it too.
+
+An agent adds one with:
+
+```bash
+hive ctl draw --image shot.png --alt "The sign-in page" [--at x,y | --near id] [--page p] [--width 400]
+```
+
+In a drawing's JSON a box `{ "id": "page", "image": "shot.png", "alt": "Sign-in page" }` is a picture links can end on. `hive ctl board` lists each picture with its `image` hash and alt text, and `--as text` writes it as `image page <hash>: Sign-in page`. `board --png` and `--svg` show the pictures themselves.
+
+## Point at something with a note
+
+Pick **Pin a note**, click a shape, a tile or the empty canvas, write what you mean, choose an agent and press **Send**. The note stays pinned there and follows what it is on. The agent gets your words with what it points at, and answers:
+
+```bash
+hive ctl notes list --json
+hive ctl notes reply <id> "Added rate limits"
+hive ctl notes done <id> --summary "Added rate limits"
+```
+
+An agent points at things for you the same way, with `hive ctl pin "Is this the right place?" --on <id>`. Click a pin to read it, reply or mark it **Done**.
+
+## Find and remove drawings
+
+The Layers panel lists each drawing under the frame or page it is on, named by its largest text, by what an arrow joins (**API → Database**), or by what it is (**Box**, **3 shapes**). A frame's drawings fold under one **Drawings** heading; click it to open them. Choose **Show: Drawings** beside **By project** to see only drawings (each workspace keeps its own choice), or search to find one by any text in it.
+
+Right-click a drawing's row, or press its ⋮, for **Show**, **Lock** or **Unlock**, and **Remove**. The ⋮ on a **Drawings** heading has **Remove all…**, which asks first. ⌘Z / Ctrl+Z on the canvas puts back what you removed.
+
+## On your phone
+
+The phone page shows drawings and pinned notes: see [Answer agents from your phone](/phone#see-what-is-drawn).
+
+<LastValidated />

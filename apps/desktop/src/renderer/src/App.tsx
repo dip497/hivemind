@@ -1,6 +1,7 @@
 import * as SettingsDialog from "@radix-ui/react-dialog";
 import { ThemePanel } from "./ThemePanel";
 import { QuitDialog } from "./QuitDialog";
+import { LinkAskDialog } from "./link-ask";
 import { WhatsNew, showWhatsNew } from "./WhatsNew";
 import { QuitSetting } from "./quit-setting";
 import { CommitGraphSetting } from "./commit-graph-setting";
@@ -354,6 +355,7 @@ export function App() {
 
         <FolderPathDialog />
         <QuitDialog />
+        <LinkAskDialog />
         <WhatsNew />
         <StatusAnnouncer />
         <RecentProjects

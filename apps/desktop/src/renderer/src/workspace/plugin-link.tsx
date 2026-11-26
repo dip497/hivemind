@@ -24,7 +24,10 @@ import { frameMachine, useMachines } from "../machines/store";
 import { useMachineOwners } from "../machines/owners";
 import { useShown } from "../multiplayer/shown";
 import { useSettings } from "../settings-store";
-import { AGENT_TILE_KIND } from "../tile-kinds";
+import { AGENT_TILE_KIND, isTerminalKind } from "../tile-kinds";
+import { toPtyId } from "@hivemind/workspace-api/tile-id";
+import { endBroadcastOf, keepBroadcastTiles } from "./broadcast-input";
+import { keyIsTheControls } from "../useCanvasShortcuts";
 import { canSpawnKind } from "../tiles/api";
 import type { SharePrepared } from "../../../shared/ipc";
 import { TILE_KEYBOARD, type WorkspaceViewProps } from "./workspace-view";
@@ -104,6 +107,8 @@ export function usePluginLink(o: PluginLinkOptions): PluginLink {
   tilesRef.current = tiles;
   const framesRef = useRef(frames);
   framesRef.current = frames;
+  const frameOfRef = useRef(frameOf);
+  frameOfRef.current = frameOf;
   const layerTilesRef = useRef(layerTiles);
   layerTilesRef.current = layerTiles;
   const repoRef = useRef(model.repoPath);
@@ -156,6 +161,7 @@ export function usePluginLink(o: PluginLinkOptions): PluginLink {
     return send;
   };
 
+  const broadcastOwner = useMemo(() => ({}), []);
   const link = useMemo(() => new CommunityLink({
     pluginId: o.pluginId,
     capabilities: o.capabilities,
@@ -200,6 +206,9 @@ export function usePluginLink(o: PluginLinkOptions): PluginLink {
         return folder && !isRemote(folder) ? folder : null;
       },
       isAgentTile: (tileId) => tilesRef.current.some((t) => t.id === tileId && t.kind === AGENT_TILE_KIND),
+      // As the terminal tile itself writes: its session, else the one its id names.
+      owner: broadcastOwner,
+      ptyOf: (tileId) => { const t = tilesRef.current.find((x) => x.id === tileId); return t && isTerminalKind(t.kind) ? t.session ?? toPtyId(t.id) : null; },
       confirmPrompt,
       issueRoot: () => optsRef.current.issueRoot?.() ?? rootRef.current,
       issueFolder: () => { const d = optsRef.current.issueFolder?.() ?? repoRef.current; return d && !isRemote(d) ? d : null; },
@@ -210,6 +219,15 @@ export function usePluginLink(o: PluginLinkOptions): PluginLink {
       },
       // Through the batch other commands go through, so the editor it opens is there for the reveal after it.
       openFile: (frameId, path, at) => new Promise((resolve) => enqueue(() => resolve(commandsRef.current.openFile(frameId, path, at)))),
+      // A view learns where it opened, never the file's path on this computer.
+      open: async (ask) => {
+        const opened = await commandsRef.current.openThing(ask.thing, { frameId: ask.frameId }).catch((e: unknown) => {
+          const notThere = (e as { code?: unknown })?.code === "NOT_FOUND";
+          throw Object.assign(new Error(notThere ? "nothing is there" : "the app would ask the person first"), { code: notThere ? "BAD_REQUEST" : "UNSUPPORTED" });
+        });
+        return opened.tile ? { to: opened.to, tile: opened.tile } : { to: opened.to };
+      },
+      board: { viewId: o.pluginId, ask: (method, writer, ...params) => window.hive.boardAsk(method, writer, ...params), frames: () => framesRef.current, frameOf: () => frameOfRef.current },
       // A view fills the window's middle, where the widget cards float; a tool's tile and a widget do not.
       ...(o.record.kind === "view" ? { box: () => optsRef.current.root.current } : {}),
     }),
@@ -217,7 +235,9 @@ export function usePluginLink(o: PluginLinkOptions): PluginLink {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }), []);
   linkRef.current = link;
-  useEffect(() => () => { shareAnswer.current?.("cancel"); promptAnswer.current?.(false); link.dispose(); }, [link]);
+  // A terminal closed leaves the group typed into together; the group ends with the view that set it.
+  useEffect(() => keepBroadcastTiles(broadcastOwner, (id) => tiles.some((t) => t.id === id)), [broadcastOwner, tiles]);
+  useEffect(() => () => { shareAnswer.current?.("cancel"); promptAnswer.current?.(false); link.dispose(); endBroadcastOf(broadcastOwner); }, [link, broadcastOwner]);
 
   const send = useCallback((m: HostMessage) => linkRef.current?.send(m), []);
   const box = () => {
@@ -371,7 +391,7 @@ export function usePluginLink(o: PluginLinkOptions): PluginLink {
     if (!bound.length || !ready || o.record.kind !== "view") return;
     const mac = /mac/i.test(navigator.platform);
     const onKey = (e: KeyboardEvent) => {
-      if (inEditable(e.target) || (e.target as Element | null)?.closest?.('[role="dialog"]')) return;
+      if (inEditable(e.target) || keyIsTheControls(e.target, e.key)) return;
       const c = bound.find((x) => chordMatches(x.keys!, e, mac));
       if (!c) return;
       e.preventDefault();

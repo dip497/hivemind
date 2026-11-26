@@ -17,8 +17,8 @@ export type TerminalTileData = {
   /** The name alone, without the task: what a rename edits. */
   given?: string;
   onRename?: (id: string, name: string) => void;
-  onOpenInBrowser?: (url: string) => void;
-  onOpenInEditor?: (path: string) => void;
+  /** Open a link or a path it printed, a relative one read from `cwd` (the shell's folder). */
+  onOpen?: (thing: string, cwd: string) => void;
   onClose?: () => void;
   pinned?: boolean;
   onTogglePin?: (id: string, rect: PinRect) => void;
@@ -61,8 +61,7 @@ export const terminalTile: TilePlugin<TerminalTileData> = {
       name: tileName(h.tileNames, h.agentTitles, t) ?? autoNameFromCmd(cmd),
       given: h.tileNames[t.id] ?? t.label,
       onRename: h.renameTile,
-      onOpenInBrowser: (url: string) => h.openUrlInBrowser(t.id, url),
-      onOpenInEditor: (path: string) => h.openFileFromTile(t.id, path),
+      onOpen: (thing: string, cwd: string, orElse?: string) => h.openThing(t.id, thing, cwd, { person: true, ...(orElse ? { orElse } : {}) }),
       onClose: s.onClose,
       ...s.pin,
       ...(t.sleeping ? { sleeping: true } : {}),

@@ -31,6 +31,7 @@ import { driveCall } from "../drive.js";
 import { appRunning, askHost, controlSocket, HostNotRunning, serveControl } from "../host-control.js";
 import { defaultSocket } from "../pty-client.js";
 import { checkSocketPath, daemonUnsupported, ensureDaemon, selfArgv } from "./daemon.js";
+import { codeSidecarLaunch } from "./code-sidecar.js";
 import { install, uninstall } from "../host-service.js";
 import { viewSdk } from "../view-sdk.js";
 
@@ -135,6 +136,7 @@ const runCmd = defineCommand({
       // A service starts with a bare environment: agents need the login shell's PATH and tokens,
       // and the daemon started below passes on what this process has.
       await applyShellEnvToProcess();
+      (await import("@hivemind/host/code-intel")).setCodeSidecar(codeSidecarLaunch);
       host = await (await import("@hivemind/host/headless")).startHeadlessHost(opts);
     } catch (e) {
       control.server.close();

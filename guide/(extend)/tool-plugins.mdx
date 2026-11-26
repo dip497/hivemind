@@ -192,7 +192,7 @@ Next: [Publish a plugin](/publish-to-hivehub) on HiveHub, or ship it with your w
 |---|---|
 | `tile` | `{ id, kind, name, frameId }` |
 | `hm` | the client a view has (`@hivemind/view-sdk`): frames, tiles, agents' status and events, commands, its settings, and its saved state, kept per tile (`hm.hello.layout`, `hm.setLayout`). Each is held to the permissions the manifest declares. |
-| `host` | what only a tile has: `repoPath`, `cwd`, `run(bin, args, { maxAgeMs, stdin })` (see [Running programs](#running-programs)), `openFile(path)` in the frame's Code tile, `openUrl(url)` in the frame's browser |
+| `host` | what only a tile has: `repoPath`, `cwd`, `run(bin, args, { maxAgeMs, stdin })` (see [Running programs](#running-programs)), `openFile(path, { line, col })` where a click would ([Open links and files](/open-links)): the frame's Code tile at that line, a picture in the Image tile; `openUrl(url)` likewise |
 | `selected` | it has the person's focus |
 
 A tile imports the app's own React and parts from `hm-plugin://host/`: `react.js`,

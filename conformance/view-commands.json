@@ -14,7 +14,8 @@
     "openFolder": "workspace:edit",
     "wakeAgent": "workspace:spawn",
     "sleepAgent": "workspace:spawn",
-    "openHostMenu": null
+    "openHostMenu": null,
+    "broadcastInput": "workspace:broadcast"
   },
   "posted": [
     { "text": "{\"type\":\"command\",\"name\":\"spawnAgent\",\"args\":[null,null,{\"name\":\"Priya's reviewer\"}]}", "asksLock": true, "why": "starts an agent" },

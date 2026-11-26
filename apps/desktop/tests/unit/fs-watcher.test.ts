@@ -11,12 +11,16 @@ import type { Connection } from "@hivemind/workspace-api/server";
 import type { EventMessage } from "@hivemind/workspace-api/protocol";
 import { watchRepo } from "../../src/main/fs-watcher.ts";
 
+// Comments of a repo with no workspace are kept under the config folder: a scratch one here.
+const config = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "hm-fs-watch-config-")));
+process.env.XDG_CONFIG_HOME = config;
 const repo = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "hm-fs-watch-")));
 execSync("git init -q", { cwd: repo });
 const clients: Array<{ close(): void }> = [];
 after(() => {
   for (const c of clients) c.close(); // an open watch keeps the process alive
   fs.rmSync(repo, { recursive: true, force: true });
+  fs.rmSync(config, { recursive: true, force: true });
 });
 
 function client(): Connection & { received: EventMessage[]; close(): void } {
@@ -49,4 +53,15 @@ test("each client watching a repo is sent its changes until its connection close
   await until(() => changedPaths(b).length > 1);
   assert.deepEqual(changedPaths(a), [path.join(repo, "first.txt")]);
   assert.deepEqual(changedPaths(b), [path.join(repo, "first.txt"), path.join(repo, "second.txt")]);
+});
+
+test("a repo with no workspace has its review comments kept in the config folder, and a change there reaches its watchers as its review file", async () => {
+  const { reviewRoot, writeComments } = await import("@hivemind/core/review");
+  const c = client();
+  watchRepo(repo, c);
+  await new Promise((r) => setTimeout(r, 500));
+  const kept = await reviewRoot(repo);
+  assert.ok(kept.startsWith(config));
+  await writeComments(kept, []);
+  await until(() => changedPaths(c).includes(path.join(repo, ".hivemind", "review.json")));
 });

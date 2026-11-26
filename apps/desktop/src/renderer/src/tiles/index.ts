@@ -5,6 +5,7 @@ import { terminalTile } from "./terminal";
 import { changesTile, codeTile, filesTile, searchTile } from "./code";
 import { browserTile } from "./browser";
 import { planReviewTile } from "./plan-review";
+import { imageTile } from "./image";
 import { missingTile } from "./missing";
 
 registerTile(terminalTile);
@@ -14,6 +15,7 @@ registerTile(changesTile);
 registerTile(searchTile);
 registerTile(browserTile);
 registerTile(planReviewTile);
+registerTile(imageTile);
 registerTile(missingTile);
 
 export * from "./api";

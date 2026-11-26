@@ -48,6 +48,14 @@ export function hiveOverIpc(port: IpcPort, workspace: WorkspaceClient): Omit<Hiv
     resolveIssueRoot: (id) => port.invoke("resolveIssueRoot", id),
 
     openPathInApp: local("openPathInApp", invoke("openPathInApp")),
+    openLinkOutside: local("openLinkOutside", invoke("openLinkOutside")),
+    outsideFileStat: local("outsideFileStat", invoke("outsideFileStat")),
+    personOpensOutside: local("personOpensOutside", invoke("personOpensOutside")),
+    outsideTextRead: local("outsideTextRead", invoke("outsideTextRead")),
+    outsideTextWrite: local("outsideTextWrite", invoke("outsideTextWrite")),
+    outsidePicture: local("outsidePicture", invoke("outsidePicture")),
+    openOutsideInApp: local("openOutsideInApp", invoke("openOutsideInApp")),
+    localHostName: local("localHostName", invoke("localHostName")),
 
     diagLog: (line) => port.invoke("diagLog", line),
 

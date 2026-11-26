@@ -20,7 +20,7 @@ import { Button } from "../components/ui/button";
 import { StandardToolbar, ViewMenuAt } from "./standard-toolbar";
 import { AddDialog } from "./add-dialog";
 import { useToolEnabled } from "../tool-availability";
-import { openAppearanceSettings, setBottomInset, setIslandShown, useChromeState } from "./chrome-store";
+import { drawOptionsSlot, openAppearanceSettings, setBottomInset, setDrawOpensUp, setIslandShown, setTopInset, useChromeState } from "./chrome-store";
 import type { ViewChrome } from "./workspace-view";
 import type { BoardChoice } from "../board-objects/board-model";
 
@@ -62,6 +62,17 @@ export function HostChrome({ chrome, toolbar, ...island }: HostChromeProps) {
   // A bottom island says how much it covers, island and gap above it, as its size changes.
   const islandRef = useRef<HTMLDivElement>(null);
   const bottom = showIsland && chrome.island !== "top";
+  useEffect(() => { setDrawOpensUp(bottom); }, [bottom]);
+  useEffect(() => {
+    const el = islandRef.current;
+    if (!showIsland || bottom || !el) { setTopInset(0); return; }
+    const measure = () => setTopInset(Math.ceil(el.getBoundingClientRect().bottom) + 8);
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    window.addEventListener("resize", measure);
+    measure();
+    return () => { ro.disconnect(); window.removeEventListener("resize", measure); setTopInset(0); };
+  }, [showIsland, bottom]);
   useEffect(() => {
     const el = islandRef.current;
     if (!bottom || !el) { setBottomInset(0); return; }
@@ -86,6 +97,8 @@ export function HostChrome({ chrome, toolbar, ...island }: HostChromeProps) {
           <div className="pointer-events-auto">
             <StandardToolbar {...island} canAdd={hasBoard} actions={actions} labels={toolbar?.labels ?? false} onTheme={openAppearanceSettings} compact={chrome.island !== "top"} />
           </div>
+          {/* The chosen drawing tool's options, off the island's open side; not counted in its inset. */}
+          <div ref={drawOptionsSlot} className={`pointer-events-auto absolute left-1/2 -translate-x-1/2 ${bottom ? "bottom-full mb-1.5" : "top-full mt-1.5"}`} />
         </div>
       )}
       {hasActions && !suppressed && chrome.island === "hidden" && (

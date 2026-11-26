@@ -13,12 +13,15 @@ import { speaksFor } from "@hivemind/agent-host/hooks/token";
 import { typeKeys } from "@hivemind/agent-host/keys";
 import { ApiError } from "@hivemind/workspace-api/protocol";
 import { LOOK_MS, PLUGIN_CALL_HOST_MS, type PluginList, type TileLook } from "@hivemind/workspace-api/plugins";
+import type { OpenedThing } from "@hivemind/workspace-api/opener";
 import type { HcpCall } from "./protocol.js";
 import type { TurnTracker } from "./turn-tracker.js";
 import type { OutputRecorder } from "./output-recorder.js";
 import type { Inbox } from "./inbox.js";
+import { Channels, mentionedNames, validChannelName } from "./channels.js";
+import { FileClaims } from "./file-claims.js";
 import { mintId, toPtyId as ptyId, toBareId as bareOf } from "@hivemind/workspace-api/tile-id";
-import type { AgentItem, AgentRead, AgentSessions, SleepAnswer, Skipped, TileOpened, WakeAnswer } from "@hivemind/workspace-api/agents";
+import type { AgentItem, AgentRead, AgentSessions, SleepAnswer, Skipped, StartImage, TileOpened, WakeAnswer } from "@hivemind/workspace-api/agents";
 import { labelOf as labelIn } from "./names.js";
 import { agentById, agentForCmd, agentLaunch, agentOption, cleanName, isSessionId, nextOrdinal, spawnableAgents, workerAgents, type AgentProviderDef, type AgentStatus, type InputKind, type SpawnOptions } from "@hivemind/agents";
 import { hookAnswerOf, hookAsks, printedAnswer, toolAbout, type HookReply } from "@hivemind/agents/node";
@@ -271,7 +274,15 @@ export interface ControlWork {
   pluginCall(plugin: unknown, command: unknown, args: unknown, tile: unknown): Promise<unknown>;
   pluginClose(instance: string, plugin: string | undefined): Promise<{ closed: string; plugin: string; kind: string }>;
   focus(tile: string): Promise<unknown>;
+  /** A window opens a URL or a file as a click in `tile`'s frame would (`opener.open`). */
+  open(thing: string, tile: string | undefined): Promise<OpenedThing>;
   look(tile: string): Promise<TileLook>;
+  /** A window draws an SVG as a PNG, base64. */
+  boardPng(svg: string, width: number, height: number): Promise<{ png: string; width: number; height: number }>;
+  /** A window makes a picture no larger than `most` pixels on its long side. */
+  boardShrinkImage(image: StartImage, most: number): Promise<StartImage>;
+  /** A window brings a rect of the canvas into view, on the workspace at `repo`. */
+  boardShow(repo: string, box: { x: number; y: number; w: number; h: number }): Promise<void>;
   rescan(what: "views" | "agents" | "widgets" | "tools"): Promise<unknown>;
   reloadSettings(): Promise<unknown>;
   hostStatus(): { workspaces: Array<{ repo: string; workspace: string | null }> };
@@ -493,6 +504,9 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
   // exits or it is put to sleep instead.
   const readers = new Map<string, Set<(state: "waiting" | "exited" | "asleep") => void>>();
 
+  const channels = new Channels();
+  const fileClaims = new FileClaims();
+
   // What a session's end drops: its turns, its sends, its waits and its inbox. Wakes anything
   // blocked on it (readers via turns.forget → seq -1; approvals resolved "worker closed") so a
   // crash doesn't hang a parent for the full timeout. Its links to other tiles stay: a restart is
@@ -509,6 +523,8 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
     deps.waits.forget(bare);
     waitTold.delete(bare);
     deps.inbox.forget(bare);
+    channels.forget(bare);
+    fileClaims.forget(bare);
   };
 
   // A tile gone for good: its session's state, and its pipes, spawn wires and parent records.
@@ -799,6 +815,14 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
       throw e instanceof Refused ? new ApiError("FORBIDDEN", e.message) : e;
     });
   const tileOf = (id: unknown): string | undefined => (typeof id === "string" && id ? bareOf(id) : undefined);
+  const who = (tile: string): { tile: string; name: string } => ({ tile, name: label(tile) });
+  const mentionName = (name: string): string => name.trim().toLowerCase().replace(/\s+/g, "-");
+  const channelOf = (given: unknown): string => {
+    const channel = String(given ?? "").replace(/^#/, "").toLowerCase();
+    if (!validChannelName(channel)) throw new ApiError("BAD_REQUEST", "a channel name is 1 to 40 lowercase letters, digits or dashes");
+    return channel;
+  };
+  const pathsOf = (given: unknown): string[] => (Array.isArray(given) ? [...new Set(given.filter((x): x is string => typeof x === "string" && x.length > 0))] : []);
 
   const agentChannel = async (method: string, rawParams: unknown, call: HcpCall): Promise<unknown> => {
     let p = (rawParams ?? {}) as Record<string, unknown>;
@@ -960,8 +984,59 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
         });
       }
 
+      case "agent.follow":
+      case "agent.leave": {
+        const tile = tileOf(p.callerTile);
+        if (!tile) throw new ApiError("BAD_REQUEST", "a channel is followed by an agent: run this in its tile, or pass --tile");
+        const channel = channelOf(p.channel);
+        if (method === "agent.follow") channels.follow(channel, tile);
+        else channels.leave(channel, tile);
+        return { channel, following: channels.followedBy(tile), followers: channels.followersOf(channel).map(who) };
+      }
+
+      case "agent.channels": {
+        const tile = tileOf(p.callerTile);
+        if (!tile) throw new ApiError("BAD_REQUEST", "run this in an agent's tile, or pass --tile");
+        return { following: channels.followedBy(tile).map((channel) => ({ channel, followers: channels.followersOf(channel).map(who) })) };
+      }
+
+      case "agent.post": {
+        const from = tileOf(p.callerTile);
+        if (!from) throw new ApiError("BAD_REQUEST", "a post is an agent's: run this in its tile, or pass --tile");
+        const channel = channelOf(p.channel);
+        const text = String(p.text ?? "").trim();
+        if (!text) throw new ApiError("BAD_REQUEST", "text required");
+        channels.follow(channel, from);
+        const known = new Map(channels.everyone().map((tile) => [mentionName(label(tile)), tile]));
+        const names = mentionedNames(text);
+        const mentioned = new Set(names.map((name) => known.get(name)).filter((tile): tile is string => !!tile && tile !== from));
+        const unknownMentions = names.filter((name) => !known.has(name));
+        const to = [...new Set([...channels.followersOf(channel), ...mentioned])].filter((tile) => tile !== from);
+        for (const tile of to) deps.inbox.post(tile, { from, name: label(from), kind: mentioned.has(tile) ? "mention" : "post", channel, text });
+        return { posted: true, channel, to: to.map(who), mentioned: [...mentioned].map(who), unknownMentions };
+      }
+
+      case "agent.claim": {
+        const tile = tileOf(p.callerTile);
+        if (!tile) throw new ApiError("BAD_REQUEST", "a claim is an agent's: run this in its tile, or pass --tile");
+        const paths = pathsOf(p.paths);
+        if (!paths.length) throw new ApiError("BAD_REQUEST", "at least one path required");
+        const note = typeof p.note === "string" && p.note.trim() ? p.note.trim() : undefined;
+        const r = fileClaims.claim(tile, paths, note);
+        return { claimed: r.claimed, held: r.held.map((c) => ({ ...c, name: label(c.by) })) };
+      }
+
+      case "agent.release": {
+        const tile = tileOf(p.callerTile);
+        if (!tile) throw new ApiError("BAD_REQUEST", "a claim is an agent's: run this in its tile, or pass --tile");
+        return { released: fileClaims.release(tile, pathsOf(p.paths)) };
+      }
+
+      case "agent.claims":
+        return { claims: fileClaims.list().map((c) => ({ ...c, name: label(c.by) })) };
+
       default:
-        throw new ApiError("UNKNOWN_METHOD", `unknown method: ${method} (the agent channel carries agent.reply, agent.report, agent.inbox, agent.await_approval, agent.await_answer and review.open; drive the rest with \`hive ctl\`)`);
+        throw new ApiError("UNKNOWN_METHOD", `unknown method: ${method} (the agent channel carries agent.reply, agent.report, agent.inbox, agent.post, agent.follow, agent.leave, agent.channels, agent.claim, agent.release, agent.claims, agent.await_approval, agent.await_answer and review.open; drive the rest with \`hive ctl\`)`);
     }
   };
 
@@ -1162,6 +1237,14 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
       requireOpen(tile);
       return deps.callRenderer("tile.focus", { tileId: tile }, RENDERER_TIMEOUT);
     },
+    async open(thing, tile) {
+      if (thing.length > 4096) throw new ApiError("BAD_REQUEST", "thing must be at most 4096 characters");
+      if (tile) requireOpen(tile);
+      return await deps.callRenderer("opener.open", { thing, ...(tile ? { tileId: tile } : {}) }, RENDERER_TIMEOUT) as OpenedThing;
+    },
+    boardPng: async (svg, width, height) => await deps.callRenderer("board.png", { svg, width, height }, LOOK_MS + 2_000) as { png: string; width: number; height: number },
+    boardShrinkImage: async (image, most) => await deps.callRenderer("board.shrinkImage", { image, most }, LOOK_MS + 2_000) as StartImage,
+    boardShow: async (repo, box) => { await deps.callRenderer("board.show", { repo, box }, RENDERER_TIMEOUT); },
     // The window brings it into view and waits for it to draw; the picture is cropped to its box.
     async look(tile) {
       if (!deps.captureWindow) throw new ApiError("UNSUPPORTED", "no window shows tiles here: look at a tile in the app");

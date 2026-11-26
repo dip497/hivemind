@@ -33,6 +33,10 @@ export interface TileHostState {
   agentTitles: Record<string, string>;
   openFileInTile: (tileId: string, file: string) => void;
   openUrlInBrowser: (sourceTileId: string, url: string) => void;
+  /** Open a link or a path (`a.ts:4:7`) where a click in the source tile would (`open-thing.ts`),
+   *  a relative path read from `cwd` (a terminal's current folder), else the tile's frame's. Only
+   *  `person` (the person's own click) may ask them or open a path outside the workspace. */
+  openThing: (sourceTileId: string, thing: string, cwd?: string, how?: { person?: boolean; orElse?: string }) => void;
   /** Open a file in the editor of the source tile's frame, starting one there if it has none: a path a
    *  terminal printed, a file picked in Files or in Changes, one a tool tile names. */
   openFileFromTile: (sourceTileId: string, path: string, at?: { line: number; col?: number }) => void;

@@ -628,3 +628,133 @@ test("1.19: code is refused without workspace:code or for a frame not there; wit
   assert.equal(none.link.stats.refused, 1);
   assert.deepEqual(responses(none.sent), []);
 });
+
+test("1.20: a board request is refused without its permission; with it, the ask reaches the host as written and its answer the view", async () => {
+  const asked: unknown[] = [];
+  const services: LinkServices = { board: { call: async (name, ask) => { asked.push([name, ask]); return name === "boardUndo" ? { undone: true } : { erased: ["s1"] }; }, follow: () => () => {}, told: () => [] } };
+  const reader = harness(["workspace:board"], ["t1"], services);
+  reader.link.handle({ type: "ready", v: 1 });
+  reader.link.handle({ type: "request", requestId: 1, name: "boardErase", args: [{ ids: ["s1"] }] });
+  reader.link.handle({ type: "request", requestId: 2, name: "boardUndo", args: [{}] });
+  await settle();
+  // Reading does not let it write: counted against the view, nothing asked of the host.
+  assert.equal(reader.link.stats.refused, 2);
+  assert.deepEqual(asked, []);
+
+  const drawer = harness(["workspace:draw"], ["t1"], services);
+  drawer.link.handle({ type: "ready", v: 1 });
+  drawer.link.handle({ type: "request", requestId: 1, name: "boardErase", args: [{ ids: ["s1"] }] });
+  drawer.link.handle({ type: "request", requestId: 2, name: "boardUndo", args: [{}] });
+  drawer.link.handle({ type: "request", requestId: 3, name: "boardRead", args: [{}] });
+  await settle();
+  const r = responses(drawer.sent);
+  assert.deepEqual(r.map((x) => [x.requestId, x.ok]).sort(), [[1, true], [2, true]]);
+  assert.equal(drawer.link.stats.refused, 1, "drawing does not let it read");
+  assert.deepEqual(r.find((x) => x.requestId === 2)!.result, { undone: true });
+  assert.deepEqual(asked, [["boardErase", { ids: ["s1"] }], ["boardUndo", {}]]);
+});
+
+test("1.20: what changes on the board reaches a follower gathered, one batch per 50 ms, and nothing after it goes", () => {
+  let heard: ((ids: readonly string[]) => void) | null = null;
+  const toldOf: string[][] = [];
+  const services: LinkServices = {
+    board: {
+      call: async () => null,
+      follow: (cb) => { heard = cb; return () => { heard = null; }; },
+      told: (ids) => { toldOf.push([...ids]); return [{ changed: ids.filter((id) => id !== "gone"), removed: ids.filter((id) => id === "gone"), page: "p1" }]; },
+    },
+  };
+  const h = harness(["workspace:board"], ["t1"], services);
+  h.link.handle({ type: "ready", v: 1 });
+  h.link.handle({ type: "subscribeBoard" });
+  assert.ok(heard, "following starts when the view subscribes");
+  for (let i = 0; i < 20; i++) heard!(["s1", "s2"]);
+  heard!(["gone"]);
+  h.tick(49);
+  const boards = () => h.sent.filter((m) => (m as { type: string }).type === "board");
+  assert.deepEqual(boards(), [], "nothing before the batch is due");
+  h.tick(1);
+  assert.deepEqual(boards(), [{ type: "board", changed: ["s1", "s2"], removed: ["gone"], page: "p1" }]);
+  assert.deepEqual(toldOf, [["s1", "s2", "gone"]], "each id is read once a batch");
+  heard!(["s3"]);
+  h.link.dispose();
+  h.tick(100);
+  assert.equal(heard, null, "the view going stops the following");
+  assert.equal(boards().length, 1, "nothing is told after it goes");
+});
+
+test("1.21: open reaches the host for an address or a path inside the frame's folder; one climbing out or for a frame not there never does", async () => {
+  const asked: unknown[] = [];
+  const services: LinkServices = { open: async (a) => { asked.push(a); return { to: "code", tile: "ed1" }; } };
+  const unasked = harness([], ["t1"], services);
+  unasked.link.handle({ type: "ready", v: 1 });
+  unasked.link.handle({ type: "request", requestId: 1, name: "open", args: [{ thing: "https://example.com", frameId: null }] });
+  await settle();
+  assert.deepEqual([asked, unasked.link.stats.refused], [[], 1], "without workspace:open nothing opens");
+
+  const g = harness(["workspace:open"], ["t1"], services);
+  g.link.handle({ type: "ready", v: 1 });
+  g.link.handle({ type: "request", requestId: 1, name: "open", args: [{ thing: "src/cart.ts:3:2", frameId: "f1" }] });
+  g.link.handle({ type: "request", requestId: 2, name: "open", args: [{ thing: "https://example.com", frameId: null }] });
+  g.link.handle({ type: "request", requestId: 3, name: "open", args: [{ thing: "../../etc/passwd", frameId: "f1" }] });
+  g.link.handle({ type: "request", requestId: 4, name: "open", args: [{ thing: "/etc/passwd", frameId: "f1" }] });
+  g.link.handle({ type: "request", requestId: 5, name: "open", args: [{ thing: "a.ts", frameId: "nope" }] });
+  await settle();
+  assert.deepEqual(asked, [{ thing: "src/cart.ts:3:2", frameId: "f1" }, { thing: "https://example.com", frameId: null }]);
+  assert.deepEqual(responses(g.sent).find((x) => x.requestId === 1)!.result, { to: "code", tile: "ed1" });
+
+  const busy = harness(["workspace:open"], ["t1"], services);
+  busy.link.handle({ type: "ready", v: 1 });
+  for (let i = 1; i <= 7; i++) busy.link.handle({ type: "request", requestId: i, name: "open", args: [{ thing: "https://example.com", frameId: null }] });
+  await settle();
+  assert.deepEqual(responses(busy.sent).sort((a, b) => a.requestId - b.requestId).map((x) => x.ok), [true, true, true, true, true, false, false], "at most 5 opens in 10 s");
+  busy.tick(10_000);
+  busy.link.handle({ type: "request", requestId: 8, name: "open", args: [{ thing: "https://example.com", frameId: null }] });
+  await settle();
+  assert.equal(responses(busy.sent).find((x) => x.requestId === 8)?.ok, true, "and more once 10 s have gone");
+
+  const none = harness(["workspace:open"], ["t1"], {});
+  none.link.handle({ type: "ready", v: 1 });
+  none.link.handle({ type: "request", requestId: 1, name: "open", args: [{ thing: "a.ts", frameId: null }] });
+  await settle();
+  assert.equal(none.link.stats.refused, 1, "a host that opens nothing does not say `open`, and refuses it");
+});
+
+test("1.21: a group of terminals is set through the host's broadcast, told back to the view, and ended when the view goes", () => {
+  let group: readonly string[] = [];
+  const followers = new Set<(ids: readonly string[]) => void>();
+  const broadcast = {
+    set: (ids: string[]) => { group = ids.length >= 2 ? ids : []; for (const f of followers) f(group); },
+    follow: (cb: (ids: readonly string[]) => void) => { followers.add(cb); cb(group); return () => { followers.delete(cb); }; },
+  };
+  const h = harness(["workspace:broadcast"], ["t1", "t2"], { broadcast });
+  h.link.handle({ type: "ready", v: 1 });
+  h.link.send({ type: "hello", v: 1, pluginId: "p", capabilities: ["workspace:broadcast"], theme: { colors: {} }, layout: null, viewport: { w: 1, h: 1 }, visible: true });
+  h.link.handle({ type: "command", name: "broadcastInput", args: [["t1", "t2"]] });
+  assert.deepEqual(group, ["t1", "t2"]);
+  assert.deepEqual(h.sent.filter((m) => (m as { type: string }).type === "broadcast"), [{ type: "broadcast", tileIds: ["t1", "t2"] }]);
+  // Escape in a terminal ends it at the host: the view is told.
+  broadcast.set([]);
+  assert.deepEqual(h.sent.filter((m) => (m as { type: string }).type === "broadcast").at(-1), { type: "broadcast", tileIds: [] });
+  h.link.handle({ type: "command", name: "broadcastInput", args: [["t1", "t2"]] });
+  h.link.dispose();
+  assert.deepEqual(group, [], "a group the view set does not outlive it");
+});
+
+test("1.21: without the host's broadcast the command is refused and nothing is typed anywhere", () => {
+  const h = harness(["workspace:broadcast"], ["t1", "t2"], {});
+  h.link.handle({ type: "ready", v: 1 });
+  h.link.handle({ type: "command", name: "broadcastInput", args: [["t1", "t2"]] });
+  assert.equal(h.link.stats.refused, 1);
+});
+
+test("1.21: a status says when the person last looked at the tile, and again when that changes", () => {
+  let tell: (at: number | null) => void = () => {};
+  const h = harness([], ["t1"], { seenOf: (_id, cb) => { tell = cb; cb(100); return () => {}; } });
+  h.link.handle({ type: "ready", v: 1 });
+  h.link.handle({ type: "subscribeStatus", tileId: "t1" });
+  h.statusCbs.get("t1")!("idle", {});
+  tell(250);
+  const seen = h.sent.filter((m) => (m as { type: string }).type === "status").map((m) => (m as { seen?: number }).seen);
+  assert.deepEqual(seen.slice(-2), [100, 250]);
+});

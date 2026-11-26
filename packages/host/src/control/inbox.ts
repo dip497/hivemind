@@ -27,6 +27,7 @@ export interface Posted {
   name: string;
   kind: InboxKind;
   turn?: number;
+  channel?: string;
   text: Said;
 }
 

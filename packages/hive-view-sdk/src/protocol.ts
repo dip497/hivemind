@@ -29,7 +29,7 @@ export const CLIENT_VALUES_UNTIL_KNOWN = {
 /** `workspace:edit` (protocol 1.2): rename a tile, bind a frame to a folder.
  *  `workspace:prompt` (1.4): give an agent an instruction the view wrote; the user confirms each one.
  *  `workspace:sessions` (1.4): see past agent sessions in a frame's folder and continue one. */
-export const VIEW_PERMISSIONS = ["workspace:spawn", "workspace:close", "workspace:edit", "workspace:prompt", "workspace:sessions", /** 1.8 */ "workspace:widgets", /** 1.9 */ "workspace:issues", /** 1.19 */ "workspace:code"] as const;
+export const VIEW_PERMISSIONS = ["workspace:spawn", "workspace:close", "workspace:edit", "workspace:prompt", "workspace:sessions", /** 1.8 */ "workspace:widgets", /** 1.9 */ "workspace:issues", /** 1.19 */ "workspace:code", /** 1.20 */ "workspace:board", "workspace:draw", /** 1.21 */ "workspace:broadcast", "workspace:open"] as const;
 export type ViewPermission = (typeof VIEW_PERMISSIONS)[number];
 
 /** What each permission lets a plugin do, in the words shown before it is installed (the app's
@@ -44,6 +44,10 @@ const PERMISSION_WORDS: Record<ViewPermission, string> = {
   "workspace:widgets": "press the workspace's widgets, as you would (what a widget does then, it does as you)",
   "workspace:issues": "read, create, change and delete the workspace's issues",
   "workspace:code": "search the workspace's files, and read the lines found",
+  "workspace:board": "see what is drawn on the workspace's board, and follow it as it changes",
+  "workspace:draw": "draw on the workspace's board, and move, restyle and erase what is drawn there",
+  "workspace:broadcast": "send what you type in one terminal to others too, while you have it on",
+  "workspace:open": "open web pages in your browser or a Browser tile, and the workspace's files in the Code tile",
 };
 /** The permissions a plugin asks for, said as what they let it do; a name not known here is left out. */
 export const permissionWords = (perms: readonly string[]): string[] =>
@@ -88,6 +92,8 @@ export interface ViewFrame {
   /** 1.2: the git branch of a worktree frame. */
   branch?: string;
   folder?: ViewFrameFolder;
+  /** 1.21: it is a page: a stop on the path a window shows while inside it. */
+  page?: true;
 }
 export interface ViewTile {
   id: string; frameId: string | null; kind: string; name: string;
@@ -127,6 +133,8 @@ export interface LineRect extends ViewRect {
 export interface CommandKeys { keys: string; command: string }
 /** The roundest a surface's corners may be. */
 export const MAX_SURFACE_RADIUS = 24;
+/** 1.21: the most terminals one `broadcastInput` group holds. */
+export const BROADCAST_MAX = 12;
 /** The colours every host sends a view in `ViewTheme.colors`, each `#rrggbb`, which
  *  `applyThemeVars` sets as `--hm-color-<id>`. Frozen: a host may add one (and a view gives it a
  *  fallback), but removing or renaming one is a **Breaking:** change to the protocol. */
@@ -162,7 +170,7 @@ export interface ViewTheme {
 
 /** What a host implements beyond 1.2, sent in `hello.features`. A host that predates 1.3 sends
  *  none, so read the field (`hm.hello.features ?? []`), never probe for a client method. */
-export const VIEW_FEATURES = ["since", "events", "activity", "presence", "history", "share", "agentStatus", "agents", "sessions", "prompt", /** 1.5 */ "participants", /** 1.6 */ "surfaces", /** 1.7 */ "settings", /** 1.8 */ "widgets", /** 1.9 */ "issues", /** 1.10 */ "invoke", /** 1.14 */ "sleep", /** 1.15 */ "hostMenu", /** 1.16 */ "tokens", /** 1.17 */ "fontFaces", "lineSlots", "ownFiles", /** 1.18 */ "widgetBand", /** 1.19 */ "code"] as const;
+export const VIEW_FEATURES = ["since", "events", "activity", "presence", "history", "share", "agentStatus", "agents", "sessions", "prompt", /** 1.5 */ "participants", /** 1.6 */ "surfaces", /** 1.7 */ "settings", /** 1.8 */ "widgets", /** 1.9 */ "issues", /** 1.10 */ "invoke", /** 1.14 */ "sleep", /** 1.15 */ "hostMenu", /** 1.16 */ "tokens", /** 1.17 */ "fontFaces", "lineSlots", "ownFiles", /** 1.18 */ "widgetBand", /** 1.19 */ "code", /** 1.20 */ "board", /** 1.21 */ "broadcast", "open"] as const;
 export type ViewFeature = (typeof VIEW_FEATURES)[number];
 
 export type JsonValue = null | boolean | number | string | JsonValue[] | { [k: string]: JsonValue };
@@ -336,6 +344,119 @@ export interface ViewWidget {
   placement: "board" | "screen";
 }
 
+// ── protocol 1.20 (additive) ────────────────────────────────────────────────
+// `board` in `hello.features`. With `workspace:board` a view reads and pictures what is drawn on the
+// workspace's board, all of it or what is inside a page or frame, and follows it (`subscribeBoard`, then `board` messages of the
+// ids that changed). With `workspace:draw` it draws, changes and erases as `hive ctl draw` does, and
+// takes back its own writes (`boardUndo`); the person's undo never takes them back. Each answer is
+// the workspace API's `board.*` answer; these types say the same shapes.
+
+export type ViewShapeColor = "ink" | "blue" | "green" | "yellow" | "orange" | "red" | "purple";
+export type ViewShapeDash = "solid" | "dashed" | "dotted";
+export type ViewShapeWeight = "thin" | "medium" | "thick";
+export type ViewShapeForm = "rect" | "ellipse" | "diamond" | "text" | "line" | "pen" | "triangle" | "hexagon" | "cylinder" | "cloud" | "star" | "parallelogram" | "image";
+export type ViewBoxForm = Exclude<ViewShapeForm, "text" | "line" | "pen" | "image">;
+export type ViewTextSize = "small" | "medium" | "large";
+export type ViewArrowRoute = "straight" | "elbow" | "curve";
+export type ViewAlignHow = "left" | "centre" | "right" | "top" | "middle" | "bottom" | "spread-across" | "spread-down";
+export interface ViewBox { x: number; y: number; w: number; h: number }
+
+/** A box placed for the view, by an `id` of its own that `links` name. */
+export interface ViewDrawnBox { id: string; text: string; form?: ViewBoxForm; color?: ViewShapeColor; filled?: boolean; dash?: ViewShapeDash; weight?: ViewShapeWeight; rough?: boolean }
+export interface ViewDrawnLink { from: string; to: string; label?: string; route?: ViewArrowRoute; dash?: ViewShapeDash; weight?: ViewShapeWeight; tail?: boolean }
+/** A shape the view places itself, relative to the drawing's corner; `points` for a line or the pen. */
+export interface ViewDrawnShape {
+  form: ViewShapeForm; x?: number; y?: number; w?: number; h?: number; text?: string; size?: ViewTextSize;
+  points?: Array<[number, number]>; head?: boolean; filled?: boolean; color?: ViewShapeColor; dash?: ViewShapeDash; weight?: ViewShapeWeight; rough?: boolean; marker?: boolean;
+}
+/** `boardDraw`: boxes and links laid out for the view, shapes it places itself, or both. */
+export interface ViewBoardDrawAsk {
+  title?: string;
+  direction?: "right" | "down";
+  boxes?: ViewDrawnBox[];
+  links?: ViewDrawnLink[];
+  shapes?: ViewDrawnShape[];
+  at?: { x: number; y: number };
+  near?: string;
+  frame?: string;
+  /** A drawing to change in place: boxes found by key or id keep their place, the rest is erased. */
+  update?: string;
+  keep?: string[];
+  /** The page or frame it goes inside; null: in no page; left out: where it is drawn near. */
+  page?: string | null;
+}
+export interface ViewDrawProblem { kind: "overlap" | "text-overflow" | "loose-arrow" | "off-frame" | "too-small"; ids: string[]; say: string; fix: string }
+export interface ViewBoardDrawn {
+  drawing: string;
+  objects: string[];
+  boxes: Record<string, string>;
+  box: ViewBox;
+  frame?: string;
+  overlaps: Array<{ shape: string; with: string }>;
+  problems: ViewDrawProblem[];
+}
+export interface ViewBoardReadAsk { ids?: string[]; drawing?: string; limit?: number; check?: boolean; page?: string | null }
+export interface ViewBoardItem { id: string; kind: string; box?: ViewBox; form?: string; widget?: string; text?: string; by?: string; drawing?: string; frame?: string; from?: string; to?: string }
+export interface ViewArrowEnd { id: string; side: "top" | "right" | "bottom" | "left" }
+interface ViewDrawnFields { id: string; frame?: string; z?: number; color?: string; by?: string; drawing?: string; dash?: ViewShapeDash; weight?: ViewShapeWeight }
+export interface ViewShape extends ViewDrawnFields {
+  kind: "shape"; form: ViewShapeForm; x: number; y: number; w: number; h: number; text?: string; size?: ViewTextSize;
+  points?: Array<[number, number]>; head?: boolean; filled?: boolean; rough?: boolean; locked?: boolean; marker?: boolean;
+  /** A picture (`form: "image"`): its hash, type and size, and what it shows in words. */
+  image?: { hash: string; type: string; width: number; height: number }; alt?: string;
+}
+export interface ViewArrow extends ViewDrawnFields {
+  kind: "arrow"; from: ViewArrowEnd; to: ViewArrowEnd; label: string; route?: ViewArrowRoute; fromAt?: [number, number]; toAt?: [number, number]; tail?: boolean;
+}
+export interface ViewBoardReading {
+  frames: Array<{ id: string; title: string; box: ViewBox; page?: true }>;
+  tiles: Array<{ id: string; name: string; kind: string; box: ViewBox; frame?: string }>;
+  drawings: Array<{ id: string; title: string; by?: string; box: ViewBox; objects: number }>;
+  objects: ViewBoardItem[];
+  full?: Array<ViewShape | ViewArrow>;
+  more?: number;
+  problems?: ViewDrawProblem[];
+}
+/** `boardPicture`: an SVG of what is drawn on a page, or of one drawing. */
+export interface ViewBoardPictureAsk { page?: string | null; drawing?: string; theme?: "dark" | "light" }
+export interface ViewBoardPicture { width: number; height: number; svg: string }
+export interface ViewBoardChangeAsk {
+  ids: string[];
+  to?: { x: number; y: number };
+  color?: ViewShapeColor;
+  dash?: ViewShapeDash;
+  weight?: ViewShapeWeight;
+  rough?: boolean;
+  locked?: boolean;
+  stack?: "front" | "back";
+  align?: ViewAlignHow;
+  duplicate?: { dx: number; dy: number };
+  page?: string | null;
+}
+export interface ViewBoardChanged { changed: string[]; locked: string[]; copies?: string[] }
+/** By ids, a drawing, or all an agent drew (its tile). */
+export interface ViewBoardEraseAsk { ids?: string[]; drawing?: string; by?: string }
+/** What a `board` message says: ids of shapes, arrows and widgets that changed or went. `page` is
+ *  the nearest page the changed ones are in (absent: none); a removed id's page is not known. */
+export interface ViewBoardChange { changed: string[]; removed: string[]; page?: string }
+
+export const BOARD_REQUESTS = ["boardRead", "boardPicture", "boardDraw", "boardChange", "boardErase", "boardUndo"] as const;
+export type BoardRequest = (typeof BOARD_REQUESTS)[number];
+/** The permission each board request needs. */
+export const BOARD_REQUEST_PERMISSION: Record<BoardRequest, ViewPermission> = {
+  boardRead: "workspace:board", boardPicture: "workspace:board",
+  boardDraw: "workspace:draw", boardChange: "workspace:draw", boardErase: "workspace:draw", boardUndo: "workspace:draw",
+};
+/** The largest board ask, as JSON. */
+export const BOARD_ASK_MAX = 512 * 1024;
+/** The most ids one `board` message names; more come in the next. */
+export const BOARD_CHANGE_IDS_MAX = 5000;
+/** What each board request is answered with. */
+export interface BoardAnswers {
+  boardRead: ViewBoardReading; boardPicture: ViewBoardPicture; boardDraw: ViewBoardDrawn;
+  boardChange: ViewBoardChanged; boardErase: { erased: string[] }; boardUndo: { undone: boolean };
+}
+
 // ── protocol 1.19 (additive) ────────────────────────────────────────────────
 // `code` in `hello.features`, permission `workspace:code`: find a frame's files by a fuzzy name and
 // its lines by their text (fff on the host, else git), tell the host which file was picked so it
@@ -366,6 +487,19 @@ export const CODE_CALLS = ["findFiles", "grep", "picked", "open"] as const;
 export const CODE_QUERY_MAX = 1000;
 export const CODE_PATH_MAX = 1024;
 export const FIND_FILES_MAX = 500;
+
+// ── protocol 1.21 (additive) ────────────────────────────────────────────────
+// `open` in `hello.features`, permission `workspace:open`, at most `OPEN_RATE` a view: open a web address or a file of a frame's folder where
+// a person's click would, by the person's link settings (a Browser tile or the system's browser, the
+// Code tile at a line, the Image tile). A path is inside the frame's folder, with `:line:col`.
+
+/** One `open` request; result `ViewOpened`. Refused `UNSUPPORTED` where the app would ask the person. */
+export interface ViewOpenAsk { thing: string; frameId: string | null }
+export interface ViewOpened { to: "browser-tile" | "system-browser" | "code" | "image" | "os"; tile?: string }
+/** The longest `thing`. */
+export const OPEN_THING_MAX = 4096;
+/** The most `open` requests one view makes in `ms`; more are refused `BUSY`. */
+export const OPEN_RATE = { count: 5, ms: 10_000 };
 
 // ── protocol 1.18 (additive) ────────────────────────────────────────────────
 // `widgetBand` in `hello.features`: the app floats widget cards over the view, stacked down the
@@ -445,7 +579,10 @@ export type HostMessage =
   | { type: "selection"; tileId: string | null; frameId: string | null; fresh: boolean }
   /** 1.3: `since` is when the tile entered this status; `exact: false` means the host found it
    *  already there, so `since` is a lower bound. */
-  | { type: "status"; tileId: string; status: ViewStatus; since?: number; exact?: boolean; /** 1.4, agent tiles */ agent?: ViewAgentStatus }
+  | { type: "status"; tileId: string; status: ViewStatus; since?: number; exact?: boolean; /** 1.4, agent tiles */ agent?: ViewAgentStatus;
+    /** 1.21: when this person last looked at the tile (ms), as the app's Layers keeps it; null: not
+     *  yet. Sent again when it changes. A host that does not keep it leaves it out. */
+    seen?: number | null }
   /** 1.3, after `subscribeEvents`: batched, oldest first. `replay` = from the host's buffer. */
   | { type: "events"; events: ViewEvent[]; replay?: boolean }
   /** 1.3, after `watchActivity`: only tiles whose level changed, at most 4 per second. */
@@ -476,7 +613,12 @@ export type HostMessage =
   | { type: "invoke"; invokeId: number; name: string; args: unknown }
   /** 1.18 (feature `widgetBand`): how much of the view the app's widget cards take, from its widget
    *  edge (`ViewWidgetBand`). Sent right after `hello`, then on every change. */
-  | { type: "widgetBand"; edge: "left" | "right"; width: number };
+  | { type: "widgetBand"; edge: "left" | "right"; width: number }
+  /** 1.20, after `subscribeBoard`: what changed on the board, at most one batch a frame. */
+  | ({ type: "board" } & ViewBoardChange)
+  /** 1.21 (feature `broadcast`): the terminals typing goes to together now; `[]` once it stopped
+   *  (Escape in one of them, the view's `[]`, or all but one closed). */
+  | { type: "broadcast"; tileIds: string[] };
 
 // ── plugin → host ───────────────────────────────────────────────────────────
 
@@ -517,6 +659,10 @@ export interface ViewCommands {
    *  widget or a tool; `appearance` the theme panel; `settings` the app's Settings. The person
    *  chooses in it: nothing changes until they do. */
   openHostMenu: (menu: HostMenu, at?: ViewRect) => void;
+  /** 1.21 (feature `broadcast`), permission `workspace:broadcast`: what the person types in any of
+   *  these terminals goes to all of them, until Escape in one of them or `[]`. The host marks each
+   *  one and says the group in `broadcast`. */
+  broadcastInput: (tileIds: string[]) => void;
 }
 /** The app menus a view may open (`commands.openHostMenu`, 1.15). */
 export const HOST_MENUS = ["views", "add", "appearance", "settings"] as const;
@@ -527,7 +673,7 @@ export const COMMAND_PERMISSION: Record<CommandName, ViewPermission | null> = {
   closeTile: "workspace:close",
   spawnTile: "workspace:spawn", spawnVis: "workspace:spawn", spawnClaude: "workspace:spawn", addFrame: "workspace:spawn",
   spawnAgent: "workspace:spawn", renameTile: "workspace:edit", openFolder: "workspace:edit",
-  wakeAgent: "workspace:spawn", sleepAgent: "workspace:spawn", openHostMenu: null,
+  wakeAgent: "workspace:spawn", sleepAgent: "workspace:spawn", openHostMenu: null, broadcastInput: "workspace:broadcast",
 };
 
 export type PluginMessage =
@@ -565,6 +711,9 @@ export type PluginMessage =
   /** 1.9 */
   | { type: "subscribeIssues" }
   | { type: "unsubscribeIssues" }
+  /** 1.20, `workspace:board` */
+  | { type: "subscribeBoard" }
+  | { type: "unsubscribeBoard" }
   /** 1.10: the answer to an `invoke`. */
   | { type: "invokeResult"; invokeId: number; ok: true; result: unknown }
   | { type: "invokeResult"; invokeId: number; ok: false; error: string }
@@ -583,7 +732,16 @@ export type PluginMessage =
   /** 1.9: one of the workspace's issue methods; a writing one needs `workspace:issues`. Result: what it returns. */
   | { type: "request"; requestId: number; name: "issue"; args: [{ call: IssueCall; args: unknown[] }] }
   /** 1.19, `workspace:code`: find, grep, picked or open in a frame's folder. */
-  | { type: "request"; requestId: number; name: "code"; args: [CodeCall] };
+  | { type: "request"; requestId: number; name: "code"; args: [CodeCall] }
+  /** 1.21 (feature `open`): open an address or a frame's file where a click would; result `ViewOpened`. */
+  | { type: "request"; requestId: number; name: "open"; args: [ViewOpenAsk] }
+  /** 1.20: the workspace API's `board.*` for the view's workspace; result `BoardAnswers[name]`. */
+  | { type: "request"; requestId: number; name: "boardRead"; args: [ViewBoardReadAsk] }
+  | { type: "request"; requestId: number; name: "boardPicture"; args: [ViewBoardPictureAsk] }
+  | { type: "request"; requestId: number; name: "boardDraw"; args: [ViewBoardDrawAsk] }
+  | { type: "request"; requestId: number; name: "boardChange"; args: [ViewBoardChangeAsk] }
+  | { type: "request"; requestId: number; name: "boardErase"; args: [ViewBoardEraseAsk] }
+  | { type: "request"; requestId: number; name: "boardUndo"; args: [Record<string, never>] };
 
 export const MAX_SURFACE_RECTS = 16;
 /** 1.17: the most line slots a view asks for at once, and the least height of one. */
@@ -713,6 +871,7 @@ const COMMAND_ARGS: Record<CommandName, (args: unknown[]) => boolean> = {
   wakeAgent: (a) => a.length === 1 && isId(a[0]),
   sleepAgent: (a) => a.length === 1 && isId(a[0]),
   openHostMenu: (a) => (a.length === 1 || (a.length === 2 && isRect(a[1]))) && (HOST_MENUS as readonly unknown[]).includes(a[0]),
+  broadcastInput: (a) => a.length === 1 && Array.isArray(a[0]) && a[0].length <= BROADCAST_MAX && a[0].every(isId),
 };
 
 /** Host side: validate a message received from a plugin. */
@@ -797,6 +956,8 @@ export function parsePluginMessage(raw: unknown): ParseResult<PluginMessage> {
     case "unsubscribeWidgets":
     case "subscribeIssues":
     case "unsubscribeIssues":
+    case "subscribeBoard":
+    case "unsubscribeBoard":
       return { ok: true, msg: { type: raw.type } };
     case "pressWidget": {
       if (!isId(raw.id)) return bad("id must be a widget id");
@@ -856,6 +1017,19 @@ export function parsePluginMessage(raw: unknown): ParseResult<PluginMessage> {
         if (typeof c === "string") return bad(c);
         return { ok: true, msg: { type: "request", requestId: raw.requestId, name: "code", args: [c] } };
       }
+      if (raw.name === "open") {
+        const t = o.thing;
+        if (typeof t !== "string" || !t || t.length > OPEN_THING_MAX || t.includes("\0")) return bad(`thing must be 1 to ${OPEN_THING_MAX} characters`);
+        const address = /^[a-z][a-z0-9+.-]*:/i.test(t) && !/^[^:/]+:\d+(?::\d+)?$/.test(t);
+        if (!address && !isInnerPath(t.replace(/:\d+(?::\d+)?$/, ""))) return bad("thing must be an address, or a path inside the frame's folder");
+        if (!isIdOrNull(o.frameId)) return bad("frameId must be an id or null");
+        return { ok: true, msg: { type: "request", requestId: raw.requestId, name: "open", args: [{ thing: t, frameId: o.frameId }] } };
+      }
+      if ((BOARD_REQUESTS as readonly unknown[]).includes(raw.name)) {
+        const why = boardAskProblem(raw.name as BoardRequest, o);
+        if (why) return bad(why);
+        return { ok: true, msg: { type: "request", requestId: raw.requestId, name: raw.name, args: [o] } as PluginMessage };
+      }
       return bad(`unknown request ${quoted(raw.name)}`);
     }
     default:
@@ -876,7 +1050,7 @@ export interface HostScope {
 /** The feature a subscription needs. */
 const SUBSCRIPTION_FEATURE: Partial<Record<PluginMessage["type"], ViewFeature>> = {
   subscribeEvents: "events", watchActivity: "activity", subscribePresence: "presence", subscribeParticipants: "participants",
-  subscribeWidgets: "widgets", pressWidget: "widgets", subscribeIssues: "issues",
+  subscribeWidgets: "widgets", pressWidget: "widgets", subscribeIssues: "issues", subscribeBoard: "board",
 };
 
 /** Host side: why a well-formed message from a view is refused, or null when it is taken. A command
@@ -897,17 +1071,30 @@ function refused(m: PluginMessage, host: HostScope): string | null {
     case "pressWidget":
       return host.capabilities.includes("workspace:widgets") ? null : 'pressWidget needs permission "workspace:widgets"';
     case "request":
+      if (m.name === "open") {
+        if (!host.features.includes("open")) return "open: not supported";
+        if (!host.capabilities.includes("workspace:open")) return 'open needs permission "workspace:open"';
+        const f = m.args[0].frameId;
+        return f === null || host.hasFrame(f) ? null : `open: unknown frame ${f}`;
+      }
       if (m.name === "code") {
         if (!host.features.includes("code")) return "code: not supported";
         if (!host.capabilities.includes("workspace:code")) return `code ${m.args[0].call} needs permission "workspace:code"`;
         const f = m.args[0].frameId;
         return f === null || host.hasFrame(f) ? null : `code: unknown frame ${f}`;
       }
+      if (Object.hasOwn(BOARD_REQUEST_PERMISSION, m.name)) {
+        const need = BOARD_REQUEST_PERMISSION[m.name as BoardRequest];
+        if (!host.features.includes("board")) return `${m.name}: not supported`;
+        return host.capabilities.includes(need) ? null : `${m.name} needs permission "${need}"`;
+      }
       if (m.name !== "issue") return null;
       if (!host.features.includes("issues")) return "issue: not supported";
       return host.capabilities.includes("workspace:issues") ? null : `issue ${m.args[0].call} needs permission "workspace:issues"`;
     case "subscribeIssues":
       return host.capabilities.includes("workspace:issues") ? null : 'subscribeIssues needs permission "workspace:issues"';
+    case "subscribeBoard":
+      return host.capabilities.includes("workspace:board") ? null : 'subscribeBoard needs permission "workspace:board"';
     case "command": {
       const need = COMMAND_PERMISSION[m.name];
       if (need && !host.capabilities.includes(need)) return `${m.name} needs permission "${need}"`;
@@ -917,6 +1104,9 @@ function refused(m: PluginMessage, host: HostScope): string | null {
       switch (m.name) {
         case "selectTile": case "focusTile": case "closeTile": case "renameTile": case "wakeAgent": case "sleepAgent": return tile(a0);
         case "selectFrame": case "openFolder": return frame(a0);
+        case "broadcastInput":
+          if (!host.features.includes("broadcast")) return "broadcastInput: not supported";
+          return (a0 as string[]).every((id) => host.hasTile(id)) ? null : "broadcastInput: unknown tile";
         case "spawnTile": return frame(a1);
         case "spawnAgent": {
           const opts = a2 as { prompt?: string; resume?: string } | undefined;
@@ -953,6 +1143,7 @@ export function parseHostMessage(raw: unknown): ParseResult<HostMessage> {
     case "status":
       if (raw.since !== undefined && !isNum(raw.since)) return bad("since must be a number");
       if (raw.exact !== undefined && typeof raw.exact !== "boolean") return bad("exact must be a boolean");
+      if (raw.seen !== undefined && raw.seen !== null && !isNum(raw.seen)) return bad("seen must be a number or null");
       if (raw.agent !== undefined && !(isObj(raw.agent) && AGENT_STATES.includes(raw.agent.state as ViewAgentState) && isNum(raw.agent.subagents))) return bad("agent must be an agent status");
       return isId(raw.tileId) && STATUSES.includes(raw.status as ViewStatus) ? { ok: true, msg: raw as unknown as HostMessage } : bad("bad fields");
     case "events":
@@ -995,6 +1186,12 @@ export function parseHostMessage(raw: unknown): ParseResult<HostMessage> {
     case "widgetBand":
       return (raw.edge === "left" || raw.edge === "right") && isNum(raw.width) && raw.width >= 0
         ? { ok: true, msg: { type: "widgetBand", edge: raw.edge, width: raw.width } } : bad("edge must be \"left\" or \"right\" and width a number from 0");
+    case "broadcast":
+      return Array.isArray(raw.tileIds) && raw.tileIds.every(isId) ? { ok: true, msg: { type: "broadcast", tileIds: raw.tileIds as string[] } } : bad("tileIds must be an array of ids");
+    case "board":
+      return Array.isArray(raw.changed) && raw.changed.every(isId) && Array.isArray(raw.removed) && raw.removed.every(isId) && (raw.page === undefined || isId(raw.page))
+        ? { ok: true, msg: { type: "board", changed: raw.changed as string[], removed: raw.removed as string[], ...(raw.page !== undefined ? { page: raw.page as string } : {}) } }
+        : bad("changed and removed must be arrays of ids, and page an id");
     default:
       return { ok: false, reason: `unknown message type ${quoted(raw.type)}` };
   }
@@ -1055,4 +1252,18 @@ function codeCall(o: Record<string, unknown>): CodeCall | string {
       return { call: "open", frameId, file: o.file, ...(o.line !== undefined ? { line: o.line as number } : {}), ...(o.col !== undefined ? { col: o.col as number } : {}) };
     }
   }
+}
+
+/** Why a board request's ask is refused, or null. The host checks each field as `hive ctl` is checked;
+ *  here only its size, its page and its ids. */
+function boardAskProblem(name: BoardRequest, o: Record<string, unknown>): string | null {
+  if (name === "boardUndo") return Object.keys(o).length === 0 ? null : "boardUndo takes no options";
+  let size = Infinity;
+  try { size = JSON.stringify(o).length; } catch { /* not JSON */ }
+  if (size > BOARD_ASK_MAX) return `the ask must be JSON of at most ${BOARD_ASK_MAX} bytes`;
+  if (o.page !== undefined && !isIdOrNull(o.page)) return "page must be a page's id or null";
+  if (o.ids !== undefined && !(Array.isArray(o.ids) && o.ids.length <= BOARD_CHANGE_IDS_MAX && o.ids.every(isId))) return `ids must be at most ${BOARD_CHANGE_IDS_MAX} ids`;
+  if (name === "boardChange" && o.ids === undefined) return "ids must name what to change";
+  if (o.drawing !== undefined && !isId(o.drawing)) return "drawing must be a drawing's id";
+  return null;
 }

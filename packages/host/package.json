@@ -14,6 +14,7 @@
     "@ff-labs/fff-node": "0.11.0",
     "@hivemind/agent-host": "workspace:*",
     "@hivemind/agents": "workspace:*",
+    "@hivemind/code-intel": "workspace:*",
     "@hivemind/core": "workspace:*",
     "@hivemind/view-host": "workspace:*",
     "@hivemind/view-sdk": "workspace:*",

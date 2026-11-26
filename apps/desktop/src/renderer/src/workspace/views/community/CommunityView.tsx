@@ -20,6 +20,9 @@ import type { ViewPackageInfo } from "../../../../../shared/ipc";
 import { REVEAL_TILE, type WorkspaceViewProps } from "../../workspace-view";
 import { usePluginLink } from "../../plugin-link";
 import { LayersPanel } from "../../../LayersPanel";
+import { useFrameFocus } from "../../../PagePath";
+import { useCanvasRuntime } from "../canvas-runtime";
+import { setViewMode } from "../../view-mode-store";
 import { disableCommunityView } from "./registry";
 import { edgeBandClip } from "./edge-band";
 import { RemoteCommunityView } from "./RemoteCommunityView";
@@ -120,6 +123,8 @@ function CommunityView({ pkg, url, manifest, capabilities, model, commands }: Wo
     // polygon mask. Floating rects stay plain overlays.
     const hostBox = useMemo(() => box(), [rects, lines]); // eslint-disable-line react-hooks/exhaustive-deps
     const { bottomInset } = useChromeState();
+    const { board } = useCanvasRuntime();
+    const { enter } = useFrameFocus();
     const clip = useMemo(() => edgeBandClip(rects, hostBox), [rects, hostBox]);
 
     return (
@@ -135,6 +140,9 @@ function CommunityView({ pkg, url, manifest, capabilities, model, commands }: Wo
           onResume={(agent, frameId, session) => { commands.spawnAgent(agent, frameId, { resume: session }); }}
           onFocusTile={commands.selectTile}
           onFocusFrame={(id) => { commands.selectFrame(id); commands.selectTile(null); commands.focusTile(id); }}
+          objects={board.objects}
+          onFocusDrawing={(ids) => { setViewMode("canvas"); setTimeout(() => commands.focusTile(ids), 0); }}
+          onFocusPage={enter}
           frameActions={model.frameActions}
           sleepActions={model.sleepActions}
           tileActions={{ onClose: commands.closeTile, onRename: commands.renameTile }}

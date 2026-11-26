@@ -4,7 +4,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  MAX_PANES, closePane, equalize, layout, moveTab, neighbor, normalize, paneById, paneOf, panes, readTree, resize, single, split, toggleZoom, unsplit,
+  MAX_PANES, closePane, cycleTab, equalize, equalizeAll, gridOf, layout, moveTab, neighbor, normalize, paneAlong, paneById, paneOf, panes, readTree, resize, single, split, swapPanes, toggleZoom, unsplit,
   type Node, type Tree,
 } from "../../views/windows/src/tree.ts";
 
@@ -185,4 +185,50 @@ test("a saved tree naming a tile in two panes keeps it in the first only", () =>
   const t = normalize(saved, ["a", "b"]);
   assert.deepEqual(panes(t.root).map((p) => p.tabs), [["a", "b"]]);
   holds(t, ["a", "b"]);
+});
+
+test("the next tab goes round its pane's strip, both ways; a pane of one tab stays as it is", () => {
+  let t = normalize(single("p1"), ["a", "b", "c"]);
+  t = cycleTab(t, "p1", 1);
+  assert.equal(paneById(t, "p1")!.active, "b");
+  t = cycleTab(cycleTab(t, "p1", 1), "p1", 1);
+  assert.equal(paneById(t, "p1")!.active, "a", "past the last, the first");
+  assert.equal(paneById(cycleTab(t, "p1", -1), "p1")!.active, "c", "before the first, the last");
+  const one = normalize(single("p9"), ["z"]);
+  assert.equal(cycleTab(one, "p9", 1), one);
+});
+
+test("swapping two panes trades their tabs and the focus follows the focused pane's tabs", () => {
+  let t = normalize(single("p1"), ["a", "b", "c"]);
+  t = split(t, "p1", "right", "c", "p2"); // p1 [a, b], p2 [c], focus p2
+  t = swapPanes(t, "p2", paneAlong(t, "p2", 1)!);
+  assert.deepEqual(panes(t.root).map((p) => [p.id, p.tabs, p.active]), [["p1", ["c"], "c"], ["p2", ["a", "b"], "a"]]);
+  assert.equal(t.focus, "p1");
+  holds(normalize(t, ["a", "b", "c"]), ["a", "b", "c"]);
+  assert.equal(paneAlong(normalize(single("p1"), ["a"]), "p1", 1), null, "one pane has none along");
+});
+
+test("making every pane equal reaches splits inside splits", () => {
+  let t = normalize(single("p1"), ["a", "b", "c"]);
+  t = split(t, "p1", "right", "b", "p2");
+  t = split(t, "p2", "down", "c", "p3");
+  t = resize(resize(t, [], 0, 0.2), [1], 0, -0.2);
+  t = equalizeAll(t);
+  const l = layout(t, ROOM, 0);
+  const [a, b, c] = l.panes;
+  assert.equal(a!.w, b!.w);
+  assert.equal(b!.h, c!.h);
+});
+
+test("a group opened as a layout: up to three side by side, four in two rows, the rest as tabs dealt round", () => {
+  let n = 0;
+  const id = () => `g${n++}`;
+  const row = gridOf(["a", "b", "c"], id);
+  assert.equal(row.root.t === "split" && row.root.dir, "row");
+  assert.deepEqual(panes(row.root).map((p) => p.tabs), [["a"], ["b"], ["c"]]);
+  const six = gridOf(["a", "b", "c", "d", "e", "f"], id);
+  assert.equal(six.root.t === "split" && six.root.dir, "col");
+  assert.deepEqual(panes(six.root).map((p) => p.tabs), [["a", "e"], ["b", "f"], ["c"], ["d"]]);
+  holds(normalize(six, ["a", "b", "c", "d", "e", "f"]), ["a", "b", "c", "d", "e", "f"]);
+  assert.deepEqual(panes(gridOf([], id).root).map((p) => p.tabs), [[]]);
 });

@@ -25,6 +25,8 @@ import { driveSockPath, readOrCreateToken } from "@hivemind/agent-host/hooks/tok
 import { socketIn } from "./socket-in.js";
 import { askDrive, serveDrive } from "./drive.js";
 import { controlApi } from "./control-api.js";
+import { board } from "./board.js";
+import { BoardImages } from "./board-images.js";
 import { Grants, grantsDomain } from "./grants.js";
 import { Services, wantedServices } from "./services.js";
 import { frameWorktrees, framesDomain } from "./frames.js";
@@ -82,6 +84,7 @@ import { PushNotices, PushSubscriptions, postNotice } from "./push.js";
 import { machines as savedMachines } from "./remote/catalog.js";
 import { People } from "./people.js";
 import { presence } from "./presence.js";
+import { PresenceHub } from "@hivemind/workspace-host/presence";
 import { widgets } from "./widgets.js";
 import { listWidgets, widgetAsset } from "@hivemind/core/widgets";
 import { disabledPlugins, pluginOptions, stringOptions } from "@hivemind/core/plugin-settings";
@@ -307,9 +310,12 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     runsHere: (bare) => !isRemote(runsIn(heldBoards(store), bare)),
     reports: (bare) => !!manifestOf(heldBoards(store), bare)?.caps.turnSignal,
   });
+  const presenceHub = new PresenceHub();
   const api: WorkspaceServer = new WorkspaceServer([
     ...workspaceDomains,
     layouts.domain,
+    // No window here makes a picture smaller: one over the size the board keeps is refused.
+    board({ store: () => store, people: (repo) => presenceHub.people(repo), changes: heard.changes, images: new BoardImages({ dir: path.join(o.dir, "board-images") }) }),
     agents({
       statuses: () => control.status.all(), links: () => control.links(),
       feed: () => agentFeed, workspaceOf: (repo) => store.ownership(repo)?.workspaceId ?? null,
@@ -317,7 +323,7 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     terminals.domain,
     tileLines.domain,
     activity.domain,
-    presence(() => api, () => keys.personId),
+    presence(() => api, () => keys.personId, presenceHub),
     widgetDomain,
     // Nothing changes a headless host's theme while it runs: it answers, and has nothing to tell.
     appearance({ current: () => appearanceNow(), onChange: () => {}, server: () => api }),

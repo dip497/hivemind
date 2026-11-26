@@ -46,7 +46,9 @@ own Review, never Allow; the computer's windows, not the phone) and `ownFiles` (
 tab, not the phone nor another computer's view); 1.18 adds `widgetBand` (the app says how much
 of the view its floating widget cards take, `widgetBand`; the computer's windows, a guest's over
 the host's view too, not the phone); 1.19 adds `code` (with `workspace:code`: `request code` finds
-a frame's files and lines with fff and opens a file in the frame's editor; the computer's windows).
+a frame's files and lines with fff and opens a file in the frame's editor; the computer's windows);
+1.20 adds `board` (with `workspace:board`: read, picture and follow the board; with `workspace:draw`:
+draw, change, erase and undo the view's own writes; the computer's windows, not the phone).
 A host that predates 1.3 sends none. Check one with `hm.supports("sleep")`.
 
 `ViewEvent` kinds: `turn {inferred?, outcome? (1.4): done | failed | interrupted | limited}`, `needsInput {reason: permission | question | review |
@@ -79,6 +81,9 @@ compute one from a theme token yourself.
 | `subscribePresence` / `unsubscribePresence` (1.3) | — | |
 | `request` (1.3) | `requestId`, `name: history \| share`, `args` | `history [{day}]`; `share [{png: ArrayBuffer, suggestedName?}]` — the one non-JSON value |
 | `request` (1.19) | `name: code`, `args [{call, frameId, …}]` | `workspace:code`. `findFiles {query, limit? 1–500}` → `{files: [{path, git?}], engine: fff \| git}`; `grep {query 1–1000 chars, mode?: plain \| regex \| fuzzy, cursor?, caseSensitive?}` → `{lines: [{path, line, col, text, ranges}], next, files, engine, note?}`, 200 a page, `next` the next `cursor`; `picked {query, file}` → `null` (ranks it higher next time); `open {file, line?, col?}` → `{tileId}` (the frame's editor, started when it has none). `frameId` null is the workspace's own folder (a workspace with no frames). `file` is a path inside the folder; `..` and absolute paths are refused. `hm.code.*` |
+| `request` (1.21) | `name: open`, `args [{thing, frameId}]` | `workspace:open`; feature `open`; at most 5 in 10 s, then `BUSY`. Opens a web address, or a path inside the frame's folder with `:line:col`, where the person's click would (their `links` settings): a Browser tile or their browser, the Code tile at that line, the Image tile → `{to, tile?}`. Refused `UNSUPPORTED` where the app would ask them; a file not there is refused too. `hm.open(thing, { frameId })` |
+| `request` (1.20) | `name: boardRead \| boardPicture \| boardDraw \| boardChange \| boardErase \| boardUndo`, `args [ask]` (≤ 512 KB JSON) | The workspace API's `board.read \| picture \| draw \| change \| erase \| undo` for the view's workspace, same asks and answers (`picture` is SVG only; `page`: inside that page or frame, at any depth; null or left out: the whole canvas). Read and picture need `workspace:board`, the rest `workspace:draw`. The view writes as itself (`view:<id>`): `boardUndo [{}]` → `{undone}` takes back only its own writes. `hm.board.*` |
+| `subscribeBoard` / `unsubscribeBoard` (1.20) | — | `workspace:board`. Then `board {changed[], removed[], page?}`, at most one per 50 ms: `page` is the nearest page the changed ids are in (absent: none). `hm.board.on(cb)` |
 | `request` (1.4) | `name: agents \| sessions \| prompt` | `agents [{}]` → `{agents}`; `sessions [{agent, frameId}]` → `{sessions: [{id, updated?, prompt?}]}`; `prompt [{tileId, text}]` → `{outcome: sent \| cancelled}`; (1.14) a tile asleep is refused `ASLEEP` before the user is asked, as `hive ctl send` refuses it: wake it first |
 | `subscribeParticipants` / `unsubscribeParticipants` (1.5) | — | `onParticipants()` handles both ends |
 

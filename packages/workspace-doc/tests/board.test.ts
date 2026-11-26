@@ -4,7 +4,7 @@ import { expect, test } from "bun:test";
 import { LoroDoc } from "loro-crdt";
 import { editObjects, readObjects } from "../src/objects.ts";
 import { boardEdit } from "../src/board-edit.ts";
-import type { BoardObject, ChecklistItem } from "../src/shapes.ts";
+import { MAX_SHAPE_POINTS, type BoardObject, type ChecklistItem } from "../src/shapes.ts";
 import { mulberry32 } from "./random.ts";
 
 type Fields = Record<string, unknown>;
@@ -206,4 +206,58 @@ test("a note, a checklist and a text label an older version wrote are read as th
   doc.commit();
   expect((doc.getMap("objects").toJSON() as Record<string, { kind: string }>).n1!.kind).toBe("widget");
   expect(readObjects(doc)).toEqual(board);
+});
+
+const stroke = (id: string, points: Array<[number, number]>) => ({ id, kind: "shape", form: "pen", x: 0, y: 0, w: 10, h: 10, points }) as unknown as BoardObject;
+const shape = (id: string, more: Fields = {}) => ({ id, kind: "shape", form: "rect", x: 1, y: 2, w: 30, h: 40, ...more }) as unknown as BoardObject;
+
+test("a shape keeps what it was drawn with, and two documents writing in it at once keep both", () => {
+  const a = new LoroDoc();
+  writeBoard(a, [shape("s1", { text: "api", color: "blue", filled: true, by: "tile-1", drawing: "d1", frame: "f1", z: 3 }), stroke("s2", [[0, 0], [5.5, 7]])]);
+  expect(readObjects(a)).toEqual(byId([shape("s1", { text: "api", color: "blue", filled: true, by: "tile-1", drawing: "d1", frame: "f1", z: 3 }), stroke("s2", [[0, 0], [5.5, 7]])]));
+
+  const b = new LoroDoc();
+  b.import(a.export({ mode: "snapshot" }));
+  const keep = readObjects(a).find((o) => o.id === "s2")!;
+  writeBoard(a, [shape("s1", { text: "api gateway", color: "blue", filled: true, by: "tile-1", drawing: "d1", frame: "f1", z: 3 }), keep]);
+  writeBoard(b, [shape("s1", { text: "the api", color: "red", filled: true, by: "tile-1", drawing: "d1", frame: "f1", z: 3 }), keep]);
+  sync(a, b);
+  const [ma, mb] = [readObjects(a).find((o) => o.id === "s1") as Fields & BoardObject, readObjects(b).find((o) => o.id === "s1") as Fields & BoardObject];
+  expect(ma).toEqual(mb);
+  expect(ma.text).toBe("the api gateway");
+  expect(ma.color).toBe("red");
+});
+
+test("a shape that is not one is left out, and what does not fit its field is dropped, not the shape", () => {
+  const a = new LoroDoc();
+  const tooMany = Array.from({ length: MAX_SHAPE_POINTS + 1 }, (_, i): [number, number] => [i, i]);
+  writeBoard(a, [
+    shape("no-form", { form: "blob" }),
+    shape("no-box", { w: "wide" }),
+    stroke("one-point", [[0, 0]]),
+    stroke("too-many", tooMany),
+    stroke("not-numbers", [[0, 0], ["a", 1] as unknown as [number, number]]),
+    shape("points-on-a-box", { points: [[0, 0], [1, 1]] }),
+    shape("kept", { size: "huge", head: "yes", filled: 1, by: 7, drawing: 8 }),
+  ]);
+  expect(readObjects(a)).toEqual([shape("kept")]);
+});
+
+test("a picture is a shape that names its bytes by hash, with its size and alt text: one without a whole reference is left out, and a reference on another form is dropped", () => {
+  const image = { hash: "a".repeat(64), type: "image/png", width: 1280, height: 720 };
+  const picture = (id: string, more: Fields = {}) => shape(id, { form: "image", w: 640, h: 360, image, alt: "the login page", frame: "f1", locked: true, ...more });
+  const a = new LoroDoc();
+  writeBoard(a, [
+    picture("kept"),
+    picture("no-image", { image: undefined }),
+    picture("short-hash", { image: { ...image, hash: "abc" } }),
+    picture("svg", { image: { ...image, type: "image/svg+xml" } }),
+    picture("no-size", { image: { ...image, width: 0 } }),
+    shape("rect-with-image", { image, alt: "not a picture" }),
+    picture("alt-not-words", { alt: 7 }),
+  ]);
+  expect(readObjects(a)).toEqual([picture("alt-not-words", { alt: undefined }), picture("kept"), shape("rect-with-image")].map((o) => JSON.parse(JSON.stringify(o)) as BoardObject));
+  const b = new LoroDoc();
+  b.import(a.export({ mode: "snapshot" }));
+  expect(readObjects(b).find((o) => o.id === "kept")).toEqual(picture("kept"));
 });

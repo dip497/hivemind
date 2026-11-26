@@ -36,7 +36,9 @@ try {
     const point = await page.evaluate(() => {
       for (const y of [.65,.8,.4,.2]) for (const x of [.9,.75,.5,.35]) {
         const point = { x: Math.round(innerWidth*x), y: Math.round(innerHeight*y) };
-        if (document.elementFromPoint(point.x, point.y)?.classList.contains('react-flow__pane')) return point;
+        // The pane under no tile, whatever overlay (a wallpaper, the painted board) is drawn above it.
+        const stack = document.elementsFromPoint(point.x, point.y);
+        if (stack.some((el) => el.classList.contains('react-flow__pane')) && !stack.some((el) => el.closest('.react-flow__node, .react-flow__panel, [data-tool-island], aside'))) return point;
       }
       return null;
     });
@@ -52,6 +54,9 @@ try {
     await page.waitForTimeout(300);
   }
   await page.waitForFunction(n => document.querySelectorAll('.xterm').length === n, NTERM);
+  // A new terminal is flown to and fills the window, and it keeps Esc; fit everything by the button.
+  await page.getByRole('button', { name: /^Fit to view/ }).click();
+  await page.waitForTimeout(1500);
   { const p = await pointAtPane(); await page.mouse.click(p.x,p.y); }
   await page.keyboard.press('Escape');
   await page.waitForTimeout(2500);
@@ -129,6 +134,7 @@ try {
         await page.keyboard.insertText('i=0; while :; do i=$((i+1)); echo "line $i lorem ipsum dolor sit amet consectetur adipiscing elit"; sleep 0.02; done');
         await page.keyboard.press('Enter');
       }
+      await page.getByRole('button', { name: /^Fit to view/ }).click(); await page.waitForTimeout(1500);
       { const p = await pointAtPane(); await page.mouse.click(p.x,p.y); } await page.keyboard.press('Escape'); await page.waitForTimeout(1500);
     }
     for (let round=0;round<rounds;round++) for (const effect of round ? [...effects].reverse() : effects) {

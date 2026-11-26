@@ -21,6 +21,7 @@ import { QuickOpen } from "./code/QuickOpen";
 const DiffTile = lazy(() => import("./DiffTile").then((m) => ({ default: m.DiffTile })));
 
 interface Props {
+  tileId?: string;
   repoPath: string;
   /** Repo-relative paths open as tabs in the embedded editor (Canvas owns this). */
   tabs: string[];
@@ -52,7 +53,7 @@ const SIDEBAR_KEY = "hivemind:workbench-sidebar";
 const PANEL_KEY = "hivemind:workbench-panel";
 const clampW = (w: number) => Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, w));
 
-export function WorkbenchTile({ repoPath, tabs, onOpenFile, onOpenInBrowser, onCloseTab, onClose, pinned, onTogglePin, startOnChanges, compare, reveal }: Props) {
+export function WorkbenchTile({ tileId, repoPath, tabs, onOpenFile, onOpenInBrowser, onCloseTab, onClose, pinned, onTogglePin, startOnChanges, compare, reveal }: Props) {
   const [collapsed, setCollapsed] = useState(false);
   const [panel, setPanel] = useState<Panel>(
     () => startOnChanges || compare ? "changes" : (localStorage.getItem(PANEL_KEY) as Panel) || "explorer",
@@ -79,6 +80,8 @@ export function WorkbenchTile({ repoPath, tabs, onOpenFile, onOpenInBrowser, onC
     onOpenFile(path); // add as a tab (Canvas dedupes)
     setActiveReq({ path, seq: ++reqSeq.current, ...opts }); // and always focus it
   };
+  // The tree marks the file the editor shows, however it came to show it: a click on that row opens it again.
+  const [shownFile, setShownFile] = useState<string | null>(null);
 
   // A line asked for from outside (the frame's Search tile): open that file there, once per ask.
   useEffect(() => {
@@ -167,7 +170,7 @@ export function WorkbenchTile({ repoPath, tabs, onOpenFile, onOpenInBrowser, onC
               {/* Keyed on repoPath: moved into a frame of another repo, the tree starts over. */}
               {panel === "search"
                 ? <FindPanel key={repoPath} repoPath={repoPath} onOpen={(p, line, col) => selectFile(p, { line, col })} />
-                : <FileTreeTile key={repoPath} repoPath={repoPath} onSelectFile={(p) => selectFile(p)} onShowHistory={(file) => showHistory({ file })} embedded />}
+                : <FileTreeTile key={repoPath} repoPath={repoPath} shown={shownFile} onSelectFile={(p) => selectFile(p)} onShowHistory={(file) => showHistory({ file })} embedded />}
             </div>
             {/* Resize handle — a WIDE (8px) grab zone with a thin centered line. */}
             <div
@@ -196,12 +199,15 @@ export function WorkbenchTile({ repoPath, tabs, onOpenFile, onOpenInBrowser, onC
         )}
         <div className="relative flex-1 min-w-0">
           <EditorTile
+            tileId={tileId}
             repoPath={repoPath}
             tabs={tabs}
             onCloseTab={onCloseTab}
             activeReq={activeReq}
             onOpenInBrowser={onOpenInBrowser}
             onShowHistory={showHistory}
+            onOpenAt={(p, line, col) => selectFile(p, { line, col })}
+            onShownFile={setShownFile}
             embedded
           />
           <QuickOpen repoPath={repoPath} open={quickOpen} onOpenChange={setQuickOpen} onPick={(p) => selectFile(p)} />

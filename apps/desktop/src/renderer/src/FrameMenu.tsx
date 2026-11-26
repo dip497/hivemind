@@ -5,7 +5,7 @@
  */
 import type { ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { ArrowDown, ArrowUp, FolderOpen, FolderMinus, GitBranch, GitCommit, LayoutGrid, Moon, Palette, Pencil, Play, Server, ServerOff, SquarePen, Trash, Unlink, AddWidget } from "./components/icons";
+import { ArrowDown, ArrowUp, FolderOpen, FolderMinus, GitBranch, GitCommit, LayoutGrid, Moon, Palette, PanelsTopLeft, Pencil, Play, Server, ServerOff, SquarePen, Trash, Unlink, AddWidget } from "./components/icons";
 import { optionChoices } from "@hivemind/agents";
 import { AgentIcon } from "./agents";
 import { useReadyAgents } from "./agent-choice";
@@ -33,6 +33,8 @@ export interface FrameActions {
   onRename: (frameId: string, title: string) => void;
   onColor: (frameId: string, color: string) => void;
   onDelete: (frameId: string) => void;
+  /** Mark the frame as a page (a stop on the path, listed under Pages), or take the mark off. */
+  onPage?: (frameId: string, page: boolean) => void;
   /** The Add menu, adding into this frame. */
   onAddInFrame: (frameId: string) => void;
   /** The commit and sync dialog for the frame's repository. */
@@ -58,6 +60,8 @@ export interface MenuFrame {
   path?: string;
   /** Bound to another machine. */
   remote?: boolean;
+  /** A page. */
+  page?: boolean;
 }
 
 const ARRANGE = [["columns", "Columns"], ["rows", "Rows"], ["grid", "Grid"]] as const;
@@ -171,6 +175,11 @@ export function FrameMenu({ frame, at, actions, arrange = false, onClose, onRena
           </Sub>
         )}
         <DropdownMenuItem onSelect={onRename} data-frame-menu-rename><Pencil />Rename<DropdownMenuShortcut>R</DropdownMenuShortcut></DropdownMenuItem>
+        {actions.onPage && (
+          <DropdownMenuItem onSelect={() => actions.onPage!(fid, !frame.page)} data-frame-menu-page>
+            <PanelsTopLeft />{frame.page ? "Turn back into a frame" : "Make a page"}
+          </DropdownMenuItem>
+        )}
         <Sub icon={<Palette />} label="Color" data="color">
           <div className="flex flex-wrap gap-1.5 p-1.5 w-[160px]">
             {FRAME_SWATCHES.map((c) => (

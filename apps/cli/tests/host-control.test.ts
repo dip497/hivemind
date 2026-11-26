@@ -146,6 +146,26 @@ describe.skipIf(!unix)("hive ctl on a headless host", () => {
     // Nobody sits at it: a verb that needs a window is refused.
     expect(ctl("focus", worker)).toMatchObject({ code: 3, json: { error: { code: "UNAVAILABLE" } } });
 
+    // Drawing needs no window: the host places it, reads it back and draws its SVG; a PNG is a window's.
+    const drawn = hive(["ctl", "draw", "--repo", repo, "--json"], { env, input: JSON.stringify({ title: "Flow", boxes: [{ id: "a", text: "A" }, { id: "b", text: "B" }], links: [["a", "b"]] }) });
+    expect(drawn.code).toBe(0);
+    const { drawing, boxes } = drawn.json as { drawing: string; boxes: Record<string, string> };
+    expect(Object.keys(boxes)).toEqual(["a", "b"]);
+    expect((hive(["ctl", "board", "--repo", repo, "--json"], { env }).json as { drawings: Array<{ id: string; title: string }> }).drawings).toEqual([expect.objectContaining({ id: drawing, title: "Flow" })]);
+    const svg = path.join(dir, "board.svg");
+    expect(hive(["ctl", "board", "--repo", repo, "--svg", svg, "--json"], { env }).code).toBe(0);
+    expect(fs.readFileSync(svg, "utf8")).toContain(">Flow<");
+    expect(hive(["ctl", "board", "--repo", repo, "--png", path.join(dir, "board.png"), "--json"], { env }).json).toMatchObject({ error: { code: "UNSUPPORTED" } });
+    expect(hive(["ctl", "board", "--repo", repo, "--show", drawing, "--json"], { env }).json).toMatchObject({ error: { code: "UNSUPPORTED" } });
+    const noWindow = hive(["ctl", "page", "open", "top", "--repo", repo], { env });
+    expect(noWindow.code).toBe(7);
+    expect(noWindow.stderr).toContain("fix: open the workspace in the Hivemind app");
+    const refused = hive(["ctl", "draw", "--repo", repo, "--json"], { env, input: "not json" });
+    expect(refused.code).toBe(2);
+    expect(refused.stderr).toContain("must be JSON");
+    expect((hive(["ctl", "pin", "Here", "--on", boxes.a!, "--repo", repo, "--json"], { env }).json as { board: { what: string } }).board.what).toBe("A");
+    expect((hive(["ctl", "erase", "--drawing", drawing, "--repo", repo, "--json"], { env }).json as { erased: string[] }).erased).toHaveLength(4);
+
     watcher.destroy();
     // Stopped, the host gives the socket back: the daemon answers there again, as it does with no
     // control plane on the machine.

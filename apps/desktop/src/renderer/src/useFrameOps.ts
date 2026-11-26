@@ -5,6 +5,7 @@
  * child frames. Lifted from Canvas.tsx; takes Canvas's state refs + setters +
  * the state values the auto-fit effect depends on.
  */
+import { framesWithin } from "@hivemind/workspace-doc/pages";
 import { mintId } from "@hivemind/workspace-api/tile-id";
 import { useCallback, useEffect, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
 import { frameColorFor } from "./frame-color";
@@ -88,7 +89,7 @@ export function useFrameOps(ctx: FrameOpsCtx) {
     // silently promotes it to a top-level frame. The worktrees stay on DISK
     // (re-attachable via the picker); the destructive removal is the explicit
     // detach (×) on a worktree frame, not a canvas delete.
-    const gone = new Set([id, ...framesRef.current.filter((f) => f.parentFrameId === id).map((f) => f.id)]);
+    const gone = framesWithin(framesRef.current, id);
     setFrames((fs) => fs.filter((f) => !gone.has(f.id)));
     // Its tiles stay, loose on the canvas: membership in a frame that is gone means nothing.
     setFrameOf((m) => Object.fromEntries(Object.entries(m).filter(([, f]) => !gone.has(f))));

@@ -5,7 +5,8 @@
   "entry": "index.html",
   "protocol": 1,
   "permissions": [
-    "workspace:close"
+    "workspace:close",
+    "workspace:broadcast"
   ],
   "layers": true,
   "author": "Hivemind",
@@ -55,6 +56,70 @@
     {
       "name": "unsplit",
       "description": "Put every tab back in one pane."
+    },
+    {
+      "name": "go-to",
+      "description": "Open the quick switcher: find a tile by name, agent or folder; the ones that need you first, then the most recent. 1 to 9 jump.",
+      "keys": "mod+alt+p"
+    },
+    {
+      "name": "needs-you",
+      "description": "Show the tile that most recently started waiting on you (the app's ⌥⌘A / Ctrl+Alt+A does it from anywhere)."
+    },
+    {
+      "name": "last-tab",
+      "description": "Show the tile shown before this one.",
+      "keys": "mod+alt+o"
+    },
+    {
+      "name": "next-tab",
+      "description": "Show the focused pane's next tab.",
+      "keys": "mod+alt+]"
+    },
+    {
+      "name": "prev-tab",
+      "description": "Show the focused pane's previous tab.",
+      "keys": "mod+alt+["
+    },
+    {
+      "name": "move-tab-next-pane",
+      "description": "Move the focused pane's shown tab to the next pane (with one pane, split it off to the right).",
+      "keys": "mod+alt+shift+]"
+    },
+    {
+      "name": "move-tab-prev-pane",
+      "description": "Move the focused pane's shown tab to the previous pane (with one pane, split it off to the left).",
+      "keys": "mod+alt+shift+["
+    },
+    {
+      "name": "swap-pane",
+      "description": "Trade what the focused pane shows with the next pane's.",
+      "keys": "mod+alt+s"
+    },
+    {
+      "name": "equalize",
+      "description": "Make every pane's share of its split equal.",
+      "keys": "mod+alt+="
+    },
+    {
+      "name": "broadcast",
+      "description": "Send what you type in one terminal to every terminal the panes show, or stop. Escape stops it too.",
+      "args": "{ \"on\"?: boolean } (left out: switch it)",
+      "keys": "mod+alt+b"
+    },
+    {
+      "name": "open-layout",
+      "description": "Show a frame's or a page's tiles as a layout of their own (its panes are kept), or every tile.",
+      "args": "{ \"frame\"?: string, \"page\"?: string } (neither: every tile)"
+    },
+    {
+      "name": "group-by",
+      "description": "Group the layouts strip by frame or by page.",
+      "args": "{ \"by\": \"frame\" | \"page\" }"
+    },
+    {
+      "name": "panes",
+      "description": "Say the layout shown, its panes and tabs, the groups, each tile's attention (needs-you, failed, done, new-output, working, quiet) and the terminals typing goes to."
     }
   ]
 }

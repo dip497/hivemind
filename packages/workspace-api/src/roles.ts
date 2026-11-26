@@ -27,8 +27,15 @@ const LEAST: Record<string, Role> = {
   "code.findFiles": "view",
   "code.picked": "view",
   "code.grep": "view",
+  "code.outline": "view",
+  "code.definition": "view",
+  "code.usages": "view",
+  "code.hover": "view",
+  "code.cancel": "view",
   "worktree.list": "view",
   "file.read": "view",
+  "file.stat": "view",
+  "file.bytes": "view",
   "issue.list": "view",
   "issue.read": "view",
   "review.list": "view",
@@ -44,6 +51,23 @@ const LEAST: Record<string, Role> = {
   "git.handOff": "edit",
   // How the host looks: a guest shows its workspace that way.
   "appearance.get": "view",
+  // What is drawn on the board, and drawing there, as editing the board does.
+  "board.read": "view",
+  "board.picture": "view",
+  // A picture on the board is part of what is drawn: read as the board is, kept as it is drawn on.
+  "board.image": "view",
+  "board.keepImage": "edit",
+  // What others have selected and changed is what presence and the document already show them.
+  "board.selected": "view",
+  "board.changes": "view",
+  "board.draw": "edit",
+  "board.erase": "edit",
+  "board.change": "edit",
+  "board.note": "edit",
+  "board.undo": "edit",
+  "board.redo": "edit",
+  "page.list": "view",
+  "page.new": "edit",
   // Being there: where one's pointer is, and what one has selected.
   "presence.set": "view",
   "widget.all": "view",
@@ -133,8 +157,8 @@ const LEAST: Record<string, Role> = {
 /** The machine's own methods (0.23): a peer's device is another machine, so they are no peer's,
  *  the person's own devices included. An agent on this machine keeps them, but joining and serving
  *  a folder: those are the person's, since a tile is kept to its own workspace. */
-const MACHINE = new Set(["browser.signIns", "browser.ask", "browser.signIn", "browser.askState", "view.emit", "plugin.list", "plugin.commands", "plugin.open", "plugin.call", "plugin.close", "tile.focus", "tile.look", "page.note", "views.rescan", "agents.rescan",
-  "widgets.rescan", "tools.rescan", "settings.reload", "host.status", "host.join", "host.add", "notifications.play", "notifications.recentSounds"]);
+const MACHINE = new Set(["browser.signIns", "browser.ask", "browser.signIn", "browser.askState", "view.emit", "plugin.list", "plugin.commands", "plugin.open", "plugin.call", "plugin.close", "board.show", "page.open", "tile.focus", "tile.look", "page.note", "views.rescan", "agents.rescan",
+  "widgets.rescan", "tools.rescan", "settings.reload", "host.status", "host.join", "host.add", "notifications.play", "notifications.recentSounds", "opener.open"]);
 
 /** The machine's methods that are the person's alone: an agent's tile is refused them too. */
 const PERSON = new Set(["host.join", "host.add", "notifications.play"]);

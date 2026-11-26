@@ -5,6 +5,7 @@
 import { forwardRef, type ForwardRefExoticComponent, type RefAttributes, type SVGProps } from "react";
 import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
 import {
+  Cursor01Icon, CircleIcon, DiamondIcon, EraserIcon, MinusSignIcon, RectangularIcon, TextFontIcon,
   AlarmClockIcon, AlarmClockOffIcon, AlertCircleIcon, AppWindowIcon, ArrowDown02Icon, ArrowLeft02Icon,
   ArrowRight02Icon, ArrowUp02Icon, ArrowUpRight01Icon, BellIcon, BlocksIcon, BotIcon, CheckIcon,
   ChevronDownIcon, ChevronRightIcon, CloudServerIcon, ContainerIcon, ChevronUpIcon, CircleCheckIcon, Copy01Icon, Download01Icon, EarthIcon,
@@ -100,6 +101,13 @@ export const Mail = icon("mail", Mail01Icon);
 export const MailOpen = icon("mail-open", MailOpenIcon);
 export const Maximize = icon("maximize", Maximize01Icon);
 export const MessageSquare = icon("message-square", MessageSquareIcon);
+export const PointerArrow = icon("pointer-arrow", Cursor01Icon);
+export const Circle = icon("circle", CircleIcon);
+export const Diamond = icon("diamond", DiamondIcon);
+export const Eraser = icon("eraser", EraserIcon);
+export const Minus = icon("minus", MinusSignIcon);
+export const RectangleShape = icon("rectangle", RectangularIcon);
+export const TextT = icon("text", TextFontIcon);
 export const MessagesSquare = icon("messages-square", MessagesSquareIcon);
 export const Monitor = icon("monitor", MonitorIcon);
 export const MonitorSmartphone = icon("monitor-smartphone", MonitorSmartphoneIcon);

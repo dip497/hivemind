@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { trackOpenSession } from "./machines/open-sessions";
-import { Terminal } from "@xterm/xterm";
+import { Terminal, type IMarker } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { UnicodeGraphemesAddon } from "@xterm/addon-unicode-graphemes";
 import { WebglAddon } from "@xterm/addon-webgl";
@@ -22,6 +22,7 @@ import { identifyAgent } from "./agent-state";
 import { agentById } from "@hivemind/agents";
 import { registerAgentTile, unregisterAgentTile, shouldDeliver, type SendToAgentDetail } from "./agent-send";
 import { peekWork, claimWork } from "./work-queue";
+import { personInputOf, setTerminalTypable, typedIntoTerminal } from "./workspace/broadcast-input";
 import { Running } from "./row-line";
 import { publishStatus, clearStatus, setLabel, statusOf, subscribeTileStatus, type TileStatusKind } from "./agent-status-bus";
 import { typeKeys } from "@hivemind/agent-host/keys";
@@ -35,7 +36,8 @@ import { acquireBoot, bootPosition, cancelBoot, isRestored, subscribeBoot } from
 import { whenTerminalMayBuild } from "./terminal-mount-queue";
 import { isRemote } from "@hivemind/core/remote-uri";
 import { toPtyId } from "@hivemind/workspace-api/tile-id";
-import { webUrlForInternalBrowser } from "./browser-open";
+import { clickedPathElsewhere, folderFor, linksOnScreen, namesAnotherComputer, shellFolderOf } from "./terminal-links";
+import { LinkPicker, type PickedLink } from "./LinkPicker";
 import { TILE_KEYBOARD } from "./workspace/workspace-view";
 import { useThemeField, useSurfacePolicy, getTheme, effectiveGlass, type ThemeState } from "./theme-store";
 import { terminalThemeFor } from "@hivemind/core/settings-schema";
@@ -51,6 +53,9 @@ import { useShown } from "./multiplayer/shown";
 // by tileId) — A−/A+ in the header + Ctrl/Cmd +/−/0 adjust it. Crispness is
 // DPR-driven (see terminal-dpr.ts); 15 is the default for comfortable reading.
 const DEFAULT_FONT = 15;
+/** This computer's host name, to tell a shell here from one reached over ssh (OSC 7). */
+let localHostName: string | null = null;
+void window.hive?.localHostName?.().then((h) => { localHostName = h; }, () => {});
 /** The faces xterm measures for a font list: its first family, regular and bold. A generic name
  *  (monospace) is the system's and is already there. */
 function measuredFaces(fontList: string): string[] {
@@ -166,10 +171,9 @@ interface Props {
   /** The name alone (a given one, else the label): what a rename edits. */
   given?: string;
   onRename?: (id: string, name: string) => void;
-  /** Open URL targets in the frame's browser tile instead of the OS browser. */
-  onOpenInBrowser?: (url: string) => void;
-  /** Open text file paths in the frame's editor tile instead of the OS app. */
-  onOpenInEditor?: (path: string) => void;
+  /** Open a link or a path it printed, a relative one read from `cwd` (the shell's folder then);
+   *  `orElse` when nothing is at `thing`. */
+  onOpen?: (thing: string, cwd: string, orElse?: string) => void;
   /** Clip-to-pile: open Canvas-level popover to add this tile to a pile. */
   onClose?: () => void;
   /** Tile selection — when false, xterm stdin is disabled + blurred so an
@@ -186,7 +190,7 @@ interface Props {
   onAsleep?: () => void;
 }
 
-export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, given, onRename, onOpenInBrowser, onOpenInEditor, onClose, selected, pinned, onTogglePin, onSleep, onAsleep }: Props) {
+export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, given, onRename, onOpen, onClose, selected, pinned, onTogglePin, onSleep, onAsleep }: Props) {
   // Editable header name: starts in display mode; double-click opens input.
   // Persists via onRename → Canvas tileNames → the workspace store (canvas-persistence.ts).
   const [editing, setEditing] = useState(false);
@@ -217,12 +221,33 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
   // The keyboard was asked for while no view showed the terminal, parked where nothing takes focus:
   // it takes it when a view shows it (a view docking it for a widget's button or `hive ctl focus`).
   const keysWhenShownRef = useRef(false);
-  const openInBrowserRef = useRef(onOpenInBrowser);
-  openInBrowserRef.current = onOpenInBrowser;
-  /** An http(s) link opens where the workspace opens addresses; any other kind not at all. */
-  const openLink = (uri: string) => { const web = webUrlForInternalBrowser(uri); if (web) openInBrowserRef.current?.(web); };
-  const openInEditorRef = useRef(onOpenInEditor);
-  openInEditorRef.current = onOpenInEditor;
+  const [picked, setPicked] = useState<PickedLink[] | null>(null);
+  const openRef = useRef(onOpen);
+  openRef.current = onOpen;
+  // The folders the shell said it moved to, each from the line it said so on (OSC 7, 633, 1337).
+  // null: a shell on another computer (ssh inside this terminal), whose paths open nothing here.
+  const shellFoldersRef = useRef<Array<{ mark: IMarker; folder: string | null }>>([]);
+  /** The folder the shell was in at buffer line `y` (1-based), else the tile's. */
+  const folderAt = (y: number): string | null => {
+    const marks = shellFoldersRef.current;
+    for (let i = marks.length - 1; i >= 0; i--) if (marks[i]!.mark.line >= 0 && marks[i]!.mark.line <= y - 1) return marks[i]!.folder;
+    return cwdRef.current;
+  };
+  /** The terminal's title, which may say its shell is on another computer. */
+  const titleRef = useRef("");
+  /** A link on buffer line `y` (1-based) opens where the window's opener says, as a click in this tile. */
+  const openLink = (uri: string, y: number) => openAt(uri, folderAt(y));
+  /** A path printed on another computer opens nothing here; a web address opens anyway. */
+  const openAt = (thing: string, folder: string | null, orElse?: string) => {
+    const web = /^https?:\/\//i.test(thing);
+    if (folder === null && !web) { toast.error("Not opened: printed by a shell on another computer"); return; }
+    const here = folder ?? cwdRef.current;
+    if (!web && !isRemote(here) && clickedPathElsewhere(thing, titleRef.current, localHostName, here)) {
+      toast.error("Not opened: this terminal is on another computer, so that path is that computer's");
+      return;
+    }
+    openRef.current?.(thing, here, orElse);
+  };
   const asleepRef = useRef(onAsleep);
   asleepRef.current = onAsleep;
   // Live cwd so the terminal file-link provider resolves relative paths against
@@ -272,6 +297,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
   const kb = useTerminalKeyboard(ptyId, cwd);
   const kbRef = useRef<TerminalKeyboard>(kb);
   kbRef.current = kb;
+  useEffect(() => setTerminalTypable(tileId, kb.mayType), [tileId, kb.mayType]);
   /** The mounted terminal's mode 2031 (theme-notify.ts). */
   const themeNotifyRef = useRef<ThemeNotify | null>(null);
   // What fits this tile, and the sizes this window last asked the session to take (drawnSize).
@@ -409,7 +435,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
       letterSpacing: 0,
       // OSC 8 hyperlinks (claude emits these), on Ctrl/⌘+click.
       linkHandler: {
-        activate: (e, uri) => { if (followsLink(e)) openLink(uri); },
+        activate: (e, uri, range) => { if (followsLink(e)) openLink(uri, range.start.y); },
         ...linkHint(() => term.element),
       },
       // Rescale glyphs that overflow their cell (powerline, wide Unicode,
@@ -419,15 +445,11 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
       // The WebGL renderer (loaded below) reuses the atlas across frames.
     });
     // http(s) URLs in terminal output (claude, build logs, etc.), on Ctrl/⌘+click.
-    term.loadAddon(new WebLinksAddon((e, uri) => { if (followsLink(e)) openLink(uri); }, linkHint(() => term.element)));
+    term.loadAddon(new WebLinksAddon((e, uri) => { if (followsLink(e)) openAt(uri, cwdRef.current); }, linkHint(() => term.element)));
+    term.onTitleChange((title) => { titleRef.current = title; });
     // File PATHS too (open in the OS default app): WebLinksAddon only handles http(s) URLs.
     // Disposed with the terminal on unmount.
-    registerFileLinks(
-      term,
-      () => cwdRef.current,
-      (url) => openInBrowserRef.current?.(url),
-      (path) => openInEditorRef.current?.(path),
-    );
+    registerFileLinks(term, folderAt, openAt);
     const fit = new FitAddon();
     term.loadAddon(fit);
     // Widths by grapheme, as programs measure their text: 👍 and ⚠️ take two columns, a Devanagari
@@ -839,7 +861,9 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
     });
     /** When this window last gave the session a key, a click or a paste. */
     let inputAt = 0;
+    const byPerson = personInputOf(term);
     term.onData((d) => {
+      const typed = byPerson();
       // Someone else has the keyboard: this window's keys (and its terminal's replies) are not the
       // session's. The pill says who has it.
       if (!kbRef.current.mayType) return;
@@ -855,11 +879,27 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
       }
       starting.touch(); // the person is driving now: nothing is sent for them
       inputAt = Date.now();
-      window.hive.ptyWrite(ptyId, d);
+      if (typedIntoTerminal(tileId, d, typed, (pty, data) => window.hive.ptyWrite(pty, data))) window.hive.ptyWrite(ptyId, d);
     });
     term.onResize(() => syncPtySize());
     // A glass terminal's background is transparent, which xterm reports as black; answer with
     // the theme's colour so a TUI tinting its panels from it blends toward what the user chose.
+    // The shell's folder, so a relative path it prints opens from where it was printed.
+    shellFoldersRef.current = [];
+    for (const code of [7, 633, 1337] as const) {
+      term.parser.registerOscHandler(code, (data) => {
+        const said = shellFolderOf(code, data);
+        const mark = said ? term.registerMarker(0) : undefined;
+        if (!said || !mark) return false;
+        const marks = shellFoldersRef.current;
+        const elsewhere = code === 7 && !isRemote(cwdRef.current) && namesAnotherComputer(data, localHostName);
+        const folder = elsewhere ? null : folderFor(cwdRef.current, said);
+        if (marks.length && marks.at(-1)!.folder === folder) { mark.dispose(); return false; }
+        marks.push({ mark, folder });
+        if (marks.length > 100) marks.shift()!.mark.dispose();
+        return false;
+      });
+    }
     term.parser.registerOscHandler(11, (data) => {
       if (data !== "?" || termBgFor(getTheme()) === getTheme().terminal.background) return false;
       const reply = oscColorReply(getTheme().terminal.background);
@@ -936,6 +976,12 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
           if (kittyFlags(term)) return false;
           term.input("\x1b\r", true);
           return true;
+        case "open-link": {
+          const b = term.buffer.active;
+          const lines = Array.from({ length: term.rows }, (_, i) => ({ y: b.viewportY + i + 1, text: b.getLine(b.viewportY + i)?.translateToString(true) ?? "" }));
+          setPicked(linksOnScreen(lines).map((l) => ({ text: l.text, folder: folderAt(l.y) })));
+          return true;
+        }
         case "take-keyboard":
           if (!kbRef.current.mayTake) return false;
           window.hive.keyboardTake(ptyId);
@@ -1557,6 +1603,8 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
           onClose={() => setOverlay(false)}
         />
       )}
+      <LinkPicker links={picked} onClose={() => { setPicked(null); termRef.current?.focus(); }}
+        onPick={(l) => { setPicked(null); termRef.current?.focus(); openAt(l.text, l.folder); }} />
     </div>
   );
 }

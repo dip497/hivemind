@@ -21,6 +21,7 @@ pub mod mark;
 pub mod markdown;
 pub mod needs;
 pub mod network;
+pub mod drawings;
 pub mod notes;
 #[cfg(not(target_family = "wasm"))]
 pub mod pacing;

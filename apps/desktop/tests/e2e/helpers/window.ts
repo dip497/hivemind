@@ -2,7 +2,7 @@
 // playwright.harness.config.ts), as a browser tab on the same app: the app is launched as usual,
 // serves itself to a browser (Settings → Your devices, "In a browser on this computer") and Chromium opens the link
 // it shows, so the spec drives the renderer over the browser server's socket instead of IPC.
-import { _electron as electron, chromium, type Page } from "@playwright/test";
+import { _electron as electron, chromium, type ElectronApplication, type Page } from "@playwright/test";
 import net from "node:net";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -11,6 +11,8 @@ const APP_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../.
 
 export interface AppWindow {
   page: Page;
+  /** The app itself, for what runs in its main process. */
+  app: ElectronApplication;
   close(): Promise<void>;
 }
 
@@ -30,13 +32,14 @@ export async function launchWindow(opts: LaunchOptions): Promise<AppWindow> {
     ...(opts.env ? { env: opts.env as Record<string, string> } : {}),
   });
   const window = await app.firstWindow();
-  if (!inBrowser()) return { page: window, close: () => app.close() };
+  if (!inBrowser()) return { page: window, app, close: () => app.close() };
   const url = await openInABrowser(window, await freePort());
   const browser = await chromium.launch(process.env.HIVE_HARNESS_CHROMIUM ? { executablePath: process.env.HIVE_HARNESS_CHROMIUM } : {});
   const page = await browser.newPage({ viewport: { width: 1600, height: 1000 } });
   await page.goto(url);
   return {
     page,
+    app,
     close: async () => {
       await browser.close();
       await app.close();

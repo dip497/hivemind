@@ -7,6 +7,7 @@ import { installThemesIpc } from "./themes-ipc.js";
 import { tileStatusOf } from "@hivemind/agent-host/tile-status";
 import { disabledPlugins, pluginOptions, stringOptions } from "@hivemind/core/plugin-settings";
 import { lookForGuests, toolPreferences } from "@hivemind/core/settings-schema";
+import { isAddress, NEVER_SCHEMES, OPENABLE_EXT } from "@hivemind/core/opener";
 import { installWidgetIpc, widgetAsset, widgetsChanged } from "./widgets.js";
 import { listWidgets } from "@hivemind/core/widgets";
 import { installToolPackageIpc, handleToolProtocol, PLUGIN_SCHEME, safeMode, toolsChanged } from "./tool-packages.js";
@@ -94,7 +95,7 @@ import { appViewsDir, handleViewProtocol, listViewPackages, startViewWatchdog, V
 import { listWallpaperPackages, liveWallpaperFiles, wallpaperMediaFile } from "./wallpaper-packages.js";
 import { installSettingsIpc, reloadSettings, getSettings as getAppSettings, onSettingsChange, settingsFile, settingsBusy, settingsSettled } from "./settings-store.js";
 import { followWindowLook, initialWindowBackground } from "./window-look.js";
-import { flushWorkspaceStore, installWorkspaceStoreIpc, storeFor, workspaceStore } from "./workspace-store-ipc.js";
+import { flushWorkspaceStore, installWorkspaceStoreIpc, onWorkspaceChange, storeFor, workspaceStore } from "./workspace-store-ipc.js";
 import { machineIdentity, suggestedName } from "./identity.js";
 import { defaultShellFor } from "@hivemind/agent-host/shell-spec";
 import { agentFeed, dialDevice, homeLinesChanged, installNetworkIpc, isYourDevice, joinLink, knownMachines, machinesToRunOn, movedAway, openJoined, peopleHere, personName, phonesPaired, shownFrom, stopNetwork, terminalMachine } from "./network.js";
@@ -105,6 +106,7 @@ import { toBareId } from "@hivemind/workspace-api/tile-id";
 import { INITIAL_PROMPT_ENV } from "@hivemind/agent-host/initial-prompt";
 import { WorkspaceServer, named, type Connection } from "@hivemind/workspace-api/server";
 import { workspaceDomains } from "@hivemind/host/domains";
+import { codeSidecar } from "@hivemind/host/code-intel";
 import { HANDED_OFF, handOff } from "@hivemind/host/hand-off";
 import { deviceFolders } from "@hivemind/host/device-files";
 import { agents } from "@hivemind/host/agents";
@@ -114,6 +116,7 @@ import { TileActivity } from "@hivemind/host/tile-activity";
 import { startSpawned, wakeSpawned } from "@hivemind/host/spawned";
 import { Layouts, type Shown } from "@hivemind/host/store";
 import { presence } from "@hivemind/host/presence";
+import { PresenceHub } from "@hivemind/workspace-host/presence";
 import { widgets } from "@hivemind/host/widgets";
 import { appearance } from "@hivemind/host/appearance";
 import { Grants, grantsDomain } from "@hivemind/host/grants";
@@ -126,6 +129,8 @@ import { workspaceSummaries } from "@hivemind/host/home";
 import { agentControl } from "@hivemind/host/agent-control";
 import { StartPlaces } from "@hivemind/host/start-places";
 import { controlApi } from "@hivemind/host/control-api";
+import { board } from "@hivemind/host/board";
+import { BoardImages } from "@hivemind/host/board-images";
 import { views } from "@hivemind/host/views";
 import { listInstalledViews } from "@hivemind/core/views";
 import { askingOf, conversationOf, conversations, transcriptOf } from "@hivemind/host/conversations";
@@ -141,6 +146,7 @@ import { PageDownloads } from "./page-downloads.js";
 import { popupGate } from "./page-popups.js";
 import { serveScheme } from "./schemes.js";
 import { fileIn } from "@hivemind/host/repo-paths";
+import { keepOpenedIn, openOutside, outsidePicture, outsideStat, outsideTextRead, outsideTextWrite, personOpens } from "./outside-files.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -390,8 +396,8 @@ async function createWindow(target: string | null = cliLaunchTarget): Promise<vo
     stopRecover();
   });
   wc.setWindowOpenHandler(({ url }) => {
-    // Only web links reach the OS: plugin manifests supply some of these URLs.
-    if (/^https?:\/\//i.test(url)) void shell.openExternal(url);
+    // Only web and mail links reach the OS: plugin manifests supply some of these URLs.
+    if (/^(https?:\/\/|mailto:)/i.test(url)) void shell.openExternal(url);
     return { action: "deny" };
   });
 
@@ -1265,18 +1271,6 @@ handle(
   wrap(async (_e, id: string) => ({ root: await resolveRootForIssue(id) })),
 );
 
-// Files the terminal will hand to the OS opener — a VIEWABLE allowlist, not a
-// denylist, so executables / installers / shortcuts (.exe .desktop .lnk .msi
-// .app .sh-binaries …) are never launched: anything not listed is refused.
-const OPENABLE_EXT = new Set([
-  ".html", ".htm", ".md", ".markdown", ".txt", ".text", ".log", ".rtf", ".pdf", ".csv", ".tsv",
-  ".json", ".jsonc", ".yaml", ".yml", ".toml", ".ini", ".cfg", ".conf", ".env", ".xml", ".svg",
-  ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".py", ".rb", ".go", ".rs", ".java", ".kt", ".kts",
-  ".c", ".h", ".cc", ".cpp", ".hpp", ".hh", ".cs", ".php", ".swift", ".scala", ".sh", ".bash", ".zsh",
-  ".fish", ".sql", ".css", ".scss", ".sass", ".less", ".vue", ".svelte", ".astro", ".lua", ".pl", ".r",
-  ".dart", ".ex", ".exs", ".erl", ".clj", ".hs", ".ml", ".gradle", ".groovy", ".tf", ".proto", ".graphql",
-  ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".ico", ".avif", ".tiff", ".mp4", ".webm", ".mov", ".mp3", ".wav", ".ogg",
-]);
 
 // Open a file/dir clicked in the terminal with the OS default app (xdg-open via
 // shell.openPath). The file-link provider passes the raw matched token + the
@@ -1320,6 +1314,22 @@ handleEffect("openPathInApp", (repo, target) => ({ target: fileIn(repo, target) 
   const err = await shell.openPath(realResolved); // "" on success
   return err ? { ok: false, error: err } : { ok: true };
 }), { local: true });
+
+// A link the window's opener sends outside (`open-thing.ts`), after the person allowed its kind:
+// never one that runs code in a page or names a file.
+handle("openLinkOutside", async (_e, url: string) => {
+  if (typeof url !== "string" || url.length > 4096 || !isAddress(url) || NEVER_SCHEMES.has(url.slice(0, url.indexOf(":")).toLowerCase())) return { ok: false, error: "refused" };
+  try { await shell.openExternal(url); return { ok: true }; } catch (e) { return { ok: false, error: (e as Error).message }; }
+}, { local: true });
+// A path outside every workspace that the person clicked (`outside-files.ts`).
+void app.whenReady().then(() => keepOpenedIn(path.join(app.getPath("userData"), "opened-outside.json")));
+handle("outsideFileStat", (_e, asked: string) => outsideStat(asked), { local: true });
+handle("personOpensOutside", (_e, asked: string) => personOpens(asked), { local: true });
+handle("outsideTextRead", (_e, asked: string) => outsideTextRead(asked), { local: true });
+handleEffect("outsideTextWrite", (asked) => ({ target: String(asked) }), (_e, asked: string, contents: string) => outsideTextWrite(asked, contents), { local: true });
+handle("outsidePicture", wrap((_e, asked: string) => outsidePicture(asked)), { local: true });
+handleEffect("openOutsideInApp", (asked) => ({ target: String(asked) }), (_e, asked: string) => openOutside(asked, (real) => shell.openPath(real)), { local: true });
+handle("localHostName", () => os.hostname(), { local: true });
 
 // Diagnostics sink: append render-quality lines to userData/render-diag.log so a
 // blurry-text report becomes a readable trace (incl. over SSH). Best-effort and
@@ -1738,6 +1748,8 @@ const placesHere = new StartPlaces({
   photos: () => path.join(app.getPath("userData"), "photos"),
 });
 const widgetDomain = widgets(() => workspaceServer, widgetAsset, listWidgets, (repo) => workspaceStore().getObjects(repo));
+/** Who is where in each workspace, with what they selected: presence keeps it, the board reads it. */
+const presenceHub = new PresenceHub();
 const workspaceServer: WorkspaceServer = new WorkspaceServer([
   ...workspaceDomains,
   layouts.domain,
@@ -1777,6 +1789,24 @@ const workspaceServer: WorkspaceServer = new WorkspaceServer([
     type: (bare, data) => control.typed(`hm:${bare}`, data),
     close: (bare) => control.close(bare),
     folderOf: (bare) => runsIn(heldBoards(workspaceStore()), bare),
+  }),
+  // What is drawn on the board (0.42): placed here, so it works with no window showing it.
+  board({
+    store: storeFor,
+    mayWrite: (repo) => !repo.startsWith("hive://") || mayWriteShared(repo.slice("hive://".length)),
+    png: async (svg, width, height) => (await control.api()).boardPng(svg, width, height),
+    // A picture larger than the board keeps is made smaller by a window, off this thread.
+    images: new BoardImages({
+      dir: path.join(app.getPath("userData"), "board-images"),
+      shrink: async (image, most) => (await control.api()).boardShrinkImage(image, most),
+    }),
+    show: async (repo, box) => { await hcpCallRenderer("board.show", { repo, box }, 15_000); },
+    // The window shows the page (null: the top level), as it does `board.show`.
+    openPage: async (repo, page) => { await hcpCallRenderer("page.open", { repo, page }, 15_000); },
+    notesChanged: (repo, file) => workspaceServer.publish("file.changed", repo, { paths: [file] }),
+    agentName: agentNamed,
+    people: (repo) => presenceHub.people(repo),
+    changes: onWorkspaceChange,
   }),
   // Naming, keys, replies, sessions, tools and pipes, and the person's machine methods (0.23).
   controlApi({
@@ -1821,7 +1851,7 @@ const workspaceServer: WorkspaceServer = new WorkspaceServer([
     widgets: widgetDomain,
     onWarn: (m) => console.warn(`[views] ${m}`),
   }),
-  presence(() => workspaceServer, () => machineIdentity().personId),
+  presence(() => workspaceServer, () => machineIdentity().personId, presenceHub),
   widgetDomain,
   // How this host looks to its guests, as its theme changes.
   appearance({
@@ -2484,5 +2514,6 @@ app.on("before-quit", () => {
   quitting = true;
   flushWorkspaceStore();
   stopNetwork();
+  codeSidecar.close();
   forceExitAfterFlush();
 });

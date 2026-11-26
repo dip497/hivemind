@@ -222,18 +222,36 @@ export function writeBoard(repo: string, objects: BoardObject[]): void {
   const b = bridge();
   if (!b) return writeJson(boardKey(repo), objects);
   const edit = boardEdit(boardBase.get(repo) ?? [], objects);
-  if (Object.keys(edit.objects).length > 0) {
+  const ids = Object.keys(edit.objects);
+  if (ids.length > 0) {
     try { b.workspaceEditObjectsSync(repo, edit); } catch { /* best-effort */ }
   }
   boardBase.set(repo, objects);
+  if (ids.length > 0) boardWritten(repo, ids);
+}
+
+const boardWriteListeners = new Set<(repo: string, ids: string[] | null) => void>();
+const boardWritten = (repo: string, ids: string[] | null): void => { for (const l of boardWriteListeners) l(repo, ids); };
+
+/** This window wrote its board: the ids it changed, or null after an undo or redo (which, it does not know).
+ *  The store tells a window only of other writers' changes. */
+export function onBoardWritten(cb: (repo: string, ids: string[] | null) => void): () => void {
+  boardWriteListeners.add(cb);
+  return () => { boardWriteListeners.delete(cb); };
 }
 
 /** Take back the last board edit. False when there is none, or no store to ask. */
 export function undoBoard(repo: string): boolean {
-  try { return bridge()?.workspaceUndoSync(repo) === true; } catch { return false; }
+  let done = false;
+  try { done = bridge()?.workspaceUndoSync(repo) === true; } catch { /* none */ }
+  if (done) boardWritten(repo, null);
+  return done;
 }
 
 /** Make again the last board edit undo took back. False when there is none, or no store to ask. */
 export function redoBoard(repo: string): boolean {
-  try { return bridge()?.workspaceRedoSync(repo) === true; } catch { return false; }
+  let done = false;
+  try { done = bridge()?.workspaceRedoSync(repo) === true; } catch { /* none */ }
+  if (done) boardWritten(repo, null);
+  return done;
 }

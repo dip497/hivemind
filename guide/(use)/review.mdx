@@ -9,7 +9,7 @@ Point at what should change, in an agent's diff or on a web page, and the agent 
 Work through the open review comments on this project's changes in Hivemind.
 
 1. In the project folder, run \`hive review list --status open --json\`. If there are none, wait for the next one with \`hive review watch --timeout 300\`. It exits 4 when none comes in time; then tell me and stop.
-2. For each comment, read it with \`hive review show <id>\` and run \`hive review seen <id>\`. A comment on a diff names a file and line. A note on a page names the page, each element it points at with a CSS selector, and a picture file to open. Make the fix.
+2. For each comment, read it with \`hive review show <id>\` and run \`hive review seen <id>\`. A comment on a diff names a file and line. A comment on code names its lines as `@file#L5-10`, with the text they held, and `hive review show` says where they are now, or that they are outdated. A note on a page names the page, each element it points at with a CSS selector, and a picture file to open. Make the fix.
 3. Run the project's tests or build to check the fix.
 4. Reply with what you changed: \`hive review reply <id> "<what changed>"\`. Then run \`hive review resolve <id> --summary "<how it was fixed>"\`.
 5. If you disagree with a comment or cannot do it, run \`hive review dismiss <id> --reason "<why>"\`. If it is a question, answer with \`hive review reply <id> "<answer>"\`.
@@ -45,6 +45,26 @@ hive review dismiss <id> --reason "why not"
 hive review reopen <id>
 hive review watch --timeout 300     # wait for the next comment
 ```
+
+## Ask an agent about code
+
+1. In the Code tile, open a file and select some lines.
+2. Check: a bar shows over the selection: **Ask an agent**, **Explain**, **Change…** and **Comment**.
+3. Press **Explain**, or **Ask an agent** or **Change…** and write what you want, then press **Send**.
+   Pick the agent in **Send to agent**: those in the Code tile's frame come first, the one you
+   picked last on top, and **New** starts one in that frame.
+4. Check: the agent receives `@file#L5-10`, your words and the selected lines, and how to answer.
+   It answers in the comment's thread, and a change lands in the file as it saves it.
+5. **Comment** keeps a comment without sending it. **Send to an agent**, at the bottom of the
+   editor, sends every comment not sent yet as one message.
+
+Each comment shows a mark beside its first line. Click it to read the thread, reply, resolve or
+send it again. A comment moves with its lines as they change. When its lines are deleted, it stays
+and says *outdated*. An agent lists them with `hive review list --on code`.
+
+Closing a tab, or the whole Code tile, with unsaved changes asks whether to save them first. A
+binary file, or one over 5 MB, opens as a note saying so, never as text, so it cannot be saved
+over.
 
 ## See what changed over time
 

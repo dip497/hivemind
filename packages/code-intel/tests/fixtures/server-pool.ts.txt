@@ -1,0 +1,78 @@
+/**
+ * The language servers live on this machine: started on the first question, at most `cap` at
+ * once (starting one more stops the one asked least lately), and each stopped after `idleMs`
+ * without a question. A server is 1-3 GB on a real repo; 4 of them is the most the design allows.
+ */
+
+export interface Stoppable { stop(): void | Promise<void> }
+
+interface Live<S> { server: Promise<S>; usedAt: number; idle: ReturnType<typeof setTimeout> }
+
+export interface PoolOptions {
+  cap?: number;
+  idleMs?: number;
+  /** A server was stopped, by its key, and why. */
+  onStop?(key: string, why: "idle" | "cap" | "closed"): void;
+}
+
+export class ServerPool<S extends Stoppable> {
+  private readonly live = new Map<string, Live<S>>();
+  private readonly cap: number;
+  private readonly idleMs: number;
+  private tick = 0;
+
+  constructor(private readonly opts: PoolOptions = {}) {
+    this.cap = opts.cap ?? 4;
+    this.idleMs = opts.idleMs ?? 10 * 60_000;
+  }
+
+  /** The server for `key`, started by `start` when none is live. A start that fails is not kept. */
+  use(key: string, start: () => Promise<S>): Promise<S> {
+    const had = this.live.get(key);
+    if (had) {
+      clearTimeout(had.idle);
+      had.idle = this.idleTimer(key);
+      had.usedAt = ++this.tick;
+      return had.server;
+    }
+    while (this.live.size >= this.cap) this.stop(this.leastLately()!, "cap");
+    const server = start();
+    this.live.set(key, { server, usedAt: ++this.tick, idle: this.idleTimer(key) });
+    server.catch(() => {
+      const now = this.live.get(key);
+      if (now?.server === server) { clearTimeout(now.idle); this.live.delete(key); }
+    });
+    return server;
+  }
+
+  /** The keys of the servers live now. */
+  keys(): string[] { return [...this.live.keys()]; }
+
+  /** The servers live now (some may still be starting), by key. */
+  servers(): [string, Promise<S>][] { return [...this.live].map(([key, l]) => [key, l.server]); }
+
+  /** Stop every server: the sidecar is closing. */
+  close(): void { for (const key of [...this.live.keys()]) this.stop(key, "closed"); }
+
+  private idleTimer(key: string): ReturnType<typeof setTimeout> {
+    const t = setTimeout(() => this.stop(key, "idle"), this.idleMs);
+    t.unref?.();
+    return t;
+  }
+
+  private leastLately(): string | undefined {
+    let pick: string | undefined;
+    let at = Infinity;
+    for (const [key, l] of this.live) if (l.usedAt < at) { at = l.usedAt; pick = key; }
+    return pick;
+  }
+
+  private stop(key: string, why: "idle" | "cap" | "closed"): void {
+    const l = this.live.get(key);
+    if (!l) return;
+    clearTimeout(l.idle);
+    this.live.delete(key);
+    l.server.then((s) => s.stop(), () => {});
+    this.opts.onStop?.(key, why);
+  }
+}
