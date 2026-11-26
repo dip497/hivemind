@@ -60,8 +60,10 @@ test("installing a version removes old copies, but the newest two and one still 
     fs.utimesSync(bin(v), t, t);
   }
   // The oldest still runs a process: its binary is a real program, not a script.
-  fs.copyFileSync("/bin/sleep", path.join(bin("2026.9.0"), "hive"));
-  const running = spawn(path.join(bin("2026.9.0"), "hive"), ["30"], { stdio: "ignore" });
+  // A real program that keeps running whatever it is called: the runtime running this test.
+  // (`sleep` can be one program for many commands that picks its job by its name.)
+  fs.copyFileSync(process.execPath, path.join(bin("2026.9.0"), "hive"));
+  const running = spawn(path.join(bin("2026.9.0"), "hive"), ["-e", "setTimeout(() => {}, 30_000)"], { stdio: "ignore" });
   try {
     await new Promise((r) => setTimeout(r, 200));
     install("2026.10.6", fakeHive("2026.10.6"));

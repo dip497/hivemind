@@ -18,7 +18,9 @@ fs.writeFileSync(appImage, [
   `[ "$1" = --appimage-extract ] || exit 2`,
   `echo run >> "${dir}/extractions"`,
   "mkdir -p squashfs-root/resources/app.asar/out/main",
-  "cp /bin/sleep squashfs-root/hivemind",
+  // A real program that keeps running whatever it is called: the runtime running this test.
+  // (`sleep` can be one program for many commands that picks its job by its name.)
+  `cp "${process.execPath}" squashfs-root/hivemind`,
   "echo daemon > squashfs-root/resources/app.asar/out/main/pty-daemon.js",
 ].join("\n"), { mode: 0o755 });
 const mount = "/tmp/.mount_hivemiAbC123";
@@ -34,7 +36,7 @@ test.skipIf(!linux)("from an AppImage's mount, the daemon runs from a copy extra
   expect(fs.readFileSync(script, "utf8").trim()).toBe("daemon");
   expect(extractions()).toBe(1);
   // A daemon running from that copy.
-  const daemon = spawn(runtime, ["60"], { stdio: "ignore" });
+  const daemon = spawn(runtime, ["-e", "setTimeout(() => {}, 60_000)"], { stdio: "ignore" });
   kids.push(daemon.pid!);
   await new Promise((r) => setTimeout(r, 300));
 

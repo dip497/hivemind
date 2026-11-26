@@ -72,11 +72,15 @@ jobs:
   # The Python SDK, on the oldest and newest Python it supports: conformance/drive.json, and a real
   # `hive host` started from source (hence bun and the repo's packages).
   sdk-python:
-    runs-on: ubuntu-latest
+    name: sdk-python (${{ matrix.python }})
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 10
     strategy:
       matrix:
-        python: ["3.9", "3.14"]
+        include:
+          # The oldest Python the SDK supports (requires-python) is not built for the newest Ubuntu.
+          - { python: "3.9", os: ubuntu-24.04 }
+          - { python: "3.14", os: ubuntu-latest }
     steps:
       - uses: actions/checkout@v7
 
