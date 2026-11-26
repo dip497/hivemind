@@ -190,6 +190,50 @@ export function equalize(tree: Tree, path: readonly number[]): Tree {
   return { ...tree, root: at(tree.root, 0) };
 }
 
+/** Every split back to equal shares. */
+export function equalizeAll(tree: Tree): Tree {
+  const at = (n: Node): Node => (n.t === "pane" ? n : { ...n, w: n.kids.map(() => 1 / n.kids.length), kids: n.kids.map(at) });
+  return { ...tree, root: at(tree.root) };
+}
+
+/** Pane `id` shows the tab `by` places along from the one it shows, round its strip. */
+export function cycleTab(tree: Tree, id: string, by: number): Tree {
+  const p = paneById(tree, id);
+  if (!p || p.tabs.length < 2) return tree;
+  const i = p.active ? p.tabs.indexOf(p.active) : 0;
+  return activate(tree, id, p.tabs[(((i + by) % p.tabs.length) + p.tabs.length) % p.tabs.length]!);
+}
+
+/** The pane `by` places along from `id` in reading order, round the ends; null with one pane. */
+export function paneAlong(tree: Tree, id: string, by: number): string | null {
+  const all = panes(tree.root);
+  const i = all.findIndex((p) => p.id === id);
+  if (all.length < 2 || i < 0) return null;
+  return all[(((i + by) % all.length) + all.length) % all.length]!.id;
+}
+
+/** What two panes show, traded: their tabs and shown tab change places, and the focus goes with
+ *  the focused pane's tabs. */
+export function swapPanes(tree: Tree, a: string, b: string): Tree {
+  const pa = paneById(tree, a);
+  const pb = paneById(tree, b);
+  if (!pa || !pb || a === b) return tree;
+  const root = mapPanes(tree.root, (p) => (p.id === a ? { ...p, tabs: pb.tabs, active: pb.active } : p.id === b ? { ...p, tabs: pa.tabs, active: pa.active } : p));
+  const focus = tree.focus === a ? b : tree.focus === b ? a : tree.focus;
+  return { root, focus, zoom: tree.zoom === a ? b : tree.zoom === b ? a : tree.zoom };
+}
+
+/** `tiles` laid out from scratch, as many panes as fit (at most `most`): side by side up to three,
+ *  then two rows; the rest as tabs, dealt round the panes in turn. */
+export function gridOf(tiles: readonly string[], newId: () => string, most = 4): Tree {
+  const n = Math.max(1, Math.min(tiles.length, most, MAX_PANES));
+  const cells = Array.from({ length: n }, () => pane(newId()));
+  tiles.forEach((t, i) => { const c = cells[i % n]!; c.tabs.push(t); c.active ??= t; });
+  const row = (kids: Pane[]): Node => (kids.length === 1 ? kids[0]! : { t: "split", dir: "row", w: kids.map(() => 1 / kids.length), kids });
+  const root: Node = n <= 3 ? row(cells) : { t: "split", dir: "col", w: [0.5, 0.5], kids: [row(cells.slice(0, Math.ceil(n / 2))), row(cells.slice(Math.ceil(n / 2)))] };
+  return { root, focus: cells[0]!.id, zoom: null };
+}
+
 /** Pane `id` alone in the room, or back among the others. */
 export const toggleZoom = (tree: Tree, id: string): Tree => ({ ...tree, focus: id, zoom: tree.zoom === id || panes(tree.root).length < 2 ? null : id });
 

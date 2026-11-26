@@ -29,9 +29,9 @@ import type { TileOpened } from "@hivemind/workspace-api/agents";
 import type { BoardObject } from "@hivemind/workspace-doc/shapes";
 import { defaultFrame } from "@hivemind/workspace-doc/tile-list";
 import { isBox } from "./board-objects/board-model";
+import type { FlyTarget } from "./fly-to";
 
 
-type FocusReq = { id: string; cx: number; cy: number; w: number; h: number; n: number; exact?: boolean } | null;
 type SpawnOpts = {
   mode?: string; work?: string; url?: string; file?: string;
   /** Per-spawn launch options beyond `mode` (agent-option id → value). */
@@ -53,6 +53,8 @@ export interface SpawnCtx {
   frameOfRef: MutableRefObject<Record<string, string>>;
   framesRef: MutableRefObject<FrameState[]>;
   selectedFrameIdRef: MutableRefObject<string | null>;
+  /** The frame the window is inside: a new tile goes in it when no other frame is selected. */
+  focusedRef: MutableRefObject<string | null>;
   selectedTileIdRef: MutableRefObject<string | null>;
   repoPathRef: MutableRefObject<string | null>;
   rootRef: MutableRefObject<string | null>;
@@ -62,12 +64,11 @@ export interface SpawnCtx {
   setFrameOf: Dispatch<SetStateAction<Record<string, string>>>;
   setPositions: Dispatch<SetStateAction<Record<string, { x: number; y: number }>>>;
   setSelectedTileId: Dispatch<SetStateAction<string | null>>;
-  setFocusReq: Dispatch<SetStateAction<FocusReq>>;
   setFrames: Dispatch<SetStateAction<FrameState[]>>;
   setSelectedFrameId: Dispatch<SetStateAction<string | null>>;
   setTiles: Dispatch<SetStateAction<TileInstance[]>>;
   setSpawnPick: Dispatch<SetStateAction<SpawnPick>>;
-  focusTile: (id: string) => void;
+  focusTile: (target: FlyTarget, opts?: { exact?: boolean }) => void;
   /** Open a file as a tab in an editor tile — spawnTile mints the new tile's
    *  id, so a caller that wants the fresh editor to show a file passes
    *  `opts.file` and this delivers it (the same shape as `queueWork` for a
@@ -89,9 +90,9 @@ function launchOptions(id: string, over: SpawnOptions): SpawnOptions {
 export function useSpawn(ctx: SpawnCtx) {
   const {
     repoPath,
-    positionsRef, sizesRef, tilesRef, frameOfRef, framesRef, selectedFrameIdRef,
+    positionsRef, sizesRef, tilesRef, frameOfRef, framesRef, selectedFrameIdRef, focusedRef,
     selectedTileIdRef, repoPathRef, rootRef, lastActiveFrameRef, boardRef,
-    setFrameOf, setPositions, setSelectedTileId, setFocusReq, setFrames,
+    setFrameOf, setPositions, setSelectedTileId, setFrames,
     setSelectedFrameId, setTiles, setSpawnPick, focusTile, openFileInTile, renameTile,
   } = ctx;
 
@@ -180,7 +181,7 @@ export function useSpawn(ctx: SpawnCtx) {
     // focus) or pan the viewport — you stay where you are while they run.
     if (!opts?.background) {
       setSelectedTileId(id);
-      setFocusReq((prev) => ({ id, cx: placeX + me.width / 2, cy: placeY + me.height / 2, w: me.width, h: me.height, n: (prev?.n ?? 0) + 1, exact: true }));
+      focusTile({ x: placeX, y: placeY, w: me.width, h: me.height }, { exact: true });
     }
   }, [repoPath]);
 
@@ -191,7 +192,7 @@ export function useSpawn(ctx: SpawnCtx) {
   /** The frame a spawn lands in, without creating one: the selected one, else the first bound to
    *  a folder, else the first (the control plane's spawns choose the same way, defaultFrame). */
   const pickFrame = useCallback(
-    (): FrameState | undefined => defaultFrame(framesRef.current, { selected: selectedFrameIdRef.current }),
+    (): FrameState | undefined => defaultFrame(framesRef.current, { selected: selectedFrameIdRef.current ?? focusedRef.current }),
     [],
   );
 
@@ -318,7 +319,7 @@ export function useSpawn(ctx: SpawnCtx) {
     }
     const selTile = selectedTileIdRef.current;
     const selFrame =
-      selectedFrameIdRef.current ?? (selTile ? frameOfRef.current[selTile] ?? null : null);
+      selectedFrameIdRef.current ?? (selTile ? frameOfRef.current[selTile] : undefined) ?? focusedRef.current ?? null;
     if (selFrame && framesRef.current.some((f) => f.id === selFrame)) {
       spawnTile(kind, selFrame, opts);
       return;

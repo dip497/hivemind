@@ -51,6 +51,8 @@ your own program with a token ([API](/api)). Which part each one touches:
 | Agents in the background process | `agents`, `spawn`, `send`, `keys`, `read`, `stream`, `sessions`, `sleep`, `wake`, `rename`, `close` | `agent.*`, `status.all`, `terminal.*` |
 | Agents working together | `workflow`, `approve`, `approval`, `report`, `inbox`, `connect`, `disconnect` | `link.connect`, `link.disconnect` |
 | Workspace and frames | `frames`, `frame add`, `list-workspaces` | `frame.open`, `frame.close`, `worktree.list`, `store.*` |
+| Board and drawing | `draw`, `board`, `board --check`, `board move`, `board style`, `board connect`, `board lock`, `board unlock`, `board front`, `board back`, `board align`, `board duplicate`, `board undo`, `board redo`, `erase`, `pin` | `board.draw`, `board.read`, `board.picture`, `board.change`, `board.undo`, `board.redo`, `board.erase`, `board.note`, `board.show` |
+| Pages | `page list`, `page new`, `page open`, and `--page` on `draw`, `board`, `erase` and `pin` | `page.list`, `page.new`, `page.open` |
 | Desktop app windows | `focus`, `open-review` | `presence.set`, `appearance.get` |
 | Plugins | `plugin list`, `plugin open`, `plugin commands`, `plugin call`, `plugin close`, `open-tool`, `view emit` | `widget.*`, `tool.open`, `view.*` |
 | Issues | `set-state`, `add-comment`, `mark-acceptance`, `delete-issue` | `issue.list`, `issue.read` |

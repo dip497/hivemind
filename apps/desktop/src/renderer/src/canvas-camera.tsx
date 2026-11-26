@@ -5,9 +5,10 @@
  * Canvas. Pure presentational adapters with no Canvas state — extracted to keep
  * Canvas.tsx focused on orchestration.
  */
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
-import { useReactFlow, useStore, useStoreApi } from "@xyflow/react";
-import { focusZoom, roomLeftOfCards } from "./camera-fit";
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { useReactFlow, useStoreApi } from "@xyflow/react";
+import { cameraFor, roomLeftOfCards } from "./camera-fit";
+import { useChromeState } from "./workspace/chrome-store";
 import { widgetBand } from "./board-objects/widget-band";
 import { tilePlugin } from "./tiles";
 
@@ -85,9 +86,13 @@ export function FocusMode({ req }: { req: { id: string | null; n: number } | nul
   return null;
 }
 
-/** Pans the viewport to a requested tile once it has mounted + been measured.
- *  Polls a few rAF ticks because a freshly-spawned node isn't laid out on the
- *  same frame the request fires. Rendered inside <ReactFlow>. */
+/** The requests a canvas has flown: a canvas mounted later flies only one still waiting, as one
+ *  asked for from another view is. */
+const flown = new WeakSet<object>();
+
+/** Flies the camera to the box a `flyTo` asked for, whole and in the middle of the room the
+ *  widget cards and the tool island leave, once the pane is measured. The box comes from state, so
+ *  nothing needs measuring first. Rendered inside <ReactFlow>. */
 export function FocusOnTile({
   req,
 }: {
@@ -95,57 +100,31 @@ export function FocusOnTile({
 }) {
   const { setCenter } = useCamera();
   const flow = useStoreApi();
-  // Pane size (CSS px). At the exact-path's zoom 1, flow units == screen px, so
-  // we can frame the tile against the viewport directly.
-  const paneW = useStore((s) => s.width);
-  const paneH = useStore((s) => s.height);
+  const chrome = useChromeState();
+  const chromeRef = useRef(chrome);
+  chromeRef.current = chrome;
   useEffect(() => {
-    if (!req) return;
-    // A column of widget cards along the right edge covers the pane's right side: the tile is
-    // framed in the room left of it, so its header (status, sleep, close) is never under a card.
-    // Read when asked, as the pane size is: the cards moving must not re-fly an old request.
-    const band = widgetBand();
-    const paneRight = flow.getState().domNode?.getBoundingClientRect().right ?? window.innerWidth;
-    const roomW = band.edge === "right" && paneW > 0 ? roomLeftOfCards(paneW, band.width, window.innerWidth - paneRight) : paneW;
-    // How far right of the tile the camera's centre goes, in screen px, for the tile to sit in the
-    // middle of that room.
-    const shift = (paneW - roomW) / 2;
-    // `exact`: text tiles (terminal/editor/diff) need EXACTLY 100% — xterm
-    // selection + DOM-text crispness are only pixel-accurate at 1:1. Pan to the
-    // tile at zoom 1 in a SINGLE animation; do NOT chase it with a fitView
-    // (which lands at ≤ 1) — running both raced the viewport to the wrong place.
-    if (req.exact) {
-      // Centering is right when the tile FITS, but a tile WIDER/TALLER than the
-      // viewport would center-clip its edges — and for a terminal the LEFT edge
-      // (prompt + line starts) is exactly what you need to read. When the tile
-      // overflows an axis, anchor that axis to the tile's left/top edge (+pad) so
-      // the content corner stays on screen instead of hanging off the left.
-      const PAD = 24;
+    if (!req || flown.has(req)) return undefined;
+    // Read when asked, as the pane size is: the cards or the window moving must not re-fly an old request.
+    const fly = () => {
+      flown.add(req);
+      const { width: paneW, height: paneH, domNode } = flow.getState();
+      const pane = domNode?.getBoundingClientRect();
+      const band = widgetBand();
+      const paneRight = pane?.right ?? window.innerWidth;
+      const roomW = band.edge === "right" && paneW > 0 ? roomLeftOfCards(paneW, band.width, window.innerWidth - paneRight) : paneW;
+      const { topInset, bottomInset } = chromeRef.current;
+      const top = Math.max(0, topInset - (pane?.top ?? 0));
+      const bottom = Math.max(0, bottomInset - (window.innerHeight - (pane?.bottom ?? window.innerHeight)));
       const w = req.w ?? 0;
       const h = req.h ?? 0;
-      let tx = req.cx + shift;
-      let ty = req.cy;
-      // Guard paneW/paneH > 0: the store reports 0 until the pane is measured;
-      // clamping against 0 would shove the tile hard off-screen.
-      if (paneW > 0 && w > roomW - 2 * PAD) tx = req.cx - w / 2 + paneW / 2 - PAD; // left-anchor
-      if (paneH > 0 && h > paneH - 2 * PAD) ty = req.cy - h / 2 + paneH / 2 - PAD; // top-anchor
-      // At zoom 1 a flow unit is a screen pixel: land the pan on whole pixels, or an odd-sized
-      // pane leaves the text on a half pixel (blurred) with nothing left to snap it.
-      if (paneW > 0) tx = paneW / 2 - Math.round(paneW / 2 - tx);
-      if (paneH > 0) ty = paneH / 2 - Math.round(paneH / 2 - ty);
-      void setCenter(tx, ty, { zoom: 1, ...FLY });
-      return;
-    }
-    // One flight to a target computed from the request's own rect — it needs no
-    // DOM measurement, so a brand-new tile or frame is framed on the first frame,
-    // and nothing is read from the live zoom (see camera-fit.ts). A newer request
-    // interrupting this one then lands exactly where it would have from rest.
-    const zoom = focusZoom(req.w ?? 0, req.h ?? 0, roomW, paneH);
-    // Same whole-pixel landing as the exact path, at whatever zoom the fit chose.
-    const cx = paneW > 0 ? (paneW / 2 - Math.round(paneW / 2 - req.cx * zoom - shift)) / zoom : req.cx;
-    const cy = paneH > 0 ? (paneH / 2 - Math.round(paneH / 2 - req.cy * zoom)) / zoom : req.cy;
-    void setCenter(cx, cy, { zoom, ...FLY });
-    // Pane size is read, not depended on: a window resize must not re-fly an old request.
+      const cam = cameraFor({ x: req.cx - w / 2, y: req.cy - h / 2, w, h }, { paneW, paneH, roomW, top, bottom }, !!req.exact);
+      void setCenter(cam.x, cam.y, { zoom: cam.zoom, ...FLY });
+    };
+    const ready = () => { const s = flow.getState(); return s.width > 0 && s.height > 0 && !!s.panZoom; };
+    if (ready()) { fly(); return undefined; }
+    const stop = flow.subscribe(() => { if (ready()) { stop(); fly(); } });
+    return stop;
   }, [req, setCenter, flow]);
   return null;
 }
@@ -232,33 +211,4 @@ export function ViewportSnap({
     return () => { cancelAnimationFrame(raf); activeRef.current = false; };
   }, [req, moveSeq, getViewport, setViewport, activeRef]);
   return null;
-}
-
-/** Fly the viewport to a tile by id (used by chip + toast clicks + the Layers
- *  panel). Must be called inside <ReactFlow> so useReactFlow resolves.
- *  `opts.exact` forces zoom to EXACTLY 100% (minZoom = maxZoom = 1) in a SINGLE
- *  animation — used for terminal/editor/diff tiles, which are only pixel-accurate
- *  (xterm selection, DOM-text crispness) at 1:1. Doing it in one fitView avoids a
- *  second racing zoom-to-1 animation that left the tile mis-positioned. */
-export function useTileFocus(): (id: string, opts?: { exact?: boolean }) => void {
-  const { getNode } = useReactFlow();
-  const { fitView } = useCamera();
-  return useCallback(
-    (id: string, opts?: { exact?: boolean }) => {
-      // For PARENTED tiles, `n.position` is RELATIVE to the parent — setCenter
-      // on relative coords pans to the wrong place. fitView resolves absolute
-      // internally and handles both parented and free nodes. Same fix shape as
-      // FocusOnTile / onNodeDragStop's positionAbsolute fallback.
-      const n = getNode(id);
-      if (!n) return;
-      void fitView({
-        nodes: [{ id }],
-        padding: 0.3,
-        ...FLY,
-        maxZoom: 1,
-        ...(opts?.exact ? { minZoom: 1 } : {}),
-      });
-    },
-    [getNode, fitView],
-  );
 }

@@ -53,6 +53,8 @@ test("an unselected terminal is locked + blurred (no keyboard); selecting re-ena
   await page.keyboard.type("should-not-reach-terminal");
   await page.waitForTimeout(200);
   expect(await termFocused(), "still blurred after typing").toBe(false);
+  // Letters typed on the canvas pick its drawing tools (the last, "l", the line): back to Select.
+  await page.keyboard.press("Escape");
 
   // 3) reselect via the header (always live) → unlocked; content is live again
   //    so clicking it focuses the terminal (keyboard works once selected).

@@ -6,7 +6,9 @@
 import chokidar, { type FSWatcher } from "chokidar";
 import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
+import { mkdir } from "node:fs/promises";
 import path from "node:path";
+import { REVIEW_FILE, reviewRoot } from "@hivemind/core/review";
 import { emit, type Connection } from "@hivemind/workspace-api/server";
 
 /** What git ignores in `repoPath` (build output, venvs, caches), as repo-relative paths;
@@ -58,6 +60,9 @@ export function watchRepo(repoPath: string, client: Connection): void {
   // missing path through its parent, and a repo whose `.hivemind` was missing then never had its
   // tree watched when it was added. The tree covers the rest once added.
   let ignoredByGit: Set<string> | null = null;
+  // Review comments of a repo with no workspace are kept in the config folder, watched here too.
+  let reviewsAway: string | null = null;
+  const underReviewsAway = (p: string) => !!reviewsAway && (p === reviewsAway || p.startsWith(`${reviewsAway}${path.sep}`));
   const watcher = chokidar.watch(
     [
       path.join(repoPath, ".git", "HEAD"),
@@ -68,6 +73,7 @@ export function watchRepo(repoPath: string, client: Connection): void {
     ].filter((p) => existsSync(p)),
     {
       ignored: (p: string) => {
+        if (underReviewsAway(p)) return p !== reviewsAway && path.basename(p) !== REVIEW_FILE;
         // .hivemind/ may be gitignored, but issue changes arrive through it.
         if (ignoredByGit && !p.includes("/.hivemind") && !p.includes("/.git/") && underIgnored(repoPath, p, ignoredByGit)) return true;
         // Inside .git/ keep only the four HEAD-ish files above; everything
@@ -118,7 +124,7 @@ export function watchRepo(repoPath: string, client: Connection): void {
   client.closed.addEventListener("abort", () => unwatch(repoPath, client), { once: true });
 
   const trigger = (p: string) => {
-    entry!.pending.add(p);
+    entry!.pending.add(underReviewsAway(p) ? path.join(repoPath, ".hivemind", REVIEW_FILE) : p);
     if (entry!.flush) clearTimeout(entry!.flush);
     entry!.flush = setTimeout(() => {
       const paths = Array.from(entry!.pending);
@@ -133,6 +139,13 @@ export function watchRepo(repoPath: string, client: Connection): void {
     ignoredByGit = ignored;
     watcher.add(repoPath);
   });
+  void reviewRoot(repoPath).then(async (dir) => {
+    if (dir === path.join(repoPath, ".hivemind") || active.get(repoPath) !== entry) return;
+    await mkdir(dir, { recursive: true }).catch(() => {});
+    if (active.get(repoPath) !== entry) return;
+    reviewsAway = dir;
+    watcher.add(dir);
+  }, () => {});
 }
 
 function unwatch(repoPath: string, client: Connection): void {

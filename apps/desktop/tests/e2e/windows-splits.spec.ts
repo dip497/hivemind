@@ -77,7 +77,11 @@ test("switching between a pane's tabs resizes neither terminal: the one switched
   await tabs.nth(0).click();
   await expect.poll(() => told()[0]! > before[0]!).toBe(true);
   await page.setViewportSize({ width: 1400, height: 860 });
-  for (const i of [0, 1]) { await tabs.nth(i).click(); await page.keyboard.press("Control+C"); }
+  for (const i of [0, 1]) {
+    await tabs.nth(i).click();
+    await page.locator(`[data-community-slot="${await tabs.nth(i).getAttribute("data-tile-id")}"] .xterm-screen`).click();
+    await page.keyboard.press("Control+C");
+  }
 });
 
 test("a terminal shown in a tab, then back on the canvas and not selected there, is told its tile's size there again", async () => {
@@ -233,4 +237,135 @@ test("a tab dragged onto another pane's tabs joins them there; onto a pane's edg
   await page.mouse.up();
   await expect(panesOf()).toHaveCount(panesBefore + 1);
   await expect(view().locator('[role="tab"]')).toHaveCount(3);
+});
+
+/** The pane the view focuses: the only one, or the one marked. */
+const focusedPane = async () => ((await panesOf().count()) === 1 ? panesOf() : view().locator(".w-pane[data-focused]"));
+/** Focus in the view: a click in the focused pane's tab strip, before its first tab. On another pane
+ *  the click selects that pane's tile, whose terminal then takes the keys; past the last tab is a
+ *  pane's tool when the tabs fill the strip. */
+const focusView = async () => {
+  const strip = (await (await focusedPane()).locator(".w-tabs").boundingBox())!;
+  await page.mouse.click(strip.x + 2, strip.y + strip.height / 2);
+};
+/** A tile the view shows anew may take the keys as its terminal moves into its slot: waited for, or
+ *  that lands after the next `focusView` and the view's key goes to the terminal. */
+const inPlace = (tile: string) => expect(page.locator(`[data-community-slot="${tile}"] .xterm`)).toHaveCount(1);
+
+test("the quick switcher finds a tile by its name, shows it, and 1 to 9 jump with nothing typed", async () => {
+  const focusedShows = () => view().locator('.w-pane[data-focused] [role="tab"][aria-selected="true"]').getAttribute("data-tile-id");
+  await expect(panesOf()).not.toHaveCount(1);
+  const before = (await focusedShows())!;
+  const target = (await view().locator(`[role="tab"]:not([data-tile-id="${before}"])`).first().getAttribute("data-tile-id"))!;
+  const name = (await view().locator(`[role="tab"][data-tile-id="${target}"] .w-name`).textContent())!.trim();
+  await focusView();
+  await page.keyboard.press("Control+Alt+KeyP");
+  const box = view().locator("dialog.w-switch");
+  await expect(box).toBeVisible();
+  // The terminals step aside while it is open, so it is not drawn over.
+  await expect(slots()).toHaveCount(0);
+  await view().locator("dialog.w-switch input").fill(name);
+  await expect(view().locator(`.w-opt[data-tile-id="${target}"]`)).toBeVisible();
+  await view().locator(`.w-opt[data-tile-id="${target}"]`).click();
+  await expect(box).toBeHidden();
+  await expect.poll(focusedShows).toBe(target);
+  await expect(slots()).not.toHaveCount(0);
+  await inPlace(target);
+  // Most recent first: with nothing typed, 2 is the tile shown before this one.
+  await focusView();
+  await page.keyboard.press("Control+Alt+KeyP");
+  await expect(view().locator(".w-opt").first()).toHaveAttribute("data-tile-id", target);
+  await page.keyboard.press("2");
+  await expect(box).toBeHidden();
+  await expect.poll(focusedShows).toBe(before);
+});
+
+test("the next tab, the last tab and moving a tab to the next pane, by key", async () => {
+  const id = await (await focusedPane()).getAttribute("data-pane");
+  const pane = view().locator(`[data-pane="${id}"]`);
+  const strip = pane.locator('[role="tab"]');
+  // Two tabs in the focused pane at least: one from another pane joins it.
+  if ((await strip.count()) < 2) {
+    const joining = view().locator(`.w-pane:not([data-pane="${id}"]) [role="tab"]`).first();
+    const joins = (await joining.getAttribute("data-tile-id"))!;
+    await joining.dragTo(strip.first());
+    await inPlace(joins);
+  }
+  await expect(strip).not.toHaveCount(1);
+  const shows = () => pane.locator('[role="tab"][aria-selected="true"]').getAttribute("data-tile-id");
+  const before = (await shows())!;
+  await focusView();
+  await page.keyboard.press("Control+Alt+BracketRight");
+  await expect.poll(shows).not.toBe(before);
+  await inPlace((await shows())!);
+  await focusView();
+  await page.keyboard.press("Control+Alt+KeyO");
+  await expect.poll(shows).toBe(before);
+  await inPlace(before);
+  const count = await strip.count();
+  await focusView();
+  await page.keyboard.press("Control+Alt+Shift+BracketRight");
+  await expect(strip).toHaveCount(count - 1);
+  await expect(view().locator('[role="tab"]')).toHaveCount(3);
+});
+
+test("a terminal not shown that writes is marked as new output, and the mark goes once it is shown", async () => {
+  // Three tiles in two panes: one pane has two tabs.
+  const pane = panesOf().filter({ has: view().locator('[role="tab"] + [role="tab"]') }).first();
+  const tab = pane.locator('[role="tab"]').first();
+  const id = (await tab.getAttribute("data-tile-id"))!;
+  await tab.click();
+  await page.locator(`[data-community-slot="${id}"] .xterm-screen`).click();
+  await page.keyboard.type("sleep 2; echo written-later\n");
+  // The other tab shown in that pane: the writer is hidden when it writes.
+  await pane.locator('[role="tab"]').nth(1).click();
+  await expect(view().locator(`[role="tab"][data-tile-id="${id}"]`)).toHaveAttribute("data-attention", /new-output|done/, { timeout: 10_000 });
+  await view().locator(`[role="tab"][data-tile-id="${id}"]`).click();
+  await expect(view().locator(`[role="tab"][data-tile-id="${id}"]`)).toHaveAttribute("data-attention", "quiet");
+});
+
+test("a divider dragged off centre, then every pane made equal by key", async () => {
+  if ((await panesOf().count()) < 2) {
+    await panesOf().first().locator(".w-bar").hover();
+    await panesOf().first().locator('[data-pane-tool="Split right"]').click();
+  }
+  // The earlier tests leave two panes, side by side or one above the other: the divider says which.
+  await expect(panesOf()).toHaveCount(2);
+  await expect(slots()).toHaveCount(2);
+  const grip = view().locator(".w-divider");
+  const across = (await grip.getAttribute("data-dir")) === "row";
+  const g = (await grip.boundingBox())!;
+  const length = async () => { const [a, b] = await boxes(); return across ? Math.abs(a!.w - b!.w) : Math.abs(a!.h - b!.h); };
+  await page.mouse.move(g.x + g.width / 2, g.y + g.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(g.x + g.width / 2 - (across ? 200 : 0), g.y + g.height / 2 - (across ? 0 : 150), { steps: 8 });
+  await page.mouse.up();
+  await expect.poll(length).toBeGreaterThan(100);
+  await focusView();
+  await page.keyboard.press("Control+Alt+Equal");
+  await expect.poll(length).toBeLessThan(3);
+});
+
+test("typing goes to every terminal shown while broadcast is on, in red, and Escape stops it", async () => {
+  if ((await panesOf().count()) < 2) {
+    await panesOf().first().locator(".w-bar").hover();
+    await panesOf().first().locator('[data-pane-tool="Split right"]').click();
+  }
+  await expect(slots()).toHaveCount(await panesOf().count());
+  await focusView();
+  await page.keyboard.press("Control+Alt+KeyB");
+  await expect(view().locator(".w-pane[data-broadcast]")).toHaveCount(await panesOf().count());
+  await expect(view().locator(".w-casting").first()).toBeVisible();
+  const ids = await slots().evaluateAll((els) => els.map((el) => el.getAttribute("data-community-slot")!));
+  await page.locator(`[data-community-slot="${ids[0]}"] .xterm-screen`).click();
+  await page.keyboard.type("echo to-all-$((40+2))\n");
+  const screen = (tile: string) => page.evaluate((t) => ((document.querySelector(`[data-tile-slot="${t}"] .xterm`)?.parentElement as unknown as { __hmScreen?: () => string } | undefined)?.__hmScreen?.() ?? ""), tile);
+  for (const id of ids) await expect.poll(() => screen(id)).toMatch(/to-all-42/);
+  // Escape in a terminal ends it, and is not sent to the programs.
+  await page.keyboard.press("Escape");
+  await expect(view().locator(".w-pane[data-broadcast]")).toHaveCount(0);
+  await expect(view().locator(".w-casting:visible")).toHaveCount(0);
+  await page.keyboard.type("echo one-only\n");
+  await expect.poll(() => screen(ids[0]!)).toMatch(/one-only/);
+  expect(await screen(ids[1]!)).not.toMatch(/one-only/);
 });

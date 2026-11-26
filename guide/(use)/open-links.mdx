@@ -1,0 +1,54 @@
+---
+title: "Open links and files"
+description: "Ctrl+click a link or a path in a terminal and it opens in the right place: a web page, the Code tile at its line, a picture in the Image tile."
+---
+
+Click a web address, a path such as `src/app.ts:12:4`, or a picture in a terminal, and it opens in the right place. Agents, views and tools open things the same way.
+
+<AgentPrompt description="Paste this into your coding agent to open a file at a line in Hivemind." page="open-links">{`Open a file of this workspace in Hivemind's Code tile, at a line.
+
+1. Check the Hivemind app is running: \`hive ctl agents --json\` must not fail with exit code 3.
+2. Open it: \`hive ctl open README.md:1 --json\`. It prints where it opened, such as {"to":"code","path":"…/README.md","line":1,"tile":"…"}.
+3. Exit 5 means the file is not there; exit 7 means Hivemind would ask me first (a path outside the workspace, or an unknown kind of link). Tell me which.`}</AgentPrompt>
+
+## Open one from a terminal
+
+1. Hold **Ctrl** (**⌘** on a Mac) and point at a link or a path. It underlines.
+2. Click it.
+
+Check: a path with a line opens in the Code tile at that line.
+
+**⇧⌘O** / **Ctrl+Shift+O** in a terminal lists the links and paths on its screen, newest first: the arrows choose, Enter opens.
+
+A path is read from the folder the shell was in when it printed it, when the shell says so (most do, or can with their shell integration). Otherwise it is read from the tile's folder. A name with a line, such as `README.md:12`, or a known file type, such as `package.json`, is a link too.
+
+## Where each one opens
+
+| You click | It opens in |
+|---|---|
+| A web page | your browser, or a Browser tile: **Web pages open in** |
+| A page on this computer (`localhost`, `127.0.0.1`) | a Browser tile, always |
+| A file, with or without `:line:col` | the Code tile, or your system's app: **Files open in** |
+| A picture (`.png`, `.jpg`, `.gif`, `.webp`, `.svg`, `.bmp`, `.avif`) | the Image tile |
+| A page of the workspace (`.html`) | a Browser tile |
+| `mailto:` | your mail app |
+
+Choose both under **Opening links** on the **Browser** page of **Settings ▸ Plugins**, or with `hive config set links.web '"tile"'` and `hive config set links.files '"system"'` (see [Settings](/settings#links)).
+
+A full path or a `~/` path you click outside your workspaces, such as a screenshot an agent saved in `/tmp`, opens the same way: a text file in the Code tile, where you can edit and save it, a picture in the Image tile, a page in a Browser tile, a folder or a PDF in your system's app. Anything else is not opened, and a note says why. Your system's app is handed only files it can show, never a program. An agent, a view or a tool opens only what is inside your workspaces, and a file outside them that you opened is read and saved only until the app restarts: click its path again after that.
+
+A path an agent split across two lines opens whole when you click either part, if a file is there; otherwise the part you clicked opens.
+
+Another kind of link, such as `vscode:` or `zoommtg:`, asks you first: **Allow once**, **Always for** it, or **Cancel**. The kinds you always allow are listed under **Opening links**, each with **Remove**. One an agent, a view or a tool opens is not asked about: it is refused until you allow its kind. Links that run code (`javascript:`, `data:`) are never opened.
+
+A path a shell printed on another computer (`ssh` inside a terminal here) opens nothing.
+
+## The Image tile
+
+The Image tile fits the picture to the tile. **−** and **+** zoom in steps, **Fit** fits it again, and **100%** shows it at its own size. Ctrl+scroll zooms too. Past 300% each pixel shows as a square. A checkerboard shows through what is see-through, and the line at the bottom says its size in pixels and on disk.
+
+## From an agent or a script
+
+`hive ctl open <url|path[:line[:col]]>` opens it as a click would: see [hive ctl](/cli#hive-ctl-agents-and-tiles). A view with the permission `workspace:open` opens one with `hm.open(thing)`, at most 5 in 10 seconds, and a tool with `host.openFile(path, { line, col })`.
+
+<LastValidated />

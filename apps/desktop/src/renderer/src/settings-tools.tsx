@@ -14,6 +14,7 @@ import { toolLabel } from "./settings-nav";
 import { useToolPackages, useToolProblem } from "./tiles/tool-plugins";
 import { SettingsForm } from "./plugins/SettingsForm";
 import { ServiceSection } from "./plugins/ServiceSection";
+import { LinksSetting } from "./links-setting";
 import { cleanError } from "./plugins/catalog-install";
 import { PluginRow, type ListedRow } from "./plugins/PluginList";
 import { heldOffByPackage, partOfPackage } from "./plugins/package-rows";
@@ -123,6 +124,7 @@ export function ToolPage({ id }: { id: string }) {
       <SettingsForm fields={added.settings} values={resolveSettings(added.settings, pluginOptions(stored, "tool", id))} onChange={(f, v) => setPluginOption("tool", id, f, v)} />
     </section>}
     {added?.service && <ServiceSection id={id} service={added.service} on={enabled} />}
+    {id === BROWSER_PLUGIN_ID && <LinksSetting />}
     {id === BROWSER_PLUGIN_ID && <BrowserControl toolOn={enabled} />}
     {added && !partOfPackage(added) && <RemoveTool pkg={added} />}
   </div>;

@@ -3,7 +3,7 @@
  * only on the slots. Unless the rect says `chrome: "none"`, the host's slot bar sits at the top of
  * it (name, status, sleep, pop-out, undock).
  */
-import { useEffect, useRef, type RefObject } from "react";
+import { useEffect, useRef, useSyncExternalStore, type RefObject } from "react";
 import type { SurfaceRect } from "@hivemind/view-sdk/protocol";
 import type { WorkspaceViewProps } from "../../workspace-view";
 import type { LayerTile } from "../../../LayersPanel";
@@ -12,6 +12,7 @@ import { inPark, TileSlot } from "../../tile-host";
 import { SlotBar } from "../../slot-chrome";
 import { Wallpaper } from "../../../Wallpaper";
 import { useSurfacePolicy } from "../../../theme-store";
+import { broadcastHeld, broadcastTiles, followBroadcast } from "../../broadcast-input";
 
 export function SurfaceSlots({ rects, width, tiles, commands, onUndock, frame }: {
   rects: SurfaceRect[];
@@ -24,6 +25,10 @@ export function SurfaceSlots({ rects, width, tiles, commands, onUndock, frame }:
   frame: RefObject<HTMLIFrameElement | null>;
 }) {
   const policy = useSurfacePolicy();
+  // Terminals typed into together: each marked in the error colour, drawn by the app, not the view.
+  const together = useSyncExternalStore(followBroadcast, broadcastTiles);
+  // Of those, the ones someone else has the keyboard of: skipped, and shown dimmed.
+  const held = useSyncExternalStore(followBroadcast, broadcastHeld);
 
   // A slot that goes away (undocked from its bar or with Shift+Esc, released by the view, its tile
   // closed) leaves the focus in its surface, now parked out of sight, or on the page: the view's
@@ -54,6 +59,8 @@ export function SurfaceSlots({ rects, width, tiles, commands, onUndock, frame }:
             className={`${r.inert ? "pointer-events-none [&_*]:!pointer-events-none" : "pointer-events-auto"} absolute flex flex-col overflow-hidden bg-[var(--color-bg)]`}
             style={{ left: r.x, top: r.y, width: r.w, height: r.h, borderRadius: r.radius, paddingTop: r.y <= 1 && r.x + r.w >= width - 1 ? 48 : 0 }}
             data-community-slot={r.tileId}
+            data-broadcast-held={held.includes(r.tileId) ? "" : undefined}
+            title={held.includes(r.tileId) ? "Someone else has this keyboard" : undefined}
             data-slot-bare={r.chrome === "none" ? "" : undefined}
           >
             {/* With pluginSurfaces "theme" the wallpaper is painted behind this slot only, so the
@@ -67,6 +74,9 @@ export function SurfaceSlots({ rects, width, tiles, commands, onUndock, frame }:
               </div>
             )}
             <TileSlot tileId={r.tileId} transient className="relative z-10 min-h-0 flex-1" />
+            {together.includes(r.tileId) && (
+              <div aria-hidden data-slot-broadcast className={`pointer-events-none absolute inset-0 z-20 border-2 border-[var(--color-err)] ${held.includes(r.tileId) ? "bg-[var(--color-bg)]/50 opacity-50" : ""}`} style={{ borderRadius: r.radius }} />
+            )}
           </div>
         );
       })}

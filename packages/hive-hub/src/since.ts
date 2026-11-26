@@ -26,6 +26,12 @@ export const SINCE = {
 export const PERMISSION_SINCE: Readonly<Record<string, string>> = {
   /** Search a frame's files and open one in its editor (view protocol 1.19, feature `code`). */
   "workspace:code": "2026.11.3",
+  "workspace:board": "2026.11.4",
+  "workspace:draw": "2026.11.4",
+  /** Open a web page or a frame's file where a click would (view protocol 1.21, feature `open`). */
+  "workspace:open": "2026.11.4",
+  /** Type into several terminals at once (view protocol 1.21, feature `broadcast`). */
+  "workspace:broadcast": "2026.11.4",
 };
 
 export type SinceKey = keyof typeof SINCE;

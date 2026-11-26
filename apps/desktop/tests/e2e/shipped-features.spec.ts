@@ -198,9 +198,16 @@ test("MiniMap is opt-in and toggles", async () => {
 test("motion-aware class toggles during canvas pan", async () => {
   // Pan via right-button drag (panOnDrag=[1,2]) over an empty canvas region —
   // wheeling over a tile is swallowed by `nowheel`, so target bare pane.
-  const pane = await page.locator(".react-flow__pane").boundingBox();
-  const ex = pane ? pane.x + pane.width - 60 : 1200;
-  const ey = pane ? pane.y + pane.height - 60 : 700;
+  // A tile flown to sits in the room under the tool island, so it may reach a corner: find bare pane.
+  const [ex, ey] = await page.evaluate(() => {
+    const p = document.querySelector(".react-flow__pane")!.getBoundingClientRect();
+    for (let y = p.bottom - 20; y > p.top + 200; y -= 40) {
+      for (let x = p.right - 20; x > p.left + 200; x -= 40) {
+        if (document.elementFromPoint(x, y)?.classList.contains("react-flow__pane")) return [x, y];
+      }
+    }
+    return [p.right - 20, p.bottom - 20];
+  });
   await page.mouse.move(ex, ey);
   await page.mouse.down({ button: "right" });
   let during = false;

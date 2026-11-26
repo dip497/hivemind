@@ -20,6 +20,7 @@
  *     than the hop within, so the reason printed is the innermost one.
  */
 import { notesCmd } from "./review.js";
+import { codeCommand } from "./ctl-code.js";
 import path from "node:path";
 import { defineCommand, type ArgsDef, type ParsedArgs } from "citty";
 import fs from "node:fs";
@@ -36,6 +37,7 @@ import { stripAnsi } from "@hivemind/host/control/output-recorder";
 import { openDrive, type Drive } from "../drive.js";
 import { notServed, registered, workspaceNamed, type HostWorkspace } from "../workspace-named.js";
 import { isRemote } from "@hivemind/core/remote-uri";
+import { isAddress } from "@hivemind/core/opener";
 
 type Core = NonNullable<Result<"store.core">>;
 import { UnsupportedError, UsageError, boolFlag, emitArgs, durationFlag, intFlag, parseKeys, resolveAgent, superviseOf, workflowPlan } from "../ctl-args.js";
@@ -49,6 +51,8 @@ import { createToolRegistry } from "@hivemind/core/tool-registry";
 import { listToolPackages } from "@hivemind/core/tool-packages";
 import { agentRows, tileRows, type AgentRow, type ToolOf } from "../tile-rows.js";
 import { LOOK_MS, PLUGIN_CALL_CLIENT_MS, type PluginInstance, type PluginList, type TileLook } from "@hivemind/workspace-api/plugins";
+import type { AlignHow, BoardChange, BoardChangeAsk, BoardChanged, BoardChanges, BoardPicture, BoardReading, BoardSelection } from "@hivemind/workspace-api/board";
+import type { PageListing } from "@hivemind/workspace-api/pages";
 import os from "node:os";
 
 const ISSUE_STATES = ["backlog", "todo", "in_progress", "in_review", "done", "cancelled"] as const;
@@ -94,7 +98,7 @@ function fail(e: unknown, json: boolean): never {
 const JSON_ARG = { json: { type: "boolean", description: "print the result as JSON on one line" } } as const;
 
 /** defineCommand with `--json`, structured errors and exit codes wired in. */
-function sub<A extends ArgsDef>(
+export function sub<A extends ArgsDef>(
   name: string, description: string, args: A,
   handler: (args: ParsedArgs<A & typeof JSON_ARG>) => Promise<unknown | { __exit: number; result: unknown }>,
 ) {
@@ -457,6 +461,7 @@ const keys = sub("keys", "Send key tokens to a tile's TUI (comma-separated, e.g.
   });
 
 const READ_DEFAULT_MS = 100_000; // under Claude Code's 120 s Bash default
+const turnExit = { closed: EXIT.notFound, waiting: EXIT.waiting, idle: EXIT.refused, timeout: EXIT.timeout, working: EXIT.ok } as const;
 
 const read = sub("read", "Wait for an agent's turn to finish and print its reply (exit 4 on timeout, 5 if it closes or the tile runs no agent, 7 if it is idle with nothing new, 8 if it stops to wait on an answer, 9 if it is asleep)", {
   ...tileArg,
@@ -469,15 +474,84 @@ const read = sub("read", "Wait for an agent's turn to finish and print its reply
     if (r.finalStatus === "turn" || a.poll) return r;
     // Closed while we waited: no turn is coming. Waiting: none comes until it is answered; idle,
     // until it is sent a task.
-    const exit = { closed: EXIT.notFound, waiting: EXIT.waiting, idle: EXIT.refused, timeout: EXIT.timeout, working: EXIT.ok } as const;
-    return { __exit: exit[r.finalStatus], result: r };
+    return { __exit: turnExit[r.finalStatus], result: r };
   });
 });
+
+const ask = sub("ask", "Send text to an agent and print its answer in one call (exit 4 on timeout, 5 if it closes, 8 if it stops to wait on an answer, 9 if it is asleep)", {
+  ...tileArg, text: { type: "positional", required: true },
+  timeout: { type: "string", description: `how long to wait for the answer, e.g. 90s or 5m (default ${READ_DEFAULT_MS / 1000}s)` },
+}, (a) => {
+  const total = durationFlag(a.timeout, "timeout", READ_DEFAULT_MS);
+  return onDrive(async (d) => {
+    const sent = await d.call("agent.send", [a.tileId, a.text]) as { sent: boolean };
+    if (!sent.sent) throw notFound(a.tileId);
+    const r = await readTurn(d, String(a.tileId), total);
+    return r.finalStatus === "turn" ? r : { __exit: turnExit[r.finalStatus], result: r };
+  });
+});
+
+const asAgent = (given: unknown): string => {
+  const callerTile = (typeof given === "string" && given) || ownTile();
+  if (!callerTile) throw new UsageError("not inside a hivemind agent tile ($HIVEMIND_TILE unset) — pass --tile <tileId>");
+  return callerTile;
+};
+const agentTileArg = { tile: { type: "string", description: "the agent doing this, from a terminal (default: $HIVEMIND_TILE — set inside every spawned agent)" } } as const;
+const channelArg = { channel: { type: "positional", required: true, description: "channel name: lowercase letters, digits and dashes" } } as const;
+const restOf = (a: { _?: string[] }, skip = 0): string[] => (a._ ?? []).slice(skip);
+const absolutePaths = (given: string[]): string[] => given.map((p) => path.resolve(p));
+
+const post = sub("post", "Post to a channel: every agent following it finds it in its inbox, and an @name in the text reaches that agent even if it does not follow. Posting follows the channel",
+  { ...channelArg, text: { type: "positional", required: true }, ...agentTileArg },
+  (a) => hcpCall("agent.post", { callerTile: asAgent(a.tile), channel: a.channel, text: a.text }));
+
+const follow = sub("follow", "Follow a channel: what agents post to it comes to your inbox", { ...channelArg, ...agentTileArg },
+  (a) => hcpCall("agent.follow", { callerTile: asAgent(a.tile), channel: a.channel }));
+
+const unfollow = sub("unfollow", "Stop following a channel", { ...channelArg, ...agentTileArg },
+  (a) => hcpCall("agent.leave", { callerTile: asAgent(a.tile), channel: a.channel }));
+
+const channelsCmd = sub("channels", "The channels you follow and who else follows each", agentTileArg,
+  (a) => hcpCall("agent.channels", { callerTile: asAgent(a.tile) }));
+
+type HeldClaim = { path: string; by: string; name: string; since: number; note?: string };
+
+const claim = sub("claim", "Claim files before you edit them, all or none (exit 7 when another agent holds one: it says who)",
+  { note: { type: "string", description: "what you are doing with them" }, ...agentTileArg },
+  async (a) => {
+    const paths = absolutePaths(restOf(a));
+    if (!paths.length) throw new UsageError("name at least one file: hive ctl claim <path…>");
+    const r = await hcpCall("agent.claim", { callerTile: asAgent(a.tile), paths, ...(a.note ? { note: a.note } : {}) }) as { claimed: string[]; held: HeldClaim[] };
+    if (!r.held.length) return r;
+    const holders = [...new Set(r.held.map((c) => `${c.name} (${c.by})`))].join(", ");
+    throw new HcpCliError("CLAIMED", `held by another agent: ${r.held.map((c) => `${c.path} by ${c.name}${c.note ? ` (${c.note})` : ""}`).join("; ")}`, EXIT.refused,
+      `ask ${holders} to release, e.g. hive ctl send ${r.held[0]!.by} "Please release ${r.held[0]!.path}", or work on other files`);
+  });
+
+const release = sub("release", "Release files you claimed; with no path, every one you hold", agentTileArg,
+  (a) => hcpCall("agent.release", { callerTile: asAgent(a.tile), paths: absolutePaths(restOf(a)) }));
+
+const claims = sub("claims", "Every file an agent has claimed, and who holds it", {}, () => hcpCall("agent.claims", {}));
 
 const focus = sub("focus", "Bring a tile forward in the window; prints { focused }", tileArg, (a) => onDrive(async (d) => {
   await d.call("tile.focus", [a.tileId]);
   return { focused: String(a.tileId) };
 }));
+const open = sub("open", "Open a web address or a file, path[:line[:col]], where a click would: a Browser tile or the system's browser, the Code tile at that line, the Image tile; prints { to, tile?, path?, url? }. Exit 7 when the app would ask the person (a path outside the workspace, an unknown kind of link), 5 when the file is not there",
+  {
+    thing: { type: "positional", required: true, description: "a URL, or a path relative to here with an optional :line:col" },
+    tile: { type: "string", description: "open it as a click in this tile's frame (an agent opens in its own)" },
+  },
+  (a) => {
+    const thing = String(a.thing);
+    const target = isAddress(thing) ? thing : path.resolve(thing);
+    return onDrive((d) => d.call("opener.open", a.tile ? [target, a.tile] : [target])).catch((e: unknown) => {
+      if (!(e instanceof HcpCliError) || e.code !== "UNSUPPORTED") throw e;
+      throw new HcpCliError(e.code, e.message, e.exit, /never/.test(e.message) ? "this kind of link is never opened"
+        : /allow|person/.test(e.message) ? "only the person can open this kind of link, by clicking it; give them the link instead"
+        : "open a file inside a workspace: hive ctl frames lists their folders");
+    });
+  });
 const close = sub("close", "Close an agent: its session ends and its tile goes", tileArg, (a) => onDrive(async (d) => {
   const r = await d.call("agent.close", [a.tileId]) as { closed: boolean };
   if (!r.closed) throw notFound(a.tileId);
@@ -592,7 +666,7 @@ type Inboxed = { messages: InboxMessage[]; dropped: number };
 
 /** What another agent sent, as a block a reader can tell apart from the rest. */
 const inboxBlock = (m: InboxMessage): string =>
-  `── #${m.id} ${m.kind} from ${m.name}${m.turn !== undefined ? `, turn ${m.turn}` : ""} ──\n${m.text}`;
+  `── #${m.id} ${m.kind}${m.channel ? ` in #${m.channel}` : ""} from ${m.name}${m.turn !== undefined ? `, turn ${m.turn}` : ""} ──\n${m.text}`;
 
 const inbox = defineCommand({
   meta: { name: "inbox", description: "What your agents sent you (replies, reports, waits, approvals), oldest first; each is read once" },
@@ -899,6 +973,380 @@ const takeBackFile = sub("take-back-file", "Remove a file this agent sent, by it
   return r;
 }));
 
+// ── the board: drawing on it, reading it, pinning notes ──────────────
+
+const pointFlag = (v: unknown, name: string): { x: number; y: number } | undefined => {
+  if (v === undefined || v === "") return undefined;
+  const [x, y, more] = String(v).split(",").map(Number);
+  if (more !== undefined || !Number.isFinite(x) || !Number.isFinite(y)) throw new UsageError(`--${name} must be x,y on the canvas: ${String(v)}`);
+  return { x: x!, y: y! };
+};
+
+/** What to draw: the JSON in `--file`, or on stdin. */
+function drawingAsked(file: unknown): Record<string, unknown> {
+  const from = file ? String(file) : 0;
+  let raw: string;
+  try {
+    raw = fs.readFileSync(from, "utf8");
+  } catch (e) {
+    throw new UsageError(`cannot read ${file ? String(file) : "stdin"}: ${(e as Error).message}`);
+  }
+  let asked: unknown;
+  try {
+    asked = JSON.parse(raw);
+  } catch {
+    throw new UsageError(`what to draw must be JSON, on stdin or in --file: ${raw.slice(0, 80)}`);
+  }
+  if (typeof asked !== "object" || asked === null || Array.isArray(asked)) throw new UsageError("what to draw must be a JSON object: {title, boxes, links, shapes}");
+  return asked as Record<string, unknown>;
+}
+
+type BoardImage = Result<"board.keepImage">;
+const IMAGE_HASH = /^[0-9a-f]{64}$/;
+/** How wide a picture put on the board alone is at most, as the window places one. */
+const PLACED_IMAGE_MOST = 640;
+const IMAGE_TYPES: Readonly<Record<string, string>> = { ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp", ".gif": "image/gif" };
+
+/** The picture in `file` kept for the board: what the board shows of it. The host reads what it is from its bytes. */
+async function keptImage(d: Drive, repo: string, file: string): Promise<BoardImage> {
+  let bytes: Buffer;
+  try {
+    bytes = fs.readFileSync(file);
+  } catch (e) {
+    throw new UsageError(`cannot read ${file}: ${(e as Error).message}`);
+  }
+  const type = IMAGE_TYPES[path.extname(file).toLowerCase()] ?? "image/png";
+  return await d.call("board.keepImage", [repo, { type, data: bytes.toString("base64") } as never]) as BoardImage;
+}
+
+/** Each box of `asked` whose `image` is a file, kept and named by its hash instead. */
+async function imagesKept(d: Drive, repo: string, asked: Record<string, unknown>): Promise<Record<string, unknown>> {
+  if (!Array.isArray(asked.boxes)) return asked;
+  const boxes = [];
+  for (const box of asked.boxes as unknown[]) {
+    const image = (box as { image?: unknown } | null)?.image;
+    boxes.push(typeof image === "string" && !IMAGE_HASH.test(image) ? { ...(box as object), image: (await keptImage(d, repo, image)).hash } : box);
+  }
+  return { ...asked, boxes };
+}
+
+/** Each problem as a line a person or an agent reads: what is wrong, then what to do. */
+function printProblems(problems: ReadonlyArray<{ say: string; fix: string }>): void {
+  for (const p of problems) console.error(`problem: ${p.say}\n  fix: ${p.fix}`);
+}
+
+/** What a board or page verb answers: its result, the line printed without --json (the result
+ *  itself when none), and its exit code when that is not 0. */
+interface Said { result: unknown; line?: string; exit?: number }
+
+/** What to do next when the board refuses, by error code. */
+const BOARD_FIXES: Readonly<Record<string, string>> = {
+  NOT_FOUND: "`hive ctl board --json` lists what is drawn, `hive ctl page list` the pages",
+  FORBIDDEN: "the person locked it, or shared this board with you to view only: ask them",
+  UNSUPPORTED: "open the workspace in the Hivemind app: `hive host` has no window",
+};
+
+/** A board or page verb: `--json`, a plain line otherwise, and a refusal with what to do next. */
+function said<A extends ArgsDef>(name: string, description: string, args: A, run: (args: ParsedArgs<A & typeof JSON_ARG>) => Promise<Said>) {
+  return defineCommand({
+    meta: { name, description },
+    args: { ...args, ...JSON_ARG },
+    async run({ args }) {
+      const json = !!args.json;
+      try {
+        const r = await run(args as ParsedArgs<A & typeof JSON_ARG>);
+        console.log(json ? JSON.stringify(r.result) : r.line ?? JSON.stringify(r.result, null, 2));
+        if (r.exit) process.exit(r.exit);
+      } catch (e) {
+        if (e instanceof HcpCliError && !e.fix && BOARD_FIXES[e.code]) e.fix = BOARD_FIXES[e.code];
+        fail(e, json);
+      }
+    },
+  });
+}
+
+/** A page or frame named on the command line: `top` is the whole canvas (null); left out, undefined. */
+function pageFlag(v: unknown): string | null | undefined {
+  if (v === undefined || v === "") return undefined;
+  return String(v) === "top" ? null : String(v);
+}
+
+const pageArg = { page: { type: "string", description: "inside this page or frame, at any depth: its id from `hive ctl page list` or `hive ctl frames`, or top for the whole canvas" } } as const;
+
+const draw = said("draw", "Draw on the board: JSON on stdin or in --file, {title?, direction?, boxes: [{id, text, form?, color?, dash?, weight?, rough?}], links: [[from, to, label?]] or [{from, to, label?, route?, dash?, tail?}], shapes: [{form, x, y, w, h, text, points, color}]}; or flowchart text with --text. Boxes are placed for you, and a link may end on a tile, a frame or anything on the board; `me` is your own tile. --update <drawing> changes a drawing in place. Prints the drawing's id, where it landed, what it overlaps and its `problems`, each with a fix", {
+  page: { type: "string", description: "the page or frame it goes inside: its id from `hive ctl page list` or `hive ctl frames`, or top for in no page (default: the frame of what it is drawn beside)" },
+  file: { type: "string", description: "read the drawing from this file instead of stdin" },
+  text: { type: "string", description: "read flowchart text from this file, or - for stdin: `A[Web app] --> B{Signed in?}: checks`, one statement a line; ((round)), {choice}, -.-> dashed, `direction down`, `image shot <hash>: alt` a picture" },
+  image: { type: "string", description: "put this picture on the board (PNG, JPEG, WebP or GIF, at most 10 MB), with --at, --near, --frame or --page; in a drawing's JSON a box { id, image: <file>, alt } is one too" },
+  alt: { type: "string", description: "with --image: what the picture shows, in words, for anyone who cannot see it" },
+  width: { type: "string", description: "with --image: how wide it is on the board, in pixels (default: its own width, at most 640)" },
+  direction: { type: "string", description: "which way the boxes run: right (default) or down" },
+  near: { type: "string", description: "draw beside this tile, frame or object (default: beside your own tile)" },
+  at: { type: "string", description: "put its top-left corner here on the canvas: x,y" },
+  frame: { type: "string", description: "the frame it moves with (default: the frame of what it is drawn beside); none for no frame" },
+  update: { type: "string", description: "a drawing's id to update: a box whose key (or id) is there keeps its place and the person's changes, a new one is placed beside what it links to, what you leave out is erased. `hive ctl board --drawing <id> --as text` gives you the text to edit" },
+  ...repoArg,
+}, (a) => onDrive(async (d) => {
+  const at = pointFlag(a.at, "at");
+  if (a.direction !== undefined && a.direction !== "right" && a.direction !== "down") throw new UsageError(`--direction must be right or down: ${String(a.direction)}`);
+  let flowchart: string | undefined;
+  if (a.text !== undefined) {
+    try {
+      flowchart = fs.readFileSync(a.text === "-" || a.text === "" ? 0 : String(a.text), "utf8");
+    } catch (e) {
+      throw new UsageError(`cannot read ${a.text === "-" ? "stdin" : String(a.text)}: ${(e as Error).message}`);
+    }
+  }
+  const page = pageFlag(a.page);
+  const repo = await workspaceOf(d, a.repo);
+  if (a.image === undefined && (a.alt !== undefined || a.width !== undefined)) throw new UsageError("--alt and --width go with --image <file>");
+  if (a.image !== undefined && (flowchart !== undefined || a.file !== undefined || a.update !== undefined)) throw new UsageError("--image puts one picture on the board: leave out --text, --file and --update, or name it in a drawing's boxes as { id, image: <file> }");
+  let image: BoardImage | undefined;
+  let drawing: Record<string, unknown>;
+  if (a.image !== undefined) {
+    image = await keptImage(d, repo, String(a.image));
+    const width = a.width === undefined ? Math.round(image.width * Math.min(1, PLACED_IMAGE_MOST / Math.max(image.width, image.height))) : intFlag(a.width, "width", 8);
+    drawing = { boxes: [{ id: "image", image: image.hash, width, ...(a.alt ? { alt: String(a.alt) } : {}) }] };
+  } else {
+    drawing = flowchart !== undefined ? { text: flowchart } : await imagesKept(d, repo, drawingAsked(a.file));
+  }
+  const asked = {
+    ...drawing,
+    ...(a.direction ? { direction: a.direction } : {}),
+    ...(a.near ? { near: a.near } : {}), ...(at ? { at } : {}), ...(a.frame ? { frame: a.frame } : {}), ...(a.update ? { update: a.update } : {}),
+    ...(page !== undefined ? { page } : {}),
+  };
+  const drawn = await d.call("board.draw", [repo, asked as never]) as { problems?: Array<{ say: string; fix: string }>; boxes: Record<string, string> };
+  if (!a.json) printProblems(drawn.problems ?? []);
+  if (!image) return { result: drawn };
+  return { result: { ...drawn, image }, line: `put picture ${drawn.boxes.image} on the board: ${image.width}×${image.height}, ${image.hash}` };
+}));
+
+/** A board change as a line: its seq, who made it, and what it changed. */
+const changeLine = (c: BoardChange): string => `${c.seq}\t${c.by}${c.who ? ` ${c.who}` : ""}\t${c.objects ? c.objects.join(",") : "anything"}`;
+
+/** The board's changes after `since`; following, each as it comes until Ctrl+C. */
+async function boardChanges(d: Drive, repo: string, since: number | null, follow: boolean, json: boolean): Promise<Said> {
+  if (!follow) {
+    const r = await d.call("board.changes", [repo, since]) as BoardChanges;
+    const lines = [...(r.lost ? ["some changes are no longer kept: read the board again"] : []), ...r.changes.map(changeLine), ...(r.erased.length ? [`not on the board now: ${r.erased.join(", ")}`] : [])];
+    return { result: r, line: [...lines, `seq ${r.seq}: ask again with --since ${r.seq}`].join("\n") };
+  }
+  // Heard from before the first answer, so nothing that happens meanwhile is missed.
+  const heard: BoardChange[] = [];
+  let show = (c: BoardChange): void => { heard.push(c); };
+  d.on("board.changed", (at, c) => { if (at === repo) show(c as BoardChange); });
+  const first = await d.call("board.changes", [repo, since, true]) as BoardChanges;
+  let seq = since ?? first.seq;
+  show = (c) => {
+    if (c.seq <= seq) return;
+    seq = c.seq;
+    console.log(json ? JSON.stringify(c) : changeLine(c));
+  };
+  if (first.lost) console.error("some changes are no longer kept: read the board again");
+  for (const c of [...first.changes, ...heard]) show(c);
+  process.on("SIGINT", () => { d.close(); process.exit(0); });
+  await d.closed;
+  throw new HcpCliError("UNAVAILABLE", "the app or host stopped", EXIT.unavailable);
+}
+
+/** How each change verb reads in the line it prints. */
+const CHANGED_SAYS: Readonly<Record<string, string>> = {
+  move: "moved", style: "styled", lock: "locked", unlock: "unlocked", front: "brought to the front", back: "sent to the back", align: "lined up", duplicate: "copied",
+};
+
+/** What a change did, as lines: what changed, the copies made, what the person's lock kept. */
+function changedLine(verb: string, r: BoardChanged): string {
+  const lines = [r.copies?.length ? `${CHANGED_SAYS[verb]}: the copies are ${r.copies.join(", ")}`
+    : r.changed.length ? `${CHANGED_SAYS[verb]}: ${r.changed.join(", ")}` : `nothing changed: already ${CHANGED_SAYS[verb]}`];
+  if (r.locked.length) lines.push(`left as they were, locked by the person: ${r.locked.join(", ")}`);
+  return lines.join("\n");
+}
+
+const boardCmd = said("board", "What is on the board, in canvas coordinates: its frames, tiles, drawings and objects; --ids or --drawing say those in full; --svg or --png save a picture to look at; --check says what is wrong with what is drawn; --page reads a page. To change what is drawn: `board move <ids> --to x,y` or `--page <page>`, `board style <ids> --color --dash --weight --rough`, `board connect <from> <to> [--label] [--route]`, `board lock|unlock|front|back <ids>`, `board align <ids> --how <how>`, `board duplicate <ids> [--by dx,dy]`; `board undo|redo` takes back or puts back your own last change. `--drawing <id> --as text` prints a drawing as the text `draw --update` takes; `--selected` says what the person has selected in each window; `board changes [--since <seq>] [--follow]` says what changed on the board and who changed it", {
+  change: { type: "positional", required: false, description: "move, style, connect, lock, unlock, front, back, align, duplicate, undo, redo or changes; left out: read the board" },
+  target: { type: "positional", required: false, description: "shapes or arrows, comma-separated, or a drawing's id for all of it; connect: what the arrow starts on" },
+  other: { type: "positional", required: false, description: "connect: what the arrow ends on" },
+  page: { type: "string", description: "read, check or picture only what is inside this page or frame, at any depth, by its id from `hive ctl page list` or `hive ctl frames` (default: the whole canvas); move: the page or frame to move them into, or top to take them out of their page" },
+  to: { type: "string", description: "move: put its top-left corner here on the canvas, x,y" },
+  how: { type: "string", description: "align: left, centre, right, top, middle, bottom, spread-across or spread-down" },
+  by: { type: "string", description: "duplicate: how far from the originals the copies go, dx,dy (default 24,24); write a negative one as --by=-24,0" },
+  color: { type: "string", description: "style: ink, blue, green, yellow, orange, red or purple" },
+  dash: { type: "string", description: "style, connect: solid, dashed or dotted" },
+  weight: { type: "string", description: "style: thin, medium or thick" },
+  rough: { type: "string", description: "style: yes for the hand-drawn look, no for clean lines" },
+  label: { type: "string", description: "connect: what the arrow says" },
+  route: { type: "string", description: "connect: straight, elbow or curve" },
+  check: { type: "boolean", description: "what is wrong with what is drawn (inside --page when given), each with a fix: exit 0 when nothing is, 10 when something is" },
+  ids: { type: "string", description: "these objects in full, comma-separated" },
+  drawing: { type: "string", description: "this drawing's objects in full, or the only thing in the picture" },
+  limit: { type: "string", description: "how many objects an overview lists (default 200)" },
+  svg: { type: "string", description: "save a picture of what is drawn to this file, as SVG" },
+  png: { type: "string", description: "save a picture of what is drawn to this file, as PNG: needs the app, not `hive host`" },
+  theme: { type: "string", description: "the picture's colours: dark (default) or light" },
+  show: { type: "string", description: "bring this drawing or object into view in the app" },
+  as: { type: "string", description: "with --drawing: text, to print it as the flowchart text `hive ctl draw --update <drawing> --text -` takes" },
+  selected: { type: "boolean", description: "what the person has selected now, in each window showing the workspace" },
+  since: { type: "string", description: "changes: only those after this seq, from an earlier answer (left out: none yet, and the seq to ask after)" },
+  follow: { type: "boolean", description: "changes: keep going, printing each change as it comes (one JSON per line with --json), until Ctrl+C" },
+  ...repoArg,
+}, (a) => onDrive(async (d): Promise<Said> => {
+  const repo = await workspaceOf(d, a.repo);
+  const page = pageFlag(a.page);
+  if (a.change === "changes") {
+    if (a.target) throw new UsageError("board changes takes no ids: --since <seq> and --follow say which");
+    return boardChanges(d, repo, a.since === undefined ? null : intFlag(a.since, "since", 0), !!a.follow, !!a.json);
+  }
+  if (a.change !== undefined) {
+    const verb = String(a.change);
+    const target = a.target ? String(a.target) : "";
+    if (page !== undefined && verb !== "move") throw new UsageError(`--page goes with move, or with reading the board: board ${verb} acts on its ids wherever they are`);
+    if (verb === "undo" || verb === "redo") {
+      if (target) throw new UsageError(`board ${verb} takes no ids: it ${verb === "undo" ? "takes back" : "puts back"} your own last change to the board`);
+      if (verb === "undo") {
+        const r = await d.call("board.undo", [repo]) as { undone: boolean };
+        if (!r.undone) throw new HcpCliError("NOTHING_TO_UNDO", "nothing you changed on this board is left to undo", EXIT.refused, "undo takes back only what you changed through `hive ctl` since the app started, newest first; the person's own changes are theirs to undo");
+        return { result: r, line: "undid your last change to the board" };
+      }
+      const r = await d.call("board.redo", [repo]) as { redone: boolean };
+      if (!r.redone) throw new HcpCliError("NOTHING_TO_REDO", "nothing you undid on this board is left to redo", EXIT.refused, "redo puts back what `hive ctl board undo` took back, until you change something else");
+      return { result: r, line: "put back what you undid" };
+    }
+    if (verb === "connect") {
+      if (!target || !a.other) throw new UsageError("say both ends: hive ctl board connect <from> <to>");
+      const link = {
+        from: target, to: String(a.other),
+        ...(a.label ? { label: String(a.label) } : {}), ...(a.route ? { route: String(a.route) } : {}), ...(a.dash ? { dash: String(a.dash) } : {}),
+      };
+      const drawn = await d.call("board.draw", [repo, { links: [link] } as never]) as { objects: string[] };
+      return { result: drawn, line: `connected ${target} to ${String(a.other)}: ${drawn.objects.join(", ")}` };
+    }
+    if (!(verb in CHANGED_SAYS)) throw new UsageError(`board takes move, style, connect, lock, unlock, front, back, align, duplicate, undo, redo or changes: ${verb}`);
+    const ids = target.split(",").map((s) => s.trim()).filter(Boolean);
+    if (ids.length === 0) throw new UsageError(`say what to ${verb}: ids from \`hive ctl board\`, or a drawing's id`);
+    let ask: Omit<BoardChangeAsk, "ids">;
+    if (verb === "move") {
+      const to = pointFlag(a.to, "to");
+      if (!to && page === undefined) throw new UsageError("say where: --to x,y on the canvas, or --page <page> to move them into a page or frame");
+      ask = { ...(to ? { to } : {}), ...(page !== undefined ? { page } : {}) };
+    } else if (verb === "style") {
+      if (a.rough !== undefined && a.rough !== "yes" && a.rough !== "no") throw new UsageError(`--rough must be yes or no: ${String(a.rough)}`);
+      ask = {
+        ...(a.color ? { color: String(a.color) } : {}), ...(a.dash ? { dash: String(a.dash) } : {}), ...(a.weight ? { weight: String(a.weight) } : {}),
+        ...(a.rough !== undefined ? { rough: a.rough === "yes" } : {}),
+      } as Omit<BoardChangeAsk, "ids">;
+    } else if (verb === "align") {
+      if (!a.how) throw new UsageError("say how: --how left, centre, right, top, middle, bottom, spread-across or spread-down");
+      ask = { align: String(a.how) as AlignHow };
+    } else if (verb === "duplicate") {
+      const [dx, dy, more] = a.by === undefined ? [24, 24] : String(a.by).split(",").map(Number);
+      if (more !== undefined || !Number.isFinite(dx) || !Number.isFinite(dy)) throw new UsageError(`--by must be dx,dy: how far from the originals the copies go: ${String(a.by)}`);
+      ask = { duplicate: { dx: dx!, dy: dy! } };
+    } else {
+      ask = verb === "lock" || verb === "unlock" ? { locked: verb === "lock" } : { stack: verb as "front" | "back" };
+    }
+    const r = await d.call("board.change", [repo, { ids, ...ask }] as never) as BoardChanged;
+    return { result: r, line: changedLine(verb, r) };
+  }
+  const onPage = page !== undefined ? { page } : {};
+  if (a.check) {
+    const { problems = [] } = await d.call("board.read", [repo, { check: true, limit: 0, ...onPage } as never]) as { problems?: Array<{ say: string; fix: string }> };
+    if (!a.json) printProblems(problems);
+    return problems.length > 0
+      ? { result: { problems }, line: `${problems.length} problem${problems.length === 1 ? "" : "s"}: fix them, then check again`, exit: EXIT.problems }
+      : { result: { problems }, line: "nothing wrong with what is drawn" };
+  }
+  if (a.selected) {
+    const r = await d.call("board.selected", [repo]) as BoardSelection;
+    const lines = r.windows.map((w) => `${w.name || w.person} (${w.window}): ${w.selected.length ? w.selected.map((i) => `${i.id} ${i.kind}${i.text ? ` "${i.text}"` : ""}`).join(", ") : "nothing selected"}`);
+    return { result: r, line: lines.join("\n") || "no window shows this workspace now" };
+  }
+  if (a.as !== undefined) {
+    if (a.as !== "text") throw new UsageError(`--as takes text: ${String(a.as)}`);
+    if (!a.drawing) throw new UsageError("say which drawing: --drawing <id> --as text");
+    const r = await d.call("board.read", [repo, { drawing: String(a.drawing), as: "text", limit: 0 }]) as BoardReading;
+    return { result: { drawing: String(a.drawing), text: r.text }, line: r.text!.trimEnd() };
+  }
+  if (a.show) {
+    await d.call("board.show", [repo, String(a.show)]);
+    return { result: { shown: String(a.show) }, line: `showed ${String(a.show)} in the app` };
+  }
+  if (a.svg || a.png) {
+    const ask = { ...(a.drawing ? { drawing: String(a.drawing) } : {}), ...(a.theme === "light" ? { theme: "light" as const } : {}), ...onPage };
+    const file = String(a.png || a.svg);
+    const pic = await d.call("board.picture", [repo, a.png ? { ...ask, png: true } : ask]) as BoardPicture;
+    fs.writeFileSync(file, "png" in pic ? Buffer.from(pic.png, "base64") : pic.svg);
+    const saved = { file: path.resolve(file), width: pic.width, height: pic.height };
+    return { result: saved, line: `saved ${saved.file}, ${pic.width}×${pic.height}` };
+  }
+  return { result: await d.call("board.read", [repo, {
+    ...(a.ids ? { ids: String(a.ids).split(",").map((s) => s.trim()).filter(Boolean) } : {}),
+    ...(a.drawing ? { drawing: String(a.drawing) } : {}),
+    ...(a.limit !== undefined ? { limit: intFlag(a.limit, "limit", 0) } : {}),
+    ...onPage,
+  }]) };
+}));
+
+const erase = said("erase", "Erase what is drawn on the board: by id, a whole drawing, or all this agent drew (--mine). An arrow goes with what it ends on", {
+  ids: { type: "positional", required: false, description: "shapes or arrows, comma-separated" },
+  drawing: { type: "string", description: "every shape and arrow of this drawing" },
+  mine: { type: "boolean", description: "everything this agent drew" },
+  by: { type: "string", description: "everything the agent of this tile drew" },
+  page: { type: "string", description: "only what is inside this page or frame, at any depth: its id from `hive ctl page list` or `hive ctl frames` (default: anywhere)" },
+  ...repoArg,
+}, (a) => onDrive(async (d): Promise<Said> => {
+  const ids = a.ids ? String(a.ids).split(",").map((s) => s.trim()).filter(Boolean) : [];
+  const page = pageFlag(a.page);
+  const r = await d.call("board.erase", [await workspaceOf(d, a.repo), {
+    ...(ids.length ? { ids } : {}), ...(a.drawing ? { drawing: String(a.drawing) } : {}),
+    ...(a.mine ? { by: "me" } : a.by ? { by: String(a.by) } : {}),
+    ...(page !== undefined ? { page } : {}),
+  }]) as { erased: string[]; locked?: string[] };
+  return { result: r, line: [`erased ${r.erased.length}: ${r.erased.join(", ")}`, ...(r.locked?.length ? [`left as they were, locked by the person: ${r.locked.join(", ")}`] : [])].join("\n") };
+}));
+
+const pageList = said("list", "Every page in the workspace: its id, title, the page it is inside, and how much is drawn and open inside it, at any depth", { ...repoArg }, (a) => onDrive(async (d): Promise<Said> => {
+  const r = await d.call("page.list", [await workspaceOf(d, a.repo)]) as { pages: PageListing[] };
+  const line = r.pages.map((p) => `${p.id}\t${p.title}\tin ${p.parent ?? "top"}\t${p.objects} drawn, ${p.tiles} tile${p.tiles === 1 ? "" : "s"}`).join("\n");
+  return { result: r, line: line || "no pages: `hive ctl page new \"Title\"` makes one" };
+}));
+
+const pageNew = said("new", "Make a page: a frame on the canvas that is a stop on the path while you are inside it. Prints its id", {
+  title: { type: "positional", required: true, description: "what the page is called" },
+  in: { type: "string", description: "the page or frame it goes inside, by its id, or top (default: the canvas itself)" },
+  at: { type: "string", description: "its top-left corner on the canvas, x,y (default: a free spot)" },
+  ...repoArg,
+}, (a) => onDrive(async (d): Promise<Said> => {
+  const at = pointFlag(a.at, "at");
+  const inside = pageFlag(a.in);
+  const r = await d.call("page.new", [await workspaceOf(d, a.repo), { title: String(a.title), ...(inside ? { in: inside } : {}), ...(at ? { at } : {}) }]) as { id: string };
+  return { result: r, line: `made page ${r.id}${inside ? ` inside ${inside}` : ""}: draw in it with --page ${r.id}, go inside it with \`hive ctl page open ${r.id}\`` };
+}));
+
+const pageOpen = said("open", "The app's window flies to a page or frame and goes inside it: what is outside dims. top goes back out to the whole canvas", {
+  page: { type: "positional", required: true, description: "the page's or frame's id from `hive ctl page list` or `hive ctl frames`, or top" },
+  ...repoArg,
+}, (a) => onDrive(async (d): Promise<Said> => {
+  const page = pageFlag(a.page) ?? null;
+  await d.call("page.open", [await workspaceOf(d, a.repo), page]);
+  return { result: { opened: page }, line: page ? `the window is inside ${page}` : "the window shows the whole canvas" };
+}));
+
+const pageCmd = defineCommand({
+  meta: { name: "page", description: "Pages: frames on the one canvas that are stops on the path while you are inside them, nested as deep as you like. List them, make one, go inside one in the app" },
+  subCommands: { list: pageList, new: pageNew, open: pageOpen },
+});
+
+const pin = said("pin", "Pin a note on the board for the person, on something there or at a place: point at what you mean. `hive ctl notes` lists and answers it", {
+  body: { type: "positional", required: true, description: "what it says" },
+  on: { type: "string", description: "the tile, frame or object it is pinned to, which it follows" },
+  at: { type: "string", description: "where: x,y from that one's corner, else on the canvas" },
+  ...repoArg,
+}, (a) => onDrive(async (d): Promise<Said> => {
+  const at = pointFlag(a.at, "at");
+  return { result: await d.call("board.note", [await workspaceOf(d, a.repo), { body: String(a.body), ...(a.on ? { on: String(a.on) } : {}), ...(at ? { at } : {}) }]) };
+}));
+
 const tile = defineCommand({
   meta: { name: "tile", description: "Look at a tile as the person sees it" },
   subCommands: { look: tileLook },
@@ -912,10 +1360,11 @@ const plugin = defineCommand({
 export const ctlCmd = defineCommand({
   meta: { name: "ctl", description: "Drive the running hivemind app (spawn/send/read/stream/workflow/report) and the issue verbs agents use" },
   subCommands: {
-    whoami, agents, tiles, frames, frame, "open-tool": openTool, spawn, sessions, send, keys, read, stream, workflow, approve, approval, report, inbox, "open-review": openReview,
-    focus, close, sleep, wake, rename, connect, disconnect, view, plugin, tile,
+    whoami, agents, tiles, frames, frame, draw, board: boardCmd, erase, page: pageCmd, pin, "open-tool": openTool, spawn, sessions, send, keys, read, stream, workflow, approve, approval, report, inbox, ask, post, follow, unfollow, channels: channelsCmd, claim, release, claims, "open-review": openReview,
+    focus, open, close, sleep, wake, rename, connect, disconnect, view, plugin, tile,
     "send-file": sendFile, "sent-files": sentFilesCmd, "take-back-file": takeBackFile,
     "set-state": setState, "add-comment": addComment, "mark-acceptance": markAcceptance,
     "delete-issue": deleteIssueCmd, "list-workspaces": listWorkspacesCmd, notes: notesCmd, browser,
+    code: codeCommand({ sub, onDrive, workspaceOf, repoArg }),
   },
 });

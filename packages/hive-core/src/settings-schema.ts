@@ -16,6 +16,7 @@ import { isPluginKey, isPluginOn, parsePluginStates, type PackageOf, type Plugin
 import { accentColorsOf, appearanceExtraOf, importedExtraParts, type AccentColors, type AppearanceExtra, type FontFaces } from "./appearance-extra.js";
 import { FIELD_ID } from "@hivemind/view-sdk/settings";
 import { DEFAULT_NOTIFICATION_SETTINGS, normalizeNotificationSettings, type NotificationSettings } from "./notification-settings.js";
+import { allowableScheme } from "./opener.js";
 
 // ── appearance ────────────────────────────────────────────────────────────────
 
@@ -538,6 +539,16 @@ export interface CodeSettings {
    *  file's history and the log are read several times faster on a large repo. */
   commitGraph: boolean;
 }
+/** Where a clicked link opens (`opener.ts`): a web page in the system's browser or a Browser tile
+ *  (a page on this computer always in a tile), a file in the Code tile or the system's app. */
+export const LINKS_WEB = ["system", "tile"] as const;
+export const LINKS_FILES = ["code", "system"] as const;
+export interface LinksSettings {
+  web: (typeof LINKS_WEB)[number];
+  files: (typeof LINKS_FILES)[number];
+  /** Kinds of link (`vscode`, `zoommtg`) the person said always go to the system. */
+  allowedSchemes: string[];
+}
 /** What quitting the app does while terminals or agents run on this computer. */
 export const QUIT_CHOICES = ["ask", "keep-running", "stop-everything"] as const;
 export type QuitChoice = (typeof QUIT_CHOICES)[number];
@@ -575,6 +586,7 @@ export interface Settings {
   agentBrowser: AgentBrowserSettings;
   quit: QuitSettings;
   code: CodeSettings;
+  links: LinksSettings;
   /** Toasts, OS pop-ups and sounds (`notification-settings.ts`). Before 2026-10 the app kept them
    *  in a settings.json of its data folder; migration 0006 moved them here. */
   notifications: NotificationSettings;
@@ -596,6 +608,7 @@ export const DEFAULT_SETTINGS: Settings = {
   agentBrowser: { useTiles: true, markPageText: true, tiles: {} },
   quit: { whenRunning: "ask" },
   code: { commitGraph: true },
+  links: { web: "system", files: "code", allowedSchemes: [] },
   notifications: DEFAULT_NOTIFICATION_SETTINGS,
 };
 
@@ -946,6 +959,11 @@ export function mergeSettings(raw: unknown, base: Settings = DEFAULT_SETTINGS): 
     profile: profileOf(p.profile, base.profile),
     network: { updateCheck: bool((isObj(p.network) ? p.network : {}).updateCheck, base.network.updateCheck) },
     code: { commitGraph: bool((isObj(p.code) ? p.code : {}).commitGraph, base.code.commitGraph) },
+    links: {
+      web: oneOf((isObj(p.links) ? p.links : {}).web, LINKS_WEB, base.links.web),
+      files: oneOf((isObj(p.links) ? p.links : {}).files, LINKS_FILES, base.links.files),
+      allowedSchemes: schemesOf((isObj(p.links) ? p.links : {}).allowedSchemes, base.links.allowedSchemes),
+    },
     browserApp: browserAppOf(p.browserApp, base.browserApp),
     agentBrowser: {
       useTiles: bool((isObj(p.agentBrowser) ? p.agentBrowser : {}).useTiles, base.agentBrowser.useTiles),
@@ -958,6 +976,10 @@ export function mergeSettings(raw: unknown, base: Settings = DEFAULT_SETTINGS): 
 }
 
 const quitChoiceOf = (v: unknown, def: QuitChoice): QuitChoice => (QUIT_CHOICES.includes(v as QuitChoice) ? (v as QuitChoice) : def);
+const schemesOf = (v: unknown, def: string[]): string[] => (Array.isArray(v)
+  ? [...new Set(v.filter((x): x is string => typeof x === "string").map((x) => x.toLowerCase()).filter(allowableScheme))].slice(0, 32)
+  : def);
+const oneOf = <T extends string>(v: unknown, choices: readonly T[], def: T): T => (choices.includes(v as T) ? (v as T) : def);
 
 const HOST_NAME_RE = /^(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)*$/;
 

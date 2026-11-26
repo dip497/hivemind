@@ -78,12 +78,17 @@ export class AgentScreen {
       this.menu.hidden = true;
       if (this.agent) this.closing.ask(`Close ${this.agent.agent}? It stops, and its tile closes on ${app.computer()}.`);
     });
-    const notes = h("button", { type: "button", role: "menuitem", "data-open-notes": "" }, "Notes on pages");
+    const notes = h("button", { type: "button", role: "menuitem", "data-open-notes": "" }, "Notes");
     notes.addEventListener("click", () => {
       this.menu.hidden = true;
       void this.showNotes();
     });
-    this.menu.append(notes, close);
+    const drawings = h("button", { type: "button", role: "menuitem", "data-open-drawings": "" }, "Drawings");
+    drawings.addEventListener("click", () => {
+      this.menu.hidden = true;
+      void this.showDrawings();
+    });
+    this.menu.append(drawings, notes, close);
     this.filesNote.addEventListener("click", () => this.showTerminal(false));
     const more = iconButton("more", "More", () => (this.menu.hidden = !this.menu.hidden), { "data-more": "" });
     this.el.addEventListener("click", () => (this.menu.hidden = true));
@@ -127,7 +132,39 @@ export class AgentScreen {
     }));
   }
 
-  /** The workspace's notes on pages, asked of the computer again: open ones can be sent to the agent,
+  /** What was drawn on the workspace's board, each to look at: a picture the computer draws, shown
+   *  as an image, so nothing in it runs. A tap shows it at full size, to scroll round. */
+  private async showDrawings(): Promise<void> {
+    const a = this.agent;
+    if (!a) return;
+    const told = h("p", { class: "quiet", role: "status", "data-drawings-told": "" });
+    const shut = h("button", { type: "button", "data-close-notes": "" }, "Close");
+    shut.addEventListener("click", () => (this.notes.hidden = true));
+    const picture = h("img", { class: "drawing-picture", alt: "", hidden: true, "data-drawing-picture": "" }) as HTMLImageElement;
+    picture.addEventListener("click", () => picture.classList.toggle("full"));
+    const look = (id: string | null, title: string) => void this.app.drawingPicture(a, id).then((svg) => {
+      picture.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+      picture.alt = title;
+      picture.hidden = false;
+      say(told, "");
+    }, () => say(told, "The computer did not send that picture."));
+    const list = await this.app.drawings(a).catch(() => null);
+    if (this.agent !== a) return;
+    const row = (id: string | null, title: string) => {
+      const open = h("button", { type: "button", "data-drawing": id ?? "all" }, title);
+      open.addEventListener("click", () => look(id, title));
+      return h("li", {}, open);
+    };
+    this.notes.replaceChildren(
+      h("header", { class: "notes-head" }, h("h2", {}, "Drawings"), shut),
+      list === null ? h("p", { class: "quiet" }, "The computer did not say what is drawn.")
+        : h("ol", { class: "notes-list" }, ...list.map((d) => row(d.id, d.title || "Untitled drawing")), row(null, "Everything drawn")),
+      h("div", { class: "drawing-view" }, picture),
+      told);
+    this.notes.hidden = false;
+  }
+
+  /** The workspace's notes on pages and the board, asked of the computer again: open ones can be sent to the agent,
    *  and each done, dismissed with a reason, or reopened. */
   private async showNotes(): Promise<void> {
     const a = this.agent;
@@ -162,8 +199,8 @@ export class AgentScreen {
         h("div", { class: "note-actions" }, ...(closed ? [reopen] : [done, dismiss, why])));
     });
     this.notes.replaceChildren(
-      h("header", { class: "notes-head" }, h("h2", {}, "Notes on pages"), shut),
-      list.length ? h("ol", { class: "notes-list" }, ...items) : h("p", { class: "quiet" }, "No notes on pages in this workspace."),
+      h("header", { class: "notes-head" }, h("h2", {}, "Notes"), shut),
+      list.length ? h("ol", { class: "notes-list" }, ...items) : h("p", { class: "quiet" }, "No notes in this workspace."),
       send, told);
     this.notes.hidden = false;
   }

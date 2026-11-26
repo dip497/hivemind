@@ -3,8 +3,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { BoardObject } from "@hivemind/workspace-doc/shapes";
+import type { Node } from "@xyflow/react";
 import {
-  duplicateBox, facingSides, newWidget, sidePoint, toCanvas, toStored, widgetsOf, widgetsToBring, withoutObject, type BoxObject,
+  facingSides, groupOf, pickTool, selectionOn, SHOWN_SELECTED_MOST, withSelected, showDrawing, isBox, isBoxType, keepUnchanged, newWidget, sidePoint, toCanvas, toStored, type BoxObject, widgetsOf, widgetsToBring, withChanges, withoutObject,
 } from "../../src/renderer/src/board-objects/board-model.ts";
 import type { FrameState } from "../../src/renderer/src/canvas-persistence.ts";
 
@@ -52,7 +53,7 @@ test("deleting a box takes the arrows that end on it, and no other", () => {
   assert.deepEqual(withoutObject(board, "n1").map((o) => o.id), ["n2", "a2"]);
 });
 
-test("a new board widget is centred where it is added and joins the frame there; one added elsewhere floats; a copy gets new ids", () => {
+test("a new board widget is centred where it is added and joins the frame there; one added elsewhere floats", () => {
   const frames = [frame({ id: "outer", x: 0, y: 0, w: 1000, h: 1000, z: 1 }), frame({ id: "inner", x: 100, y: 100, w: 400, h: 400, parentFrameId: "outer", z: 2 })];
   const size = { w: 220, h: 180 };
   const box = newWidget("note", "n9", 4, { at: { x: 300, y: 300 }, size, frames });
@@ -65,11 +66,6 @@ test("a new board widget is centred where it is added and joins the frame there;
   assert.deepEqual(newWidget("checklist", "c9", 1, { at: { x: 0, y: 0 }, size, lines: true, frames }).items, []);
   const floating = newWidget("clock", "w1", 1);
   assert.deepEqual(widgetsOf([floating, box], "canvas").map((w) => w.id), ["w1"]);
-
-  const list = { id: "c1", kind: "widget", widget: "checklist", placement: "board", x: 0, y: 0, w: 260, h: 200, text: "t", items: [{ id: "i1", text: "a", done: true }] } as BoxObject;
-  let n = 0;
-  const copy = duplicateBox(list, "c2", 7, () => `item-${++n}`);
-  assert.deepEqual(copy, { ...list, id: "c2", x: 24, y: 24, z: 7, items: [{ id: "item-1", text: "a", done: true }] });
 });
 
 test("a package's view brings each of its widgets to a workspace once: never a second copy, never one closed", () => {
@@ -84,4 +80,84 @@ test("a package's view brings each of its widgets to a workspace once: never a s
   assert.deepEqual(widgetsToBring([...members, "@ada/log"], ["@ada/log"], members), { add: [], brought: ["@ada/log"] });
   // A workspace where the person put some of them by hand, before any view brought one: as arranged.
   assert.deepEqual(widgetsToBring(members, ["@ada/ledger"], []), { add: [], brought: members });
+});
+
+const drawnShape = (id: string, more: Record<string, unknown> = {}) => ({ id, kind: "shape", form: "rect", x: 10, y: 20, w: 100, h: 50, ...more }) as BoardObject;
+
+test("a shape is on the board as a box is: relative to its frame in the store, on the canvas in the window", () => {
+  assert.equal(isBox(drawnShape("s")), true);
+  assert.equal(isBoxType("shape"), true);
+  const frames = [{ id: "f", x: 100, y: 200, w: 500, h: 500 }] as FrameState[];
+  const stored = [drawnShape("s", { frame: "f" })];
+  const canvas = toCanvas(stored, frames);
+  assert.deepEqual(canvas[0], drawnShape("s", { frame: "f", x: 110, y: 220 }));
+  assert.deepEqual(toStored(canvas, frames), stored);
+  // Its frame gone, it stays where it is, loose.
+  assert.deepEqual(toStored(canvas, []), [drawnShape("s", { x: 110, y: 220 })]);
+});
+
+test("selecting a shape of a drawing is selecting the drawing, and a shape alone is itself", () => {
+  const board = [drawnShape("a", { drawing: "d" }), drawnShape("b", { drawing: "d" }), drawnShape("c", { drawing: "other" }), drawnShape("loose")];
+  assert.deepEqual(groupOf(board, "b"), ["a", "b"]);
+  assert.deepEqual(groupOf(board, "loose"), ["loose"]);
+  assert.deepEqual(groupOf(board, "nothing"), ["nothing"]);
+});
+
+test("what a board action answered is one edit: changed objects keep their place, taken ones go, new ones come last", () => {
+  const board = [drawnShape("a"), drawnShape("b"), drawnShape("c")];
+  // Nothing answered: the same board, so nothing is written and no undo step is made.
+  assert.equal(withChanges(board, {}), board);
+  const moved = drawnShape("b", { x: 99 });
+  const next = withChanges(board, { b: moved, c: null, d: drawnShape("d") });
+  assert.deepEqual(next.map((o) => o.id), ["a", "b", "d"]);
+  assert.equal(next[0], board[0]);
+  assert.equal(next[1], moved);
+});
+
+test("a board where nothing changed is the same board, and an edit leaves every other object as it was", () => {
+  const stroke = drawnShape("pen", { form: "pen", frame: "f", points: [[0, 0], [40, 30], [80, 10]] });
+  const stored = [stroke, drawnShape("box", { frame: "f" }), note()];
+  const kept = keepUnchanged([], stored);
+  // The frame moves and its drawing goes along: nothing kept changed, so there is nothing to save.
+  const moved = toCanvas(stored, [frame({ x: 300, y: 60 })]).map((o) => ({ ...o }));
+  assert.equal(keepUnchanged(kept, toStored(moved, [frame({ x: 300, y: 60 })])), kept);
+  // One box recoloured: it alone is new.
+  const edited = keepUnchanged(kept, toStored(moved.map((o) => (o.id === "box" ? { ...o, color: "red" } : o)) as BoardObject[], [frame({ x: 300, y: 60 })]));
+  assert.notEqual(edited, kept);
+  assert.deepEqual(edited.map((o, i) => o === kept[i]), [true, false, true]);
+});
+
+test("picking a drawing tool brings the drawing tools out, and putting them away goes back to Select", () => {
+  const off = { tool: "select", on: false } as const;
+  assert.deepEqual(pickTool(off, "rect"), { tool: "rect", on: true }, "a tool key turns Draw on");
+  assert.equal(pickTool(off, "select"), off, "Select alone leaves Draw as it was");
+  const drawing = { tool: "pen", on: true } as const;
+  assert.deepEqual(pickTool(drawing, "select"), { tool: "select", on: true }, "Esc back to Select keeps the row out");
+  assert.deepEqual(showDrawing(drawing, false), { tool: "select", on: false }, "Draw off puts the pen down");
+  assert.deepEqual(showDrawing(off, true), { tool: "select", on: true });
+  assert.equal(showDrawing(drawing, true), drawing, "nothing changed, the same object");
+});
+
+test("what another writer or an undo took off the board is no longer selected or written in; a selection all still there is the same one", () => {
+  const board = [note({ id: "n1" }), note({ id: "n2" })];
+  const chosen = { selectedId: "n1", selectedIds: ["n1", "n2"], editingId: "n2" };
+  assert.equal(selectionOn(board, chosen), chosen);
+  assert.deepEqual(selectionOn([note({ id: "n2" })], chosen), { selectedId: "n2", selectedIds: ["n2"], editingId: "n2" });
+  assert.deepEqual(selectionOn([note({ id: "n1" })], chosen), { selectedId: "n1", selectedIds: ["n1"], editingId: null });
+  assert.deepEqual(selectionOn([], chosen), { selectedId: null, selectedIds: [], editingId: null });
+  const none = { selectedId: null, selectedIds: [], editingId: null };
+  assert.equal(selectionOn([], none), none);
+});
+
+test("selecting every shape keeps a big painted selection painted; a few are shown as their nodes, and a tile always is", () => {
+  const painted = (id: string): Node => ({ id, type: "shape", position: { x: 0, y: 0 }, data: {}, hidden: true });
+  const tile: Node = { id: "t1", type: "terminal", position: { x: 0, y: 0 }, data: {} };
+  const many = Array.from({ length: 2000 }, (_, i) => painted(`s${i}`));
+  const all = withSelected([tile, ...many], new Set(["t1", ...many.map((n) => n.id)]));
+  assert.equal(all.filter((n) => !n.hidden).length, 1, "only the tile is a shown node");
+  assert.ok(all.every((n) => n.selected), "every one is selected");
+  const few = withSelected(many, new Set(["s1", "s2"]));
+  assert.deepEqual(few.filter((n) => !n.hidden).map((n) => n.id), ["s1", "s2"]);
+  const bound = withSelected(many, new Set(many.slice(0, SHOWN_SELECTED_MOST).map((n) => n.id)));
+  assert.equal(bound.filter((n) => !n.hidden).length, SHOWN_SELECTED_MOST);
 });

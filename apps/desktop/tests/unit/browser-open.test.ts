@@ -3,8 +3,6 @@ import assert from "node:assert/strict";
 import {
   htmlFileUrl,
   isHtmlPath,
-  openTargetForTerminalLink,
-  webUrlForInternalBrowser,
 } from "../../src/renderer/src/browser-open";
 
 test("isHtmlPath recognizes html files only", () => {
@@ -26,27 +24,4 @@ test("htmlFileUrl refuses remote workspaces and traversal", () => {
   assert.equal(htmlFileUrl("ssh://me@host/repo", "index.html"), null);
   assert.equal(htmlFileUrl("/home/me/site", "../secret.html"), null);
   assert.equal(htmlFileUrl("/home/me/site", "/tmp/other.html"), null);
-});
-
-test("webUrlForInternalBrowser keeps http urls for the internal browser", () => {
-  assert.equal(webUrlForInternalBrowser("https://example.com/a?q=1"), "https://example.com/a?q=1");
-  assert.equal(webUrlForInternalBrowser("http://localhost:5173"), "http://localhost:5173");
-  assert.equal(webUrlForInternalBrowser("ftp://example.com/file"), null);
-});
-
-test("openTargetForTerminalLink routes html→browser, source→in-app editor, http→browser", () => {
-  assert.deepEqual(
-    openTargetForTerminalLink("/home/me/site", "./index.html:12"),
-    { kind: "browser", url: "file:///home/me/site/index.html" },
-  );
-  // Source files now open in the in-app editor tile (resolved to an absolute path)
-  // rather than the OS app opener.
-  assert.deepEqual(
-    openTargetForTerminalLink("/home/me/site", "./src/main.ts:12:4"),
-    { kind: "editor", path: "/home/me/site/src/main.ts" },
-  );
-  assert.deepEqual(
-    openTargetForTerminalLink("/home/me/site", "https://example.com"),
-    { kind: "browser", url: "https://example.com" },
-  );
 });

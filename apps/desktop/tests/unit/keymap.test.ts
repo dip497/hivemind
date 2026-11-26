@@ -36,9 +36,14 @@ test("⌘ is the app's modifier on a Mac, Ctrl elsewhere", () => {
 });
 
 test("Esc on the canvas is tried in order, and Shift+Esc only undocks", () => {
-  assert.deepEqual(on("canvas", "Escape", "Escape"), ["stop-arrow", "leave-fullscreen", "deselect", "fit-all"]);
+  assert.deepEqual(on("canvas", "Escape", "Escape"), ["stop-tool", "stop-arrow", "leave-fullscreen", "deselect", "go-out", "fit-all"]);
   assert.deepEqual(on("canvas", "Escape", "Escape", { shift: true }), ["undock"]);
   assert.deepEqual(on("anywhere", "Escape", "Escape"), [], "a terminal's program keeps Esc");
+});
+
+test("X on the canvas shows or hides the drawing tools, and is a terminal's own", () => {
+  assert.deepEqual(actionsFor(letter("x"), "canvas", false), ["toggle-drawing"]);
+  assert.deepEqual(actionsFor(letter("x"), "anywhere", false), []);
 });
 
 test("the same key is the canvas's zoom and the terminal's font", () => {

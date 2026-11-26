@@ -4,8 +4,12 @@
  */
 import type { Issue, IssuePatch, IssueState, IssueSummary, LinkType, NewIssue } from "@hivemind/core/types";
 import type { LinkResult, TransferResult } from "@hivemind/core/cross-repo";
-import type { PageBox, PageComment, ReviewComment, ReviewIntent } from "@hivemind/core/review";
+import type { CodeAnchor, CodeComment, PageBox, PageComment, ReviewComment, ReviewIntent } from "@hivemind/core/review";
+import type { BoardAsk, BoardChange, BoardChangeAsk, BoardChanged, BoardChanges, BoardComment, BoardDrawAsk, BoardDrawn, BoardEraseAsk, BoardNoteAsked, BoardPicture, BoardPictureAsk, BoardReading, BoardSelection } from "./board.js";
+import type { PageListing, PageNewAsk } from "./pages.js";
 import type { FindFilesPage, GrepMode, GrepPage } from "./code.js";
+import type { Answer as CodeAnswer, Place as CodePlace } from "@hivemind/code-intel/contract";
+import type { FileStat, OpenedThing } from "./opener.js";
 import type { BlameOptions, BlamePayload, CommitInfo, DiffPayload, DiffScope, FileHistoryCursor, FileHistoryPage, GitBranchList, GitRevision, GitStatusSnapshot, HandedOff, LogOptions, LogPage, WorktreeCreateOpts, WorktreeEntry } from "./git.js";
 import type { SleepAnswer, WakeAnswer } from "./agents.js";
 import type { AgentAnswer, AgentChange, Approval, Answerer, AgentChanges, AgentEvent, AgentItem, AgentRead, AgentSessions, ConversationEntry, SentFile, SentFilePiece, SlashCommand, Folders, Links, PipeChange, Places, SpawnChange, StartAgent, StartImage, Startable, StatusChange, TileOpened, ToolUse } from "./agents.js";
@@ -19,7 +23,7 @@ import type { ViewFile, ViewListing, ViewScreen } from "./views.js";
 import type { PluginList, TileLook } from "./plugins.js";
 import type { HostMessage, PluginMessage, SurfaceRect } from "@hivemind/view-sdk/protocol";
 import type { Answering, LinkRole, Role } from "@hivemind/workspace-host/access";
-import type { BoardEdit, BoardObject, CoreLayout, ViewLayout } from "@hivemind/workspace-doc/shapes";
+import type { BoardEdit, BoardImage, BoardImageType, BoardObject, CoreLayout, ViewLayout } from "@hivemind/workspace-doc/shapes";
 import type { LegacyLayout, WorkspaceChange } from "@hivemind/workspace-host/layout";
 import type { Participant, PresenceState } from "@hivemind/workspace-host/presence";
 import type { SharedAppearance } from "@hivemind/core/settings-schema";
@@ -81,6 +85,15 @@ export interface WorkspaceMethods {
   "code.picked": (repo: string, query: string, file: string) => void;
   /** (0.40) Lines by their text, a page at a time. */
   "code.grep": (repo: string, query: string, opts?: { mode?: GrepMode; cursor?: number; caseSensitive?: boolean }) => GrepPage;
+  /** (0.43) A file's outline from its syntax. `opts.text` asks about the editor's unsaved text;
+   *  `opts.version` is the caller's own count, given back in the answer. */
+  "code.outline": (repo: string, file: string, opts?: CodeAsk) => CodeAnswer<"documentSymbol"> | null;
+  /** (0.43) Where the symbol at `at` is defined: the language server's answer, else the file's outline. */
+  "code.definition": (repo: string, file: string, at: CodePlace, opts?: CodeAsk) => CodeAnswer<"definition"> | null;
+  /** (0.43) Every usage of the symbol at `at`: the language server's, else a search for the word. */
+  "code.usages": (repo: string, file: string, at: CodePlace, opts?: CodeAsk) => CodeAnswer<"references"> | null;
+  /** (0.43) What the language server says of the symbol at `at`, as markdown. */
+  "code.hover": (repo: string, file: string, at: CodePlace, opts?: CodeAsk) => CodeAnswer<"hover"> | null;
   /** A participant's branch, as a git bundle (base64), landed as `handoff/<who>/<branch>`, with a
    *  Diff tile on the board showing it against the branch checked out here (M4). */
   "git.handOff": (repo: string, branch: string, bundle: string) => HandedOff;
@@ -91,6 +104,10 @@ export interface WorkspaceMethods {
   /** A file's text, `file` relative to the repo. */
   "file.read": (repo: string, file: string) => string;
   "file.write": (repo: string, file: string, contents: string) => void;
+  /** (0.43) A file or a folder and its size, null when nothing is there; on this computer only. */
+  "file.stat": (repo: string, file: string) => FileStat | null;
+  /** (0.43) A file's bytes as base64, at most `FILE_BYTES_MAX`: a picture the Image tile shows. */
+  "file.bytes": (repo: string, file: string) => { base64: string; size: number };
   /** `root` is the workspace's `.hivemind` directory. */
   "issue.list": (root: string) => IssueSummary[];
   "issue.read": (root: string, id: string) => Issue;
@@ -109,6 +126,10 @@ export interface WorkspaceMethods {
   "review.list": (repo: string) => ReviewComment[];
   /** Replace the repo's comments on a diff; its notes on pages are kept. */
   "review.save": (repo: string, comments: ReviewComment[]) => void;
+  /** (0.43) A comment on lines of a file, by the person. */
+  "review.add": (repo: string, comment: Omit<CodeComment, "id" | "at" | "author">) => CodeComment;
+  /** (0.43) A comment on code moved to where its lines are now, with what they say now. */
+  "review.move": (repo: string, id: string, to: CodeAnchor) => ReviewComment;
   /** One comment, changed by what it is: each refuses a comment not where the change starts from
    *  (core's review rules). */
   "review.seen": (repo: string, id: string) => ReviewComment;
@@ -276,7 +297,45 @@ export interface WorkspaceMethods {
    *  widget taken off the board, a view left for the canvas. */
   "plugin.close": (instance: string, plugin?: string) => { closed: string; plugin: string; kind: string };
   /** Bring a tile into view and give it the keyboard. */
+  /** (0.42) Draw on the board: boxes and links placed for the caller, or shapes it places itself. */
+  "board.draw": (repo: string, asked: BoardDrawAsk, as?: BoardWriter) => BoardDrawn;
+  /** (0.42) What is on the board, in canvas coordinates: an overview, or those asked for in full. */
+  "board.read": (repo: string, ask?: BoardAsk) => BoardReading;
+  /** (0.43) What each window showing `repo`, or another device, has selected now. */
+  "board.selected": (repo: string) => BoardSelection;
+  /** (0.43) The board's changes after `since`, and who made each; left out, where the feed is now.
+   *  `follow`: each change after it is a `board.changed` to the caller, until it goes. */
+  "board.changes": (repo: string, since?: number | null, follow?: boolean) => BoardChanges;
+  /** (0.42) What is drawn, as a picture: an SVG, or with `png` a PNG, which needs a window. */
+  "board.picture": (repo: string, ask?: BoardPictureAsk) => BoardPicture;
+  /** (0.43) Keep a picture for the board: a PNG, JPEG, WebP or GIF of at most 10 MB, made no larger
+   *  than 4096 pixels on its long side by a window (refused where none can). What a draw's box
+   *  names by `image`, and an `image` shape shows. */
+  "board.keepImage": (repo: string, image: StartImage) => BoardImage;
+  /** (0.43) A picture kept for the board, by its hash, in base64: as anyone who may read the board may. */
+  "board.image": (repo: string, hash: string) => { type: BoardImageType; data: string };
+  /** (0.42) Erase shapes and arrows: by id, by drawing, or what one agent drew. */
+  "board.erase": (repo: string, ask: BoardEraseAsk, as?: BoardWriter) => { erased: string[] };
+  /** Move, restyle, lock, restack, line up, copy or move into a page shapes and arrows already drawn. */
+  "board.change": (repo: string, ask: BoardChangeAsk, as?: BoardWriter) => BoardChanged;
+  /** (0.43) Take back the caller's own last board change, or make it again: kept for an hour unused. */
+  "board.undo": (repo: string, as?: BoardWriter) => { undone: boolean };
+  "board.redo": (repo: string, as?: BoardWriter) => { redone: boolean };
+  /** (0.42) Pin a note on the board, or on something there; `hive ctl notes` answers it. */
+  "board.note": (repo: string, note: BoardNoteAsked) => BoardComment;
+  /** (0.42) Bring a drawing, or something on the board, into view. */
+  "board.show": (repo: string, target: string) => null;
+  /** (0.43) The pages of a workspace: frames marked as stops on a window's path. */
+  "page.list": (repo: string) => { pages: PageListing[] };
+  /** Make a page, inside a page or frame or on the canvas itself. */
+  "page.new": (repo: string, ask: PageNewAsk) => { id: string };
+  /** A window flies to a page or frame and goes inside it (null: out to the whole canvas). */
+  "page.open": (repo: string, id: string | null) => null;
   "tile.focus": (tile: string) => null;
+  /** (0.43) Open a URL or a file (`path:line:col`, absolute) in the window, where the person's link
+   *  settings say, as a click in `tile`'s frame: an agent's own tile when an agent asks. Refused
+   *  `UNSUPPORTED` when it would ask the person, `NOT_FOUND` when the file is not there. */
+  "opener.open": (thing: string, tile?: string) => OpenedThing;
   /** (0.32) Bring a tile into view, wait for its plugin to draw, and answer a picture of it with its
    *  plugin's state and the last lines its code wrote (`plugins.ts`). */
   "tile.look": (tile: string) => TileLook;
@@ -398,6 +457,8 @@ export interface WorkspaceNotices {
   "terminal.detach": (tile: string) => void;
   /** The terminals whose activity the client wants (`terminal.activity`). */
   "terminal.watchActivity": (tiles: string[]) => void;
+  /** (0.43) Take back the code question the caller asked with this `ask` id: it is answered null. */
+  "code.cancel": (ask: number) => void;
   /** Ask for the terminal's keyboard: whoever holds it is asked (M2). */
   "terminal.keyboard.ask": (tile: string) => void;
   /** Give the terminal's keyboard, which the client holds (or the host does), to `to`, who asked. */
@@ -454,9 +515,14 @@ export interface WorkspaceEvents {
   "terminal.typing": (tile: string, by: Typist) => void;
   /** Files changed in a repo the client watches (at most one event every 300 ms). */
   "file.changed": (repo: string, change: { paths: string[] }) => void;
+  /** (0.43) A code question asked with an `ask` id has a better answer than the last one sent:
+   *  the fastest first, then a more accurate one. To the asker alone. */
+  "code.answered": (ask: number, answer: CodeAnswer) => void;
   /** Another writer changed a workspace's layouts: `part` is `core`, `board` or `view:<id>`; for the
    *  board, `objects` names the objects that changed (0.28; none: any may have). */
   "store.changed": (change: Pick<WorkspaceChange, "repo" | "part" | "objects">) => void;
+  /** (0.43) A change to the board of `repo`, to whoever follows its changes (`board.changes`). */
+  "board.changed": (repo: string, change: BoardChange) => void;
   /** Who is in the workspace `repo` now, each as they last said (`presence.set`). */
   "presence.changed": (repo: string, people: Participant[]) => void;
   /** The widget `id` in `repo` drew `tree` (`widget.draw`). */
@@ -482,6 +548,18 @@ export interface WorkspaceEvents {
   /** The host ended the caller's view session `session`, and why: it disabled the view. */
   "view.ended": (session: string, why: string) => void;
 }
+
+/** A code question about the editor's text rather than the file on disk, and the caller's version of it. */
+export interface CodeAsk {
+  text?: string;
+  version?: number;
+  /** The caller's id for this question: each better answer is sent as `code.answered` as it
+   *  comes, and `code.cancel` with it takes the question back. */
+  ask?: number;
+}
+
+/** Who a board write is written as: only this computer's window may name a view (`view:<id>`). */
+export interface BoardWriter { writer: string }
 
 export type Method = keyof WorkspaceMethods;
 export type Params<M extends Method> = Parameters<WorkspaceMethods[M]>;

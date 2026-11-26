@@ -138,12 +138,22 @@ export type BrowserAsk = { ask: number; tile: string; by: string | null } & (
 );
 
 /** A note the person left on a page in a Browser tile (hive-phone's `notes::Note`). */
+/** Something an agent drew on the board, to look at. */
+export interface Drawing {
+  id: string;
+  title: string;
+  /** The tile of the agent that drew it. */
+  by?: string;
+  objects: number;
+}
+
 export interface PageNote {
   id: string;
   body: string;
   status: "open" | "seen" | "resolved" | "dismissed";
-  /** What it points at: an element's name, or "Area". */
+  /** What it points at: an element's name, "Area", or what it is pinned on. */
   what: string;
+  /** The page it is on; empty for one on the board. */
   url: string;
   /** What was done, or why it was dismissed. */
   summary?: string;

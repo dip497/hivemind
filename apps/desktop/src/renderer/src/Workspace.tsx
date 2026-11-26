@@ -34,6 +34,7 @@ import { DeleteFrameDialog, type FrameDeleteAsk } from "./DeleteFrameDialog";
 import { useSleepAgents } from "./workspace/SleepAgents";
 import { Plus } from "./components/icons";
 import { PickerDialog } from "./picker-dialog";
+import { UnsavedCloseDialog, unsavedIn, type UnsavedWork } from "./tile-close-guard";
 import { isPluginVerb, pluginVerb, type PluginVerbHost } from "./workspace/plugin-verbs";
 import type { LayerTile, LayerFrame } from "./LayersPanel";
 import { forgetStatus, statusOf, setHostedStatus, type TileStatusKind, subscribeTileStatus } from "./agent-status-bus";
@@ -47,7 +48,9 @@ import { reloadWallpapers } from "./live/wallpaper-store";
 import type { SceneAgent } from "./live/roster";
 import { CanvasOverlay } from "./CanvasOverlay";
 import { applyTheme, setPluginScene, setWallpaperActive } from "./theme-store";
-import { patchSettings, useSettings } from "./settings-store";
+import { getSettings, patchSettings, useSettings } from "./settings-store";
+import { makeOpenThing } from "./open-thing";
+import { askToOpen } from "./link-ask";
 import type { PinRect } from "./workspace/tile-surfaces";
 import { clampAnchor } from "./pin-anchor";
 import { pickEditorTile } from "./workspace/editor-target";
@@ -63,6 +66,9 @@ import {
 } from "./canvas-persistence";
 import { useStateWithRef } from "./use-state-with-ref";
 import { useBoard } from "./board-objects/useBoard";
+import { svgToPng } from "./board-objects/svg-to-png";
+import { shrinkImage } from "./board-objects/board-images";
+import { newDrawings } from "./layer-drawings";
 import { onEveryView, type BoardChoice, type Point } from "./board-objects/board-model";
 import { useEnabledWidgetPackages, useShownWorkspace, useWidgetRuntime } from "./board-objects/widget-runtime";
 import { useViewBringsWidgets } from "./board-objects/view-widgets";
@@ -116,12 +122,16 @@ import {
   type SpawnOpts, type WorkspaceCommands, type WorkspaceViewModel,
 } from "./workspace/workspace-view";
 import { saveViewLayout, useDebouncedSave, useViewLayout } from "./workspace/view-layout-store";
+import { ancestorsOf, framesWithin } from "@hivemind/workspace-doc/pages";
+import { FrameFocusContext, type FrameFocus } from "./PagePath";
+import { Overview } from "./Overview";
+import { boundsOf, type FlyTarget } from "./fly-to";
 import { onStoreChange, showWorkspace } from "./workspace/workspace-store-client";
 import { setViewMode, useViewMode } from "./workspace/view-mode-store";
 import { useSharedDefaultView } from "./workspace/shared-default-view";
 import { CANVAS_CAMERA, CANVAS_LAYOUT, loadCanvasCamera, loadCanvasLayout, reloadCanvasLayout } from "./workspace/views/canvas-layout";
 import { PIN_SIZE, PINS } from "./workspace/pins";
-import { CanvasRuntimeContext, type CanvasRuntime, type FocusModeReq, type FocusReq, type Viewport } from "./workspace/views/canvas-runtime";
+import { CanvasRuntimeContext, type CanvasRuntime, type FocusReq, type Viewport } from "./workspace/views/canvas-runtime";
 // Registers the built-in view plugins (side effect) before the first render.
 import "./workspace/views";
 import { agentById as catalogAgentById } from "@hivemind/agents";
@@ -133,6 +143,10 @@ import { endTileSession } from "./TerminalTile";
 const DEFAULT_VIEWPORT: Viewport = { x: 16, y: 24, zoom: 1 };
 /** A Send to agent row that starts a new tile of the agent named after it. */
 const NEW_AGENT_ROW = "new:";
+/** Frames in the order an agent is picked from: the sender's, then the last picked one's. */
+const pickOrder = <F extends { id: string }>(frames: F[], ...first: (string | undefined)[]): F[] =>
+  [...frames].sort((a, b) => rank(first, a.id) - rank(first, b.id));
+const rank = (first: (string | undefined)[], id: string): number => { const i = first.indexOf(id); return i === -1 ? first.length : i; };
 /** The agent that runs in a tile, when one does. */
 const agentOfTile = (t: TileInstance): string | undefined => (t.kind === AGENT_TILE_KIND ? agentForCmd(t.cmd)?.id : undefined);
 /** A per-tile map without `id`'s entry: the map itself when it has none, so dropping nothing re-renders nothing. */
@@ -295,10 +309,6 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
 
   // Tile selection — the one tile that takes keyboard input, in every view.
   const [selectedTileId, setSelectedTileId, selectedTileIdRef] = useStateWithRef<string | null>(null);
-  // Focus mode: fitView to one node (`.`) / fit all (Esc). Same nonce pattern
-  // as focusReq so re-firing the same id still triggers.
-  const [focusModeReq, setFocusModeReq] = useState<FocusModeReq>(null);
-  const focusModeNonceRef = useRef(0);
 
   // Open a file as a tab in a SPECIFIC editor tile. The EditorTile picks the
   // newly-appended tab as active.
@@ -338,12 +348,33 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
     setPins(withoutKey(id));
     forgetStatus(id);
   }, [setPins]);
+  // What the person closes: a tile holding unsaved work asks first.
+  const [closeAsk, setCloseAsk] = useState<{ work: UnsavedWork; close: () => void } | null>(null);
+  /** Close `ids` with `close`, asking first when any holds unsaved work. */
+  const closeAsking = useCallback((ids: string[], close: () => void) => {
+    const works = ids.map(unsavedIn).filter((w): w is UnsavedWork => w !== null);
+    if (!works.length) { close(); return; }
+    setCloseAsk({
+      work: { files: works.flatMap((w) => w.files), saveAll: async () => { for (const w of works) if (!(await w.saveAll())) return false; return true; } },
+      close,
+    });
+  }, []);
+  const askCloseTile = useCallback((id: string) => closeAsking([id], () => closeTile(id)), [closeAsking, closeTile]);
 
 
   // Frames — colored comment boxes for grouping, each optionally bound to a
   // worktree / workspace folder / remote host. frames/frameOf each expose a
   // synchronously-readable ref (updated in the setter — see useStateWithRef).
   const [frames, setFrames, framesRef] = useStateWithRef<FrameState[]>(initial.frames);
+  // The frame this window is inside (PagePath.tsx); null: the whole canvas. Gone with its frame.
+  const [focusedKept, setFocused] = useState<string | null>(null);
+  const focused = focusedKept !== null && frames.some((f) => f.id === focusedKept) ? focusedKept : null;
+  const focusedRef = useRef(focused);
+  focusedRef.current = focused;
+  // It and every frame inside it, found once per change of focus or frames: what does not dim.
+  const focusMembers = useMemo(() => (focused === null ? null : framesWithin(frames, focused)), [frames, focused]);
+  const focusMembersRef = useRef(focusMembers);
+  focusMembersRef.current = focusMembers;
   // Re-resolve a frame's workspaceRoot when it's null but the folder now has a `.hivemind/`: on
   // load (opened before `hive init`, persisted null) and when a plugin sets issues up.
   useEffect(() => {
@@ -372,7 +403,7 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
   // The board's notes, checklists, text and arrows (board-objects/). One thing is selected at a
   // time: an object or a tile.
   const deselectTile = useCallback(() => setSelectedTileId(null), [setSelectedTileId]);
-  const board = useBoard({ persistKey, frames, framesRef, onSelect: deselectTile });
+  const board = useBoard({ persistKey, frames, framesRef, focusRef: focusMembersRef, onSelect: deselectTile });
   const boardRef = useRef(board);
   boardRef.current = board;
   const { select: selectObject, reload: reloadBoard } = board;
@@ -428,6 +459,32 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
   // the pointer is elsewhere. "arrow" starts drawing one.
   const canvasPointRef = useRef<(() => Point) | null>(null);
   const { addWidget, startArrow, update: updateBoard } = board;
+  // An agent drew something: said once, with a way to it, since it may be off screen.
+  const persistKeyRef = useRef(persistKey);
+  persistKeyRef.current = persistKey;
+  const announced = useRef<{ repo: string | null; drawings: Set<string> }>({ repo: null, drawings: new Set() });
+  // Told by the store, so another writer's: what this window just drew or copied needs no saying.
+  const boardHeard = useRef(false);
+  useEffect(() => {
+    if (announced.current.repo !== persistKey) {
+      announced.current = { repo: persistKey, drawings: new Set(newDrawings(board.objects, new Set())?.keys()) };
+    }
+    const heard = boardHeard.current;
+    boardHeard.current = false;
+    for (const [id, shapes] of newDrawings(board.objects, announced.current.drawings) ?? []) {
+      announced.current.drawings.add(id);
+      if (!heard) continue;
+      const by = shapes[0]!.by;
+      const name = by ? tilesRef.current.find((t) => t.id === by)?.label ?? "An agent" : "A program";
+      const title = shapes.find((s) => s.form === "text" && s.size === "large")?.text ?? shapes.find((s) => s.text)?.text;
+      toast(`${name} drew ${title ? `"${title.split("\n")[0]}"` : "on the board"}`, {
+        action: { label: "Show", onClick: () => {
+          // Where it is by now: it may have been moved since this was said.
+          flyToRef.current(id);
+        } },
+      });
+    }
+  }, [board.objects, persistKey]);
   const widgetPackages = useEnabledWidgetPackages();
   useShownWorkspace(persistKey, !!joinedId(repoPath ?? null));
   useWidgetRuntime(persistKey, board.objects, widgetPackages, updateBoard);
@@ -491,6 +548,7 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
     setFrameOf(next.frameOf ?? {});
     reloadBoard(persistKey, next.frames);
     if (nextCamera) { currentViewportRef.current = nextCamera; setLoadedCamera(nextCamera); }
+    setFocused(null);
   }, [persistKey, reloadBoard]);
 
   // Persist — trailing-debounced (250ms) so a drag's per-drop setPositions
@@ -504,7 +562,7 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
   const { flush: flushCore } = useDebouncedSave(persistKey, coreSnap, useCallback((key: string, v: typeof coreSnap) => saveLayout(key, v), []));
   // Main acts on the workspace this window shows, in the frame the user is in, when the control
   // plane's caller is in no tile.
-  const userFrame = selectedFrameId ?? (selectedTileId ? frameOf[selectedTileId] ?? null : null);
+  const userFrame = selectedFrameId ?? (selectedTileId ? frameOf[selectedTileId] : undefined) ?? focused;
   useEffect(() => showWorkspace(persistKey, userFrame), [persistKey, userFrame]);
   // Another writer changed this workspace's core layout (the control plane named or closed a
   // tile): write what this window has yet to save, which the store applies as this window's change
@@ -530,47 +588,78 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
       setPositions(stored.positions);
       setSizes(stored.sizes);
     } else if (part === "board") {
+      boardHeard.current = true;
       mergeBoard(objects);
     }
   }), [persistKey, flushCore, flushGeometry, mergeBoard, closeTile, setFrames, setTiles, setFrameOf, setPositions, setSizes]);
   const { schedule: saveCamera } = useDebouncedSave(persistKey, loadedCamera, useCallback((key: string, v: Viewport) => saveViewLayout(CANVAS_CAMERA, key, v), []));
+  const setViewport = saveCamera;
 
-  // Viewport-focus request: resolve the target's CENTER from our own state
-  // (positions/sizes/frames) and hand absolute coords to <FocusOnTile>. Works
-  // even when the node hasn't been DOM-measured yet or is culled off-screen.
+  // Every "go to" in the window flies here (fly-to.ts): the target's box from our own state, so a
+  // node not yet measured or culled off screen is framed as well.
   const [focusReq, setFocusReq] = useState<FocusReq>(null);
-  const focusTile = useCallback(
-    (id: string, opts?: { exact?: boolean }) => {
-      const frame = framesRef.current.find((f) => f.id === id);
+  const flyTo = useCallback(
+    (target: FlyTarget, opts?: { exact?: boolean }) => {
       // A view package draws the workspace its own way: the tile is selected and the view asked to
       // show it. A frame, which `reveal` does not name, is the canvas's.
-      if (!frame && getView(activeViewIdRef.current ?? FALLBACK_VIEW_ID)?.source === "community") {
-        if (!tilesRef.current.some((t) => t.id === id)) return;
-        setSelectedTileId(id);
-        window.dispatchEvent(new CustomEvent(REVEAL_TILE, { detail: id }));
+      if (typeof target === "string" && !framesRef.current.some((f) => f.id === target)
+        && getView(activeViewIdRef.current ?? FALLBACK_VIEW_ID)?.source === "community") {
+        if (!tilesRef.current.some((t) => t.id === target)) return;
+        setSelectedTileId(target);
+        window.dispatchEvent(new CustomEvent(REVEAL_TILE, { detail: target }));
         return;
       }
-      let cx: number, cy: number, w: number, h: number;
-      if (frame) {
-        cx = frame.x + frame.w / 2;
-        cy = frame.y + frame.h / 2;
-        w = frame.w;
-        h = frame.h;
-      } else {
-        const p = positionsRef.current[id];
-        if (!p) return;
-        const kind = tilesRef.current.find((t) => t.id === id)?.kind;
-        const s = sizesRef.current[id] ?? (kind ? defaultSizeForKind(kind) : defaultTileSize(id));
-        cx = p.x + s.width / 2;
-        cy = p.y + s.height / 2;
-        w = s.width;
-        h = s.height;
-      }
-      // Text is only sharp at exactly 100%, so a tile always lands there; only a frame zooms to fit.
-      setFocusReq((prev) => ({ id, cx, cy, w, h, n: (prev?.n ?? 0) + 1, exact: opts?.exact ?? !frame }));
+      const found = boundsOf({
+        frames: framesRef.current,
+        positions: positionsRef.current,
+        sizeOf: (id) => {
+          const kind = tilesRef.current.find((t) => t.id === id)?.kind;
+          return kind ? sizesRef.current[id] ?? defaultSizeForKind(kind) : undefined;
+        },
+        objects: boardRef.current.objectsRef.current,
+      }, target);
+      if (!found) return;
+      const { box } = found;
+      // Text is only sharp at exactly 100%, so a tile lands there; anything else is fitted.
+      setFocusReq((prev) => ({ id: typeof target === "string" ? target : "box", cx: box.x + box.w / 2, cy: box.y + box.h / 2, w: box.w, h: box.h, n: (prev?.n ?? 0) + 1, exact: opts?.exact ?? found.tile }));
     },
     [setSelectedTileId],
   );
+  const flyToRef = useRef(flyTo);
+  flyToRef.current = flyTo;
+  /** Fly to a frame and go inside it: what is outside dims. Null: out to the whole canvas. */
+  const enter = useCallback((id: string | null) => {
+    if (id !== null && !framesRef.current.some((f) => f.id === id)) return;
+    setFocused(id);
+    focusedRef.current = id;
+    setSelectedFrameId(id);
+    setSelectedTileId(null);
+    boardRef.current.select(null);
+    setViewMode("canvas");
+    flyToRef.current(id);
+  }, [setSelectedFrameId, setSelectedTileId, setViewMode]);
+  const enterRef = useRef(enter);
+  enterRef.current = enter;
+  const goOut = useCallback(() => {
+    const now = focusedRef.current;
+    if (now === null) return false;
+    enterRef.current(ancestorsOf(framesRef.current, now).at(-1) ?? null);
+    return true;
+  }, []);
+  const goInside = useCallback(() => {
+    const id = selectedFrameIdRef.current;
+    if (!id || id === focusedRef.current) return false;
+    enterRef.current(id);
+    return true;
+  }, []);
+  const fitAll = useCallback(() => { flyToRef.current(null); }, []);
+  const focusPath = useMemo(() => (focused === null ? [] : [...ancestorsOf(frames, focused), focused].map((id) => {
+    const f = frames.find((x) => x.id === id);
+    return { id, title: f?.title || "Frame", page: !!f?.page };
+  })), [frames, focused]);
+  const leave = useCallback(() => setFocused(null), []);
+  const workspaceName = repoPath ? repoPath.split("/").filter(Boolean).pop() ?? "Workspace" : "Workspace";
+  const frameFocus: FrameFocus = useMemo(() => ({ frame: focused, path: focusPath, members: focusMembers, enter, leave, workspace: workspaceName }), [focused, focusPath, focusMembers, enter, leave, workspaceName]);
 
   // Frame CRUD + opt-in arrange + the reactive auto-fit effect. See useFrameOps.
   const {
@@ -578,7 +667,7 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
   } = useFrameOps({
     repoPath, positions, sizes, tiles, frameOf, boxes: board.objects,
     framesRef, tilesRef, frameOfRef, positionsRef, sizesRef, lastActiveFrameRef, boardRef: board.objectsRef,
-    setFrames, setFrameOf, setPositions, setSelectedFrameId, focusTile, shiftBoxes: board.shiftFrames, placeBoxes: board.place,
+    setFrames, setFrameOf, setPositions, setSelectedFrameId, focusTile: flyTo, shiftBoxes: board.shiftFrames, placeBoxes: board.place,
   });
 
   // Worktree + workspace-zone lifecycle (IPC, in-flight guard, detach confirm).
@@ -587,7 +676,7 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
   } = useWorktrees({
     framesRef, tilesRef, positionsRef, sizesRef, frameOfRef, repoPathRef,
     lastActiveFrameRef, pushToastRef, setFrames, setFrameOf, setSelectedFrameId,
-    focusTile, closeTile,
+    focusTile: flyTo, closeTile,
   });
 
   // Topmost-frame-wins point membership for drops (pure — see frameAtPoint).
@@ -617,7 +706,7 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
   // worktree sub-frames go with it, so their tiles count too.
   const [frameDeleteAsk, setFrameDeleteAsk] = useState<FrameDeleteAsk | null>(null);
   const tilesInFrame = useCallback((id: string) => {
-    const ids = new Set([id, ...framesRef.current.filter((f) => f.parentFrameId === id).map((f) => f.id)]);
+    const ids = framesWithin(framesRef.current, id);
     return tilesRef.current.filter((t) => ids.has(frameOfRef.current[t.id] ?? ""));
   }, []);
   const requestDeleteFrame = useCallback((id: string) => {
@@ -630,9 +719,13 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
     const ask = frameDeleteAsk;
     setFrameDeleteAsk(null);
     if (!ask || choice === "cancel") return;
-    if (choice === "close") for (const t of tilesInFrame(ask.frameId)) closeTile(t.id);
-    deleteFrame(ask.frameId);
-  }, [frameDeleteAsk, tilesInFrame, closeTile, deleteFrame]);
+    if (choice !== "close") { deleteFrame(ask.frameId); return; }
+    const held = tilesInFrame(ask.frameId);
+    closeAsking(held.map((t) => t.id), () => {
+      for (const t of held) closeTile(t.id);
+      deleteFrame(ask.frameId);
+    });
+  }, [frameDeleteAsk, tilesInFrame, closeTile, closeAsking, deleteFrame]);
 
   // ── view-agnostic listing (Layers rail, tab strip, 3D labels …) ────────────
   const layerFrames: LayerFrame[] = useMemo(
@@ -643,6 +736,7 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
       remoteUri: isRemote(f.workspacePath) ? f.workspacePath : undefined,
       folder: (f.worktreePath ?? f.workspacePath)?.split("/").filter(Boolean).pop(),
       ...(!isRemote(f.workspacePath) && (f.worktreePath ?? f.workspacePath) ? { path: (f.worktreePath ?? f.workspacePath)! } : {}),
+      ...(f.page ? { page: true as const } : {}),
     })),
     [frames],
   );
@@ -816,7 +910,7 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
   const revealSeq = useRef(0);
   // Text awaiting a claude target — set when something wants to deliver a prompt
   // ("Work on this", diff "send review") and 1+ claude tiles exist.
-  const [agentPick, setAgentPick] = useState<{ text: string } | null>(null);
+  const [agentPick, setAgentPick] = useState<{ text: string; from?: string } | null>(null);
   // The Machines dialog: `hivemind:attach-remote` picks where a frame runs, `hivemind:machines` opens it for anything else.
   const [machinesReq, setMachinesReq] = useState<MachinesRequest | null>(null);
   useEffect(() => {
@@ -861,10 +955,10 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
   // Tile spawning + in-frame placement. See useSpawn.
   const { spawnTile, spawnDefaultAgent, spawnAgent, spawnVis, spawnInto, frameOpen, openPlanReview, placeArrived } = useSpawn({
     repoPath,
-    positionsRef, sizesRef, tilesRef, frameOfRef, framesRef, selectedFrameIdRef,
+    positionsRef, sizesRef, tilesRef, frameOfRef, framesRef, selectedFrameIdRef, focusedRef,
     selectedTileIdRef, repoPathRef, rootRef, lastActiveFrameRef, boardRef: board.objectsRef,
-    setFrameOf, setPositions, setSelectedTileId, setFocusReq, setFrames,
-    setSelectedFrameId, setTiles, setSpawnPick, focusTile, openFileInTile, renameTile,
+    setFrameOf, setPositions, setSelectedTileId, setFrames,
+    setSelectedFrameId, setTiles, setSpawnPick, focusTile: flyTo, openFileInTile, renameTile,
   });
   // Tiles the control plane opens, which its host starts: announced before they reach the layout
   // (whether to bring each forward), then laid out as they arrive. The notice and the layout come
@@ -932,6 +1026,12 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
     onPush: (frameId: string) => { const r = repoOfFrame(frameId); if (r) gitPushMut.mutate({ repoPath: r }); },
     onPull: (frameId: string) => { const r = repoOfFrame(frameId); if (r) gitPullMut.mutate({ repoPath: r }); },
     onSleep: (frameId: string) => void sleepActions.sleep(frameId),
+    onPage: (frameId: string, page: boolean) => setFrames((fs) => fs.map((f) => {
+      if (f.id !== frameId || !!f.page === page) return f;
+      if (page) return { ...f, page: true as const };
+      const { page: _was, ...frame } = f;
+      return frame;
+    })),
     onWake: (frameId: string) => void sleepActions.wake(frameId),
     agentsIn: (frameId: string) => {
       const within = new Set([frameId]);
@@ -960,7 +1060,7 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
     if (existing) {
       openFileInTile(existing, path);
       reveal(existing);
-      setTimeout(() => { setSelectedTileId(existing); focusTile(existing); }, 0);
+      setTimeout(() => { setSelectedTileId(existing); flyTo(existing); }, 0);
       return existing;
     }
     // No editor in that frame: the fresh one must still open the file the user
@@ -969,7 +1069,7 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
     const id = kind ? spawnTile(kind, frameId, { file: path }) ?? null : null;
     if (id) reveal(id);
     return id;
-  }, [openFileInTile, focusTile, spawnTile]);
+  }, [openFileInTile, flyTo, spawnTile]);
   const openFileFromTile = useCallback((sourceTileId: string, path: string, at?: { line: number; col?: number }) => {
     void openFileInFrame(frameOfRef.current[sourceTileId] ?? selectedFrameIdRef.current, path, at);
   }, [openFileInFrame]);
@@ -983,11 +1083,10 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
     if (!id) return;
     const seq = ++historySeq.current;
     setHistoryReqs((m) => ({ ...m, [id]: { ...req, seq } }));
-    if (existing) setTimeout(() => { setSelectedTileId(existing.id); focusTile(existing.id); }, 0);
-  }, [spawnTile, focusTile]);
+    if (existing) setTimeout(() => { setSelectedTileId(existing.id); flyTo(existing.id); }, 0);
+  }, [spawnTile, flyTo]);
 
-  const openUrlInBrowser = useCallback((sourceTileId: string, url: string) => {
-    const sourceFrameId = frameOfRef.current[sourceTileId] ?? selectedFrameIdRef.current;
+  const openUrlInFrame = useCallback((sourceFrameId: string | null, url: string): string | null => {
     const existing = tilesRef.current.find((t) => (
       tileKind(t.kind).opens?.includes("url") && (!sourceFrameId || frameOfRef.current[t.id] === sourceFrameId)
     ));
@@ -1000,15 +1099,48 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
       setTimeout(() => {
         if (browserFrameId) setSelectedFrameId(browserFrameId);
         setSelectedTileId(existing.id);
-        focusTile(existing.id);
+        flyTo(existing.id);
       }, 0);
-      return;
+      return existing.id;
     }
     const kind = kindsThatOpenNow("url")[0];
-    if (kind) spawnTile(kind, sourceFrameId ?? null, { url });
-    // No tile here opens addresses: the system's browser does (main opens only http(s)).
-    else window.open(url, "_blank", "noopener,noreferrer");
-  }, [focusTile, spawnTile]);
+    if (kind) return spawnTile(kind, sourceFrameId ?? null, { url }) ?? null;
+    // No tile here opens addresses: the system's browser does (main opens only http(s) and mail).
+    window.open(url, "_blank", "noopener,noreferrer");
+    return null;
+  }, [flyTo, spawnTile]);
+  const openImageInFrame = useCallback((frameId: string | null, path: string): string | null => {
+    const shown = tilesRef.current.find((t) => t.kind === "image" && t.url === path && (frameOfRef.current[t.id] ?? null) === frameId);
+    if (!shown) return spawnTile("image", frameId, { url: path }) ?? null;
+    setTimeout(() => { setSelectedTileId(shown.id); flyTo(shown.id); }, 0);
+    return shown.id;
+  }, [flyTo, spawnTile]);
+  const folderOfFrame = (frameId: string | null): string | null => {
+    const f = frameId ? framesRef.current.find((x) => x.id === frameId) : undefined;
+    return f?.worktreePath ?? f?.workspacePath ?? repoPathRef.current ?? null;
+  };
+  const openThingIn = useMemo(() => makeOpenThing({
+    links: () => getSettings().links,
+    folderOf: folderOfFrame,
+    folders: () => [repoPathRef.current, ...framesRef.current.flatMap((f) => [f.worktreePath, f.workspacePath])].filter((x): x is string => !!x),
+    frameFor: (folder) => {
+      const strip = (p: string) => p.replace(/\/+$/, "");
+      const f = framesRef.current.find((x) => { const own = x.worktreePath ?? x.workspacePath; return !!own && strip(own) === strip(folder); });
+      return f ? f.id : repoPathRef.current && strip(repoPathRef.current) === strip(folder) ? null : undefined;
+    },
+    openUrl: openUrlInFrame,
+    openFile: openFileInFrame,
+    openImage: openImageInFrame,
+    ask: askToOpen,
+    allowAlways: (scheme) => { const kept = getSettings().links.allowedSchemes; if (!kept.includes(scheme)) patchSettings("links.allowedSchemes", [...kept, scheme]); },
+  }), [openUrlInFrame, openFileInFrame, openImageInFrame]); // eslint-disable-line react-hooks/exhaustive-deps
+  const openThing = useCallback((sourceTileId: string, thing: string, cwd?: string, how?: { person?: boolean; orElse?: string }) => {
+    openThingIn(thing, { frameId: frameOfRef.current[sourceTileId] ?? selectedFrameIdRef.current, cwd, person: how?.person === true, ...(how?.orElse ? { orElse: how.orElse } : {}) })
+      .catch((e: unknown) => { if (!(e as { quiet?: boolean }).quiet) toast.error((e as Error).message.slice(0, 200)); });
+  }, [openThingIn]);
+  const openUrlInBrowser = useCallback((sourceTileId: string, url: string) => openThing(sourceTileId, url, undefined, { person: true }), [openThing]);
+  const openThingRef = useRef(openThingIn);
+  openThingRef.current = openThingIn;
 
   // Plan review: an agent waits on a person's review of its plan (M2). Every window showing the
   // agent opens the review beside it, on every machine the workspace is shared with, and the ones
@@ -1077,15 +1209,44 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
             await reply(cmd.id, true, { problems });
             break;
           }
+          case "opener.open": {
+            const tile = typeof p.tileId === "string" ? p.tileId : null;
+            await reply(cmd.id, true, await openThingRef.current(String(p.thing ?? ""), { frameId: (tile ? frameOfRef.current[tile] : undefined) ?? selectedFrameIdRef.current }));
+            break;
+          }
           case "tile.focus": {
             const id = String(p.tileId ?? "");
             setSelectedTileId(id);
-            focusTile(id);
+            flyTo(id);
             await reply(cmd.id, true, { ok: true });
             break;
           }
+          // A picture of the board for an agent to look at (`hive ctl board --png`).
+          case "board.png": {
+            await reply(cmd.id, true, await svgToPng(String(p.svg ?? ""), Number(p.width), Number(p.height)));
+            break;
+          }
+          // A picture an agent put on the board, too large to keep as it is.
+          case "board.shrinkImage": {
+            await reply(cmd.id, true, await shrinkImage(p.image as Parameters<typeof shrinkImage>[0], Number(p.most)));
+            break;
+          }
+          case "board.show": {
+            const box = p.box as { x: number; y: number; w: number; h: number } | undefined;
+            if (!box || p.repo !== persistKeyRef.current) throw Object.assign(new Error("this window shows another workspace"), { code: "UNAVAILABLE" });
+            setViewMode("canvas");
+            flyTo(box);
+            await reply(cmd.id, true, null);
+            break;
+          }
+          case "page.open": {
+            if (p.repo !== persistKeyRef.current) throw Object.assign(new Error("this window shows another workspace"), { code: "UNAVAILABLE" });
+            enterRef.current(typeof p.page === "string" ? p.page : null);
+            await reply(cmd.id, true, null);
+            break;
+          }
           case "tile.look": {
-            const seen = await lookAt(String(p.tileId ?? ""), (id) => { setSelectedTileId(id); focusTile(id); });
+            const seen = await lookAt(String(p.tileId ?? ""), (id) => { setSelectedTileId(id); flyTo(id); });
             await reply(cmd.id, true, seen);
             break;
           }
@@ -1099,7 +1260,7 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
       }
     });
     return off;
-  }, [focusTile]);
+  }, [flyTo]);
 
   // Agent links, from the host: the ones there are now (drawn before this window opened), then
   // every change. The answer already counts any change pushed before it.
@@ -1153,23 +1314,33 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
 
   // Deliver a prompt to an agent with a TARGET PICKER. 0 agent tiles → start the agent a new
   // tile starts, carrying the prompt; 1+ → picker (the chosen tile, or a new one of an agent).
-  const deliverToAgent = useCallback((text: string, target: string) => {
-    if (target.startsWith(NEW_AGENT_ROW)) { spawnDefaultAgent(undefined, text, target.slice(NEW_AGENT_ROW.length) || undefined); return; }
+  // A send from a tile (`from`) lists that tile's frame first and starts a new agent there; the
+  // agent picked last comes first.
+  const lastAgentPicked = useRef<string | null>(null);
+  const deliverToAgent = useCallback((text: string, target: string, from?: string) => {
+    const frameId = from ? frameOfRef.current[from] : undefined;
+    if (target.startsWith(NEW_AGENT_ROW)) {
+      const a = agentById(target.slice(NEW_AGENT_ROW.length));
+      if (frameId) spawnTile(AGENT_TILE_KIND, frameId, { work: text, ...(a ? { agent: { id: a.id, cmd: a.cmd, args: a.defaultArgs, label: a.label } } : {}) });
+      else spawnDefaultAgent(undefined, text, a?.id);
+      return;
+    }
+    lastAgentPicked.current = target;
     window.dispatchEvent(new CustomEvent("hivemind:send-to-agent", { detail: { text, target } }));
     setSelectedTileId(target);
-    focusTile(target);
-  }, [spawnDefaultAgent, focusTile]);
+    flyTo(target);
+  }, [spawnDefaultAgent, spawnTile, flyTo]);
   useEffect(() => {
     const onDeliver = (e: Event) => {
-      const text = (e as CustomEvent<{ text: string }>).detail?.text;
+      const { text, from } = (e as CustomEvent<{ text: string; from?: string }>).detail ?? {};
       if (!text) return;
       const agentTiles = tilesRef.current.filter((t) => t.kind === AGENT_TILE_KIND);
-      if (agentTiles.length === 0) { spawnDefaultAgent(undefined, text); return; }
-      setAgentPick({ text });
+      if (agentTiles.length === 0) { deliverToAgent(text, NEW_AGENT_ROW, from); return; }
+      setAgentPick({ text, from });
     };
     window.addEventListener("hivemind:deliver-to-agent", onDeliver as EventListener);
     return () => window.removeEventListener("hivemind:deliver-to-agent", onDeliver as EventListener);
-  }, [spawnDefaultAgent]);
+  }, [deliverToAgent]);
 
   // Spawn the island's CURRENTLY-selected agent (key "2").
   const spawnSelectedAgent = useCallback(() => {
@@ -1181,10 +1352,10 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
 
   // Keyboard shortcuts + menu event listeners. See useCanvasShortcuts.
   useCanvasShortcuts({
-    repoPath, spawnDefaultAgent, spawnSelectedAgent, spawnVis, spawnBrowser, addFrame, frameOpen, focusTile, closeTile,
-    setSelectedTileId, setFocusModeReq, selectedTileIdRef, selectedFrameIdRef,
-    focusModeNonceRef, tilesRef, boardRef, addBoard,
+    repoPath, spawnDefaultAgent, spawnSelectedAgent, spawnVis, spawnBrowser, addFrame, frameOpen, focusTile: flyTo, closeTile: askCloseTile,
+    setSelectedTileId, selectedTileIdRef, selectedFrameIdRef, tilesRef, boardRef, addBoard,
     onCanvas: () => (activeViewIdRef.current ?? FALLBACK_VIEW_ID) === "canvas",
+    goOut, goInside, fitAll,
   });
 
   // Pinning captures the tile's SCREEN rect so the floating panel opens where the tile is.
@@ -1240,12 +1411,12 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
       const last = tiles[tiles.length - 1];
       if (last && !frameOfRef.current[last.id]) {
         setSelectedTileId(last.id);
-        focusTile(last.id);
+        flyTo(last.id);
       }
     }
     prevExtrasLen.current = tiles.length;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tiles, focusTile]);
+  }, [tiles, flyTo]);
 
   const { toasts, dismissToast, markSeen, selectedTileIdsRef } = useAgentAwareness({
     pushToastRef, frameOfRef, framesRef,
@@ -1257,7 +1428,7 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
   const handleNodeDragStop = useNodeDragStop({
     framesRef, frameOfRef, sizesRef, tilesRef, lastActiveFrameRef,
     setPositions, setFrames, setFrameOf, parentFrameOf, moveFrame, commitPosition, clearDragging: noopClearDragging,
-    moveBox: board.moveTo, shiftBoxes: board.shiftFrames,
+    moveBoxes: board.moveTo, shiftBoxes: board.shiftFrames,
   });
   // Re-lay out, never remove. This used to clear every frame and tile, which left each agent
   // and terminal running in the daemon with no tile to reach it by. Now: tiles back to their
@@ -1270,8 +1441,7 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
     for (const f of frames) if (f.parentFrameId) arrangeFrame(f.id, "grid");
     requestAnimationFrame(() => {
       for (const f of framesRef.current) if (!f.parentFrameId) arrangeFrame(f.id, "grid");
-      requestAnimationFrame(() => requestAnimationFrame(() =>
-        setFocusModeReq({ id: null, n: ++focusModeNonceRef.current })));
+      requestAnimationFrame(() => requestAnimationFrame(() => flyToRef.current(null)));
     });
   }, [arrangeFrame, framesRef, sizesRef, setSizes]);
 
@@ -1286,18 +1456,18 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
   const buildSurfaces = useMemo(() => createTileSurfaceBuilder(), [persistKey, tilesVersion]);
   const surfaces = useMemo(() => buildSurfaces({
     repoPath, root, cwd, tiles, frames, frameOf, pinnedIds, editorTabs, browserOpenReqs, historyReqs, editorReveals, tileNames, agentTitles,
-    openFileInTile, openUrlInBrowser, openFileFromTile, showHistory, closeTabInTile, closeTile, renameTile, sleepTile, wakeTile,
+    openFileInTile, openUrlInBrowser, openThing, openFileFromTile, showHistory, closeTabInTile, closeTile: askCloseTile, renameTile, sleepTile, wakeTile,
     onTogglePin: togglePin,
   }), [
     buildSurfaces, repoPath, root, cwd, tiles, frames, frameOf, pinnedIds, editorTabs, browserOpenReqs, historyReqs, editorReveals, tileNames, agentTitles,
-    openFileInTile, openUrlInBrowser, openFileFromTile, showHistory, closeTabInTile, closeTile, renameTile, sleepTile, wakeTile, togglePin,
+    openFileInTile, openUrlInBrowser, openThing, openFileFromTile, showHistory, closeTabInTile, askCloseTile, renameTile, sleepTile, wakeTile, togglePin,
   ]);
 
   // What the person here has selected, for the others in the workspace to see, whichever view
   // shows it (M1).
   const presenceSelection = useMemo(
-    () => [selectedTileId, selectedFrameId, board.selectedId].filter((id): id is string => !!id),
-    [selectedTileId, selectedFrameId, board.selectedId],
+    () => [...new Set([selectedTileId, selectedFrameId, board.selectedId, ...board.selectedIds].filter((id): id is string => !!id))],
+    [selectedTileId, selectedFrameId, board.selectedId, board.selectedIds],
   );
 
   // A live wallpaper's creatures, for one that draws the agents: the agents here. The same array until one comes,
@@ -1316,8 +1486,8 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
   }, [tileNames, agentTitles]);
   const openCreature = useCallback((id: string) => {
     setSelectedTileId(id);
-    focusTile(id);
-  }, [focusTile]);
+    flyTo(id);
+  }, [flyTo]);
 
   // ── what the active view receives ─────────────────────────────────────────
   const links = useMemo(() => ({ pipes, spawnLinks }), [pipes, spawnLinks]);
@@ -1329,8 +1499,8 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
   const commands: WorkspaceCommands = useMemo(() => ({
     selectTile: setSelectedTileId,
     selectFrame: setSelectedFrameId,
-    focusTile,
-    closeTile,
+    focusTile: flyTo,
+    closeTile: askCloseTile,
     spawnTile: (kind, frameId, opts) => spawnTile(kind, frameId, opts ?? {}),
     spawnVis,
     spawnClaude: () => spawnDefaultAgent(), // protocol name (1.0); it starts the DEFAULT agent
@@ -1356,23 +1526,24 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
     // Module-level bus functions: stable identities, so status never enters the
     // memo deps — a status transition re-renders nothing here.
     openFile: openFileInFrame,
+    openThing: openThingIn,
     subscribeTileStatus: (tileId, cb) => subscribeTileStatus(tileId, (e) => cb(e.status, e)),
     tileStatus: statusOf,
-  }), [setSelectedTileId, setSelectedFrameId, focusTile, closeTile, spawnTile, spawnVis, spawnDefaultAgent, addFrame, renameTile, bindWorkspace, sleepActions, openFileInFrame]);
+  }), [setSelectedTileId, setSelectedFrameId, flyTo, askCloseTile, spawnTile, spawnVis, spawnDefaultAgent, addFrame, renameTile, bindWorkspace, sleepActions, openFileInFrame, openThingIn]);
 
 
   // The canvas plugin's private runtime access (milestone-1 seam).
   const canvasRuntime: CanvasRuntime = useMemo(() => ({
-    positions, sizes, currentViewportRef, setViewport: saveCamera,
+    positions, sizes, currentViewportRef, setViewport,
     onNodeResizeCommit, handleNodeDragStop, resetCanvas,
-    focusReq, focusModeReq, setFocusModeReq, focusModeNonceRef, selectedTileIdRef, selectedFrameIdRef,
+    focusReq, selectedTileIdRef, selectedFrameIdRef,
     selectedTileIdsRef, markSeen,
     frameTiles, updateFrameTitle, bringFrameToFront,
     pins, togglePin, onPinChange, board, canvasPointRef,
     agentSel, setAgentSel, spawnAgent, spawnBrowser,
     updateAvailable, updateStaged, onUpgrade: () => onUpgrade?.(), onRestart: () => onRestart?.(), upgrading,
   }), [
-    positions, sizes, saveCamera, onNodeResizeCommit, handleNodeDragStop, resetCanvas, focusReq, focusModeReq,
+    positions, sizes, setViewport, onNodeResizeCommit, handleNodeDragStop, resetCanvas, focusReq,
     selectedTileIdRef, selectedFrameIdRef, selectedTileIdsRef, markSeen, frameTiles,
     updateFrameTitle, bringFrameToFront,
     pins, togglePin, onPinChange, board, agentSel, spawnAgent, spawnBrowser, updateAvailable, updateStaged, onUpgrade, onRestart, upgrading,
@@ -1382,6 +1553,7 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
 
   return (
     <CanvasRuntimeContext.Provider value={canvasRuntime}>
+    <FrameFocusContext.Provider value={frameFocus}>
     <div className="relative h-full w-full flex flex-col" data-active-view={activeViewId ?? ""}>
       {/* Live wallpaper — fixed full-window layer behind ALL app content (z-index
           -1), so it shows through every view AND the panels beside it. */}
@@ -1432,7 +1604,7 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
       <AgentToasts
         toasts={toasts}
         onDismiss={dismissToast}
-        onView={(id) => { setSelectedTileId(id); focusTile(id); markSeen([id]); }}
+        onView={(id) => { setSelectedTileId(id); flyTo(id); markSeen([id]); }}
       />
       {/* Shared-layer selection: a body's native pointerdown selects its tile
           (React synthetic events from a portaled body never reach a view's own
@@ -1475,17 +1647,19 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
           />
         </Suspense>
       )}
+      <UnsavedCloseDialog work={closeAsk?.work ?? null} onDone={(close) => { const ask = closeAsk; setCloseAsk(null); if (close) ask?.close(); }} />
       {agentPick && (
         <PickerDialog
           title="Send to agent"
           description={agentPick.text}
-          rows={frames.flatMap((f) => tiles
+          rows={pickOrder(frames, agentPick.from ? frameOf[agentPick.from] : undefined, lastAgentPicked.current ? frameOf[lastAgentPicked.current] : undefined).flatMap((f) => tiles
             .filter((t) => t.kind === AGENT_TILE_KIND && frameOf[t.id] === f.id)
+            .sort((a, b) => Number(b.id === lastAgentPicked.current) - Number(a.id === lastAgentPicked.current))
             .map((t) => ({ id: t.id, label: tileName(tileNames, agentTitles, t), group: f.title, icon: <AgentIcon id={agentForCmd(t.cmd)?.id} size={13} /> })))}
           extra={readyAgents.length
             ? readyAgents.map((a) => ({ id: `${NEW_AGENT_ROW}${a.id}`, label: `New ${a.label}`, icon: <Plus size={13} /> }))
             : [{ id: NEW_AGENT_ROW, label: "New agent", icon: <Plus size={13} /> }]}
-          onPick={(id) => deliverToAgent(agentPick.text, id)}
+          onPick={(id) => deliverToAgent(agentPick.text, id, agentPick.from)}
           onClose={() => setAgentPick(null)}
         />
       )}
@@ -1496,7 +1670,9 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
         open={gitModalRepo !== null}
         onOpenChange={(o) => { if (!o) setGitModalRepo(null); }}
       />
+      <Overview frames={frames} tiles={tiles} frameOf={frameOf} objects={board.objects} positions={positions} sizes={sizes} tileNames={tileNames} agentTitles={agentTitles} />
     </div>
+    </FrameFocusContext.Provider>
     </CanvasRuntimeContext.Provider>
   );
 }

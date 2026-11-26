@@ -9,7 +9,7 @@ use hive_phone::{
     failure::{Failure, Lost},
     home, homes,
     identity::DeviceCertificate,
-    markdown, network, notes, pairing, person,
+    drawings, markdown, network, notes, pairing, person,
     screen::{Screen, FIRST_HISTORY},
     sent_files, views,
     workspace::{self, Answer, Input, Reply, Sent, Watched},
@@ -609,6 +609,27 @@ impl Host {
             .await
             .map_err(err)?;
         to_js(&serde_json::to_value(notes).map_err(err)?)
+    }
+
+    /// What was drawn on the board of `workspace`: `[{id, title, by?, objects}]`, each to look at.
+    pub async fn drawings(&self, workspace: String) -> Result<JsValue, JsError> {
+        let drawn = drawings::drawings(&self.connection, &workspace)
+            .await
+            .map_err(err)?;
+        to_js(&serde_json::to_value(drawn).map_err(err)?)
+    }
+
+    /// A picture of the drawing `id`, or all that is drawn: an SVG that runs and loads nothing.
+    #[wasm_bindgen(js_name = drawingPicture)]
+    pub async fn drawing_picture(
+        &self,
+        workspace: String,
+        id: Option<String>,
+        theme: String,
+    ) -> Result<String, JsError> {
+        drawings::picture(&self.connection, &workspace, id.as_deref(), &theme)
+            .await
+            .map_err(err)
     }
 
     /// Mark the note `id` done, dismiss it (`reason` says why) or reopen it.

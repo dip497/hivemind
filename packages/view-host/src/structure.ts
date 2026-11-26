@@ -13,6 +13,8 @@ import type { TileRecord } from "@hivemind/workspace-doc/shapes";
 /** A frame, as `structure` reads it. */
 export interface StructureFrame extends FrameListing {
   parentFrameId?: string;
+  /** It opens into a page of its own. */
+  page?: true;
 }
 
 /** A tile, as `structure` reads it: an agent's says whether it sleeps, and since when. */
@@ -58,6 +60,7 @@ export function viewStructure<F extends StructureFrame, T extends StructureTile>
         ...(f.parentFrameId ? { parentId: f.parentFrameId } : {}),
         ...(f.branch ? { branch: f.branch } : {}),
         ...folderOf(f),
+        ...(f.page ? { page: true as const } : {}),
       };
     }),
     tiles: s.tiles.map((t) => {

@@ -40,11 +40,46 @@ opens **Open recent**, where you pick another. A view that draws its own toolbar
 To split a pane in Windows, drag a tab onto a pane's edge, or press `⌘\` / `Ctrl+\`. Every Windows key
 is on [Keyboard shortcuts](/keyboard-shortcuts).
 
+### Find the agent that needs you
+
+Each tab has a mark for what its tile asks of you: a pulsing triangle when it waits on you, a cross
+when it failed, a diamond when it finished since you last looked, a ring when it wrote something you
+have not seen, and a dot while it works. A pane with a tab that waits on you has an amber edge, and
+the focused pane shows how many wait, as a button that takes you to the newest. A tile you already
+looked at, here, on the canvas or in the Layers panel, is not marked again.
+
+Press ⌥⌘A / Ctrl+Alt+A to go to the tile that most recently started waiting on you. It works from
+anywhere, a terminal too, in every view.
+
+1. Press ⌥⌘P / Ctrl+Alt+P, or choose the magnifier in a pane's bar.
+2. Type part of a tile's name, its agent or its folder. Tiles that wait on you are first, then the
+   ones you used most recently.
+3. Press Enter, or a digit 1 to 9 before you type.
+4. Check: the tile shows in its pane.
+
+### Open a frame or a page as a layout
+
+With tiles in two or more frames, a strip over the panes lists **All** and each frame, with how many
+tiles it has and a mark when one of them needs you. Choose a frame to see only its tiles, laid out
+side by side. Each layout keeps its own panes, so going back to **All** finds them as you left them.
+When the workspace has pages, **By frame** switches the strip to **By page**.
+
+### Type into several terminals at once
+
+1. Show the terminals in panes side by side.
+2. Press ⌥⌘B / Ctrl+Alt+B.
+3. Check: each of their panes has a red edge, and its bar says in red how many terminals your
+   typing goes to.
+4. Press Esc, or choose **Stop**, to type into one again. Esc is not sent to the programs.
+
+The Windows keys work when the view has focus, not a terminal: click a pane's bar first. Agents do
+all of this with `hive ctl plugin call windows`; see the [CLI reference](/cli#hive-ctl-plugins).
+
 <Note>
 A Browser tile reloads its page once each time you switch views. Its tabs and history stay.
 </Note>
 
-<Frame caption="The Windows view: one tile fills the window, with a tab for each tile.">
+<Frame caption="The Windows view with one pane: a terminal under its tab, and the Layers panel beside it.">
   <img src="/images/app/windows-view.dark.webp" alt="The Windows view: a terminal fills the window, its tab is at the top, and the Layers panel lists the project and its tile on the left." />
 </Frame>
 

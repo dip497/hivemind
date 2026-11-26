@@ -307,6 +307,9 @@ describe("the oldest Hivemind a plugin needs", () => {
     // A permission is a value, not a field: an app that does not know it refuses the manifest too.
     expect((await plugin(view({ permissions: ["workspace:spawn", "workspace:code"] }))).minAppVersion).toBe(PERMISSION_SINCE["workspace:code"]);
     expect((await plugin(view({ widgets: "left", permissions: ["workspace:code"] }))).minAppVersion).toBe(PERMISSION_SINCE["workspace:code"]);
+    // The newest permission asked for decides it.
+    expect((await plugin(view({ permissions: ["workspace:code", "workspace:draw"] }))).minAppVersion).toBe("2026.11.4");
+    expect((await plugin(view({ permissions: ["workspace:board"] }))).minAppVersion).toBe("2026.11.4");
     expect((await plugin(widget())).minAppVersion).toBeNull();
     const kit = (members: object, files: Record<string, string>) => plugin({
       "hivemind-package.json": JSON.stringify({ apiVersion: 2, id: "@ada/kit", name: "Kit", version: "1.0.0", ...members }), ...files });

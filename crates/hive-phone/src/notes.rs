@@ -1,6 +1,6 @@
-//! Notes left on a page in a Browser tile on the computer: review comments on a page
-//! (core's `review.ts`). The phone lists a workspace's, closes or reopens one, and sends the open
-//! ones to an agent, in the words the computer writes for it (`review.message`).
+//! Notes left on a page in a Browser tile on the computer, or pinned on its board: review comments
+//! with a place (core's `review.ts`). The phone lists a workspace's, closes or reopens one, and sends
+//! the open ones to an agent, in the words the computer writes for it (`review.message`).
 
 use anyhow::Result;
 use iroh::endpoint::Connection;
@@ -16,8 +16,9 @@ pub struct Note {
     pub body: String,
     /// `open`, `seen` (an agent is on it), `resolved` or `dismissed`: core's `statusOf`.
     pub status: &'static str,
-    /// What it points at: the first element's name, or "Area".
+    /// What it points at: the first element's name, "Area", or what it is pinned on.
     pub what: String,
+    /// The page it is on; empty for one on the board.
     pub url: String,
     /// What was done, or why it was dismissed.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -30,7 +31,7 @@ pub struct Note {
     pub attachments: Vec<String>,
 }
 
-/// The notes on pages among a workspace's review comments, as `review.list` gives them.
+/// The notes among a workspace's review comments, as `review.list` gives them.
 pub fn read_notes(comments: &Value) -> Vec<Note> {
     let text = |c: &Value, k: &str| c.get(k).and_then(Value::as_str).map(str::to_owned);
     let yes = |c: &Value, k: &str| c.get(k).and_then(Value::as_bool) == Some(true);
@@ -39,24 +40,31 @@ pub fn read_notes(comments: &Value) -> Vec<Note> {
         .into_iter()
         .flatten()
         .filter_map(|c| {
-            let page = c.get("page")?;
+            let page = c.get("page");
+            let board = c.get("board");
             let status = match (yes(c, "resolved"), yes(c, "dismissed"), yes(c, "seen")) {
                 (true, true, _) => "dismissed",
                 (true, false, _) => "resolved",
                 (false, _, true) => "seen",
                 _ => "open",
             };
-            let what = if page.get("area").is_some() {
-                "Area".to_owned()
-            } else {
-                page.pointer("/elements/0/name")?.as_str()?.to_owned()
+            let what = match (page, board) {
+                (Some(page), _) if page.get("area").is_some() => "Area".to_owned(),
+                (Some(page), _) => page.pointer("/elements/0/name")?.as_str()?.to_owned(),
+                (None, Some(board)) => {
+                    text(board, "what").unwrap_or_else(|| "The board".to_owned())
+                }
+                (None, None) => return None,
             };
             Some(Note {
                 id: text(c, "id")?,
                 body: text(c, "body")?,
                 status,
                 what,
-                url: text(page, "url")?,
+                url: match page {
+                    Some(page) => text(page, "url")?,
+                    None => String::new(),
+                },
                 summary: text(c, "summary"),
                 agent: text(c, "author").filter(|a| a != "you"),
                 attachments: c
@@ -71,7 +79,7 @@ pub fn read_notes(comments: &Value) -> Vec<Note> {
         .collect()
 }
 
-/// The notes on pages kept in `repo`, a folder of `workspace`.
+/// The notes kept in `repo`, a folder of `workspace`.
 pub async fn notes(connection: &Connection, workspace: &str, repo: &str) -> Result<Vec<Note>> {
     let mut w = Workspace::open(connection, workspace).await?;
     Ok(read_notes(&w.call("review.list", json!([repo])).await?))
@@ -152,6 +160,33 @@ mod tests {
             ]
         );
         assert_eq!(notes[2].summary.as_deref(), Some("now 48px"));
+    }
+
+    #[test]
+    fn a_note_on_the_board_is_listed_by_what_it_is_pinned_on_and_has_no_page() {
+        let listed = json!([
+            { "id": "c-1", "body": "rate limits", "author": "you", "board": { "on": "shape-1", "x": 0, "y": 0, "what": "API" } },
+            { "id": "c-2", "body": "here?", "author": "pi", "board": { "x": 40, "y": 50 } },
+        ]);
+        let notes = read_notes(&listed);
+        let seen: Vec<_> = notes
+            .iter()
+            .map(|n| {
+                (
+                    n.id.as_str(),
+                    n.what.as_str(),
+                    n.url.as_str(),
+                    n.agent.as_deref(),
+                )
+            })
+            .collect();
+        assert_eq!(
+            seen,
+            vec![
+                ("c-1", "API", "", None),
+                ("c-2", "The board", "", Some("pi")),
+            ]
+        );
     }
 
     #[test]

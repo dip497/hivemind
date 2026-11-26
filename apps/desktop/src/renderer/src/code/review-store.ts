@@ -19,7 +19,8 @@ export async function saveComments(repoPath: string, list: ReviewComment[]): Pro
   await window.hive.reviewSave(repoPath, list).catch(() => { /* keep the UI usable */ });
 }
 
-/** Send review text to an agent via the target picker (Canvas routes the event). */
-export function deliverToAgent(text: string): void {
-  window.dispatchEvent(new CustomEvent("hivemind:deliver-to-agent", { detail: { text } }));
+/** Send review text to an agent via the target picker (Canvas routes the event); `from`, the tile
+ *  it is sent from, puts that tile's frame first. */
+export function deliverToAgent(text: string, from?: string): void {
+  window.dispatchEvent(new CustomEvent("hivemind:deliver-to-agent", { detail: { text, from } }));
 }

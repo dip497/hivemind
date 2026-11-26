@@ -44,6 +44,7 @@ import { grantCmd } from "./commands/grant.js";
 import { migrateOnStart } from "./migrate-on-start.js";
 import { migrationsCmd } from "./commands/migrations.js";
 import { guideCmd } from "./commands/guide.js";
+import { codeSidecarCmd } from "./commands/code-sidecar.js";
 import { runCli } from "./cli-runner.js";
 
 /**
@@ -105,6 +106,7 @@ const main = defineCommand({
     notifications: notificationsCmd,
     migrations: migrationsCmd,
     guide: guideCmd,
+    "code-sidecar": codeSidecarCmd,
   },
 });
 

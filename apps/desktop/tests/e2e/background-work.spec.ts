@@ -8,7 +8,6 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { seedAgents } from "./helpers/agents";
 import { stopDaemons } from "./helpers/daemons";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -46,7 +45,6 @@ const noteInLayers = (tile: string) => page.locator(`[data-layer-tile="${tile}"]
 
 test.beforeAll(async () => {
   test.setTimeout(180_000);
-  seedAgents(XDG, ["claude"]);
   repo = fs.mkdtempSync(path.join(os.tmpdir(), "hm-background-"));
   execFileSync("git", ["init", "-q"], { cwd: repo });
   fakeBin = fs.mkdtempSync(path.join(os.tmpdir(), "hm-background-bin-"));
@@ -67,7 +65,6 @@ test.afterAll(async () => {
   await app?.close();
   stopDaemons(XDG);
   for (const d of [repo, fakeBin]) fs.rmSync(d, { recursive: true, force: true });
-  fs.rmSync(path.join(XDG, "hivemind", "agents", "claude"), { recursive: true, force: true });
 });
 
 test("a turn that ends with a workflow running stays working, its reply readable, until a later turn ends with none", async () => {

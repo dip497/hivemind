@@ -11,7 +11,7 @@ import { appMeetsMinVersion } from "@hivemind/agents";
 import { appRunning } from "./host-control.js";
 import { printFailure } from "./exit-codes.js";
 
-const TOUCHES_NOTHING = new Set(["--version", "-v", "--help", "-h", "migrations"]);
+const TOUCHES_NOTHING = new Set(["--version", "-v", "--help", "-h", "migrations", "code-sidecar"]);
 
 export async function migrateOnStart(argv: readonly string[], app: string): Promise<void> {
   if (!argv.length || TOUCHES_NOTHING.has(argv[0]!) || argv.includes("--help") || argv.includes("-h")) return;

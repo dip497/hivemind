@@ -23,7 +23,8 @@ import {
   ACTIVITY_MIN_INTERVAL_MS, EVENT_REPLAY_MAX, PROTOCOL_VERSION, customNameMatches, parsePluginMessage, refusal,
   type ActivityLevel, type CommandName, type HostMessage, type HostScope, type PluginMessage, type RequestErrorCode, type ShareOutcome, type SurfaceRect, type LineRect, type ViewEvent,
   type ViewEventKind, type ViewFeature, type ViewHistoryDay, type ViewParticipant, type ViewPermission, type ViewPresence, type ViewRect, type ViewWidget,
-  type ViewAgent, type ViewAgentStatus, type HostMenu, type ViewSession, type ViewStatus, type IssueCall, type ViewIssueSummary, type ViewWidgetBand, type CodeCall,
+  type ViewAgent, type ViewAgentStatus, type HostMenu, type ViewSession, type ViewStatus, type IssueCall, type ViewIssueSummary, type ViewWidgetBand, type CodeCall, type ViewOpenAsk,
+  BOARD_CHANGE_IDS_MAX, BOARD_REQUEST_PERMISSION, OPEN_RATE, type BoardRequest, type ViewBoardChange,
 } from "@hivemind/view-sdk/protocol";
 import type { TileKind } from "@hivemind/workspace-doc/shapes";
 import type { TileStatusKind } from "@hivemind/agent-host/tile-status";
@@ -98,10 +99,31 @@ export interface LinkServices {
    *  has none. A guest's window floats the cards over the host's view and says it itself, so the
    *  session the host runs for it has none either. */
   widgetBand?: { subscribe(cb: (band: ViewWidgetBand) => void): () => void };
+  /** 1.21: when this person last looked at a tile (ms; null: not yet), now and on each change. */
+  seenOf?: (tileId: string, cb: (seen: number | null) => void) => () => void;
+  /** 1.21: the window's one group of terminals typed into together (the link has checked the tiles
+   *  and the permission). `follow` hears the group now and on each change, Escape's end included. */
+  broadcast?: { set(tileIds: string[]): void; follow(cb: (tileIds: readonly string[]) => void): () => void };
   /** 1.19: find, grep, picked and open in a frame's folder (the link has checked the permission and
    *  that the frame is the view's). Rejects `{ code: "UNSUPPORTED" }` for a frame with no folder. */
   code?: (c: CodeCall) => Promise<unknown>;
+  /** 1.21: open an address or a frame's file where a click would (the link has checked the frame). */
+  open?: (ask: ViewOpenAsk) => Promise<unknown>;
+  /** 1.20: the board of the view's workspace. `call` answers a board request as the view's own
+   *  writer (the link has checked the permission); `follow` hears the ids of what changed on it, from
+   *  any writer, until stopped; `told` says those ids as the view is told them. */
+  board?: {
+    call(name: BoardRequest, ask: object): Promise<unknown>;
+    follow(cb: (ids: readonly string[]) => void): () => void;
+    told(ids: readonly string[]): ViewBoardChange[];
+  };
 }
+
+/** How long board changes are gathered before a view is told them: about a frame. */
+export const BOARD_PUSH_MS = 50;
+
+type BoardRequestMessage = Extract<PluginMessage, { type: "request"; name: BoardRequest }>;
+const isBoardRequest = (m: Extract<PluginMessage, { type: "request" }>): m is BoardRequestMessage => Object.hasOwn(BOARD_REQUEST_PERMISSION, m.name);
 
 export const SHARE_DECLINES_MAX = 3;
 /** Tiles announced to a view that the link remembers, newest kept. */
@@ -126,7 +148,10 @@ export function linkFeatures(s: LinkServices, placesSurfaces = false): ViewFeatu
   if (s.widgets) f.push("widgets");
   if (s.issues) f.push("issues");
   if (s.widgetBand) f.push("widgetBand");
+  if (s.broadcast) f.push("broadcast");
   if (s.code) f.push("code");
+  if (s.board) f.push("board");
+  if (s.open) f.push("open");
   f.push("invoke");
   if (placesSurfaces) f.push("surfaces");
   return f;
@@ -213,6 +238,11 @@ export class CommunityLink {
   private issuesUnsub: (() => void) | null = null;
   private bandUnsub: (() => void) | null = null;
   private lastBand = "";
+  private boardUnsub: (() => void) | null = null;
+  private boardPending = new Set<string>();
+  /** When this view's last `open` requests came, for its rate. */
+  private opens: number[] = [];
+  private boardTimer = false;
   private people: ViewParticipant[] | null = null;
   private lastParticipants = "";
   /** What this host cannot do that the view asked for, said once each. */
@@ -265,7 +295,7 @@ export class CommunityLink {
   send(msg: HostMessage): void {
     if (this.stats.disabled || !this.port) return;
     try { this.port.postMessage(msg); } catch { /* port gone */ }
-    if (msg.type === "hello") this.followBand();
+    if (msg.type === "hello") { this.followBand(); this.followBroadcast(); }
     if (msg.type !== "structure") return;
     this.asleep = new Set(msg.tiles.flatMap((t) => (t.asleep ? [t.id] : [])));
     for (const t of msg.tiles) { this.announced.delete(t.id); this.announced.add(t.id); }
@@ -283,6 +313,21 @@ export class CommunityLink {
       if (key === this.lastBand) return;
       this.lastBand = key;
       this.send({ type: "widgetBand", edge, width });
+    });
+  }
+
+  /** 1.21: the group typed into together, told as it changes. A group this view set ends with it. */
+  private broadcastUnsub: (() => void) | null = null;
+  private broadcastSet = false;
+  private lastBroadcast = "";
+  private followBroadcast(): void {
+    if (this.broadcastUnsub || !this.services.broadcast) return;
+    this.broadcastUnsub = this.services.broadcast.follow((ids) => {
+      const key = ids.join("\n");
+      if (key === this.lastBroadcast) return;
+      this.lastBroadcast = key;
+      if (!ids.length) this.broadcastSet = false;
+      this.send({ type: "broadcast", tileIds: [...ids] });
     });
   }
 
@@ -320,6 +365,9 @@ export class CommunityLink {
     this.widgetsUnsub?.(); this.widgetsUnsub = null;
     this.issuesUnsub?.(); this.issuesUnsub = null;
     this.bandUnsub?.(); this.bandUnsub = null;
+    this.broadcastUnsub?.(); this.broadcastUnsub = null;
+    if (this.broadcastSet) { this.broadcastSet = false; this.services.broadcast?.set([]); }
+    this.stopBoard();
     for (const u of this.statusUnsubs.values()) u();
     this.statusUnsubs.clear();
     this.stats.statusSubscriptions = 0;
@@ -382,10 +430,11 @@ export class CommunityLink {
         const tileId = m.tileId;
         let bucket: ViewStatus | null = null;
         let agent: ViewAgentStatus | undefined;
+        let seen: number | null | undefined;
         const push = () => {
           if (bucket === null) return;
           const s = this.services.sinceOf?.(tileId);
-          this.send({ type: "status", tileId, status: bucket, ...(s ? { since: s.since, exact: s.exact } : {}), ...(agent ? { agent } : {}) });
+          this.send({ type: "status", tileId, status: bucket, ...(s ? { since: s.since, exact: s.exact } : {}), ...(agent ? { agent } : {}), ...(seen !== undefined ? { seen } : {}) });
         };
         const offBus = this.deps.commands.subscribeTileStatus(tileId, (status) => { bucket = bucketTileStatus(status); push(); });
         const offAgent = this.services.agentStatus?.(tileId, (a) => {
@@ -393,7 +442,8 @@ export class CommunityLink {
           agent = a;
           push();
         });
-        this.statusUnsubs.set(tileId, () => { offBus(); offAgent?.(); });
+        const offSeen = this.services.seenOf?.(tileId, (at) => { if (at === seen) return; seen = at; push(); });
+        this.statusUnsubs.set(tileId, () => { offBus(); offAgent?.(); offSeen?.(); });
         this.stats.statusSubscriptions = this.statusUnsubs.size;
         return;
       }
@@ -451,6 +501,11 @@ export class CommunityLink {
         return;
       }
       case "unsubscribeIssues": this.issuesUnsub?.(); this.issuesUnsub = null; return;
+      case "subscribeBoard": {
+        if (!this.boardUnsub) this.boardUnsub = this.services.board!.follow((ids) => this.queueBoard(ids));
+        return;
+      }
+      case "unsubscribeBoard": this.stopBoard(); return;
       case "invokeResult": {
         const p = this.invokes.get(m.invokeId);
         if (!p) return;
@@ -539,15 +594,56 @@ export class CommunityLink {
     }, wait);
   }
 
+  private stopBoard() {
+    this.boardUnsub?.(); this.boardUnsub = null;
+    this.boardPending.clear();
+  }
+
+  // What changed on the board, gathered and told at most once per BOARD_PUSH_MS.
+  private queueBoard(ids: readonly string[]) {
+    for (const id of ids) this.boardPending.add(id);
+    if (this.boardTimer || this.boardPending.size === 0) return;
+    this.boardTimer = true;
+    this.schedule(() => {
+      this.boardTimer = false;
+      const board = this.services.board;
+      if (!this.boardUnsub || !board) return;
+      const ids = [...this.boardPending].slice(0, BOARD_CHANGE_IDS_MAX);
+      for (const id of ids) this.boardPending.delete(id);
+      for (const change of board.told(ids)) this.send({ type: "board", ...change });
+      this.queueBoard([]);
+    }, BOARD_PUSH_MS);
+  }
+
   private request(m: Extract<PluginMessage, { type: "request" }>) {
     const reply = (p: Promise<unknown>) => p.then(
       (result) => this.send({ type: "response", requestId: m.requestId, ok: true, result }),
       (e: unknown) => {
         const code = (e as { code?: unknown })?.code;
-        this.fail(m.requestId, code === "UNSUPPORTED" || code === "BAD_REQUEST" ? code : "INTERNAL", (e as Error)?.message ?? String(e));
+        this.fail(m.requestId, code === "UNSUPPORTED" || code === "BAD_REQUEST" || code === "DECLINED" ? code : "INTERNAL", (e as Error)?.message ?? String(e));
       },
     );
     const granted = (p: ViewPermission) => (this.deps.capabilities.includes(p) ? true : (this.fail(m.requestId, "DECLINED", `${m.name} needs permission "${p}"`), false));
+    if (isBoardRequest(m)) {
+      const board = this.services.board;
+      if (!board) { this.fail(m.requestId, "UNSUPPORTED", "this host has no board"); return; }
+      if (!granted(BOARD_REQUEST_PERMISSION[m.name])) return;
+      void reply(board.call(m.name, m.args[0]));
+      return;
+    }
+    if (m.name === "open") {
+      const open = this.services.open;
+      if (!open) { this.fail(m.requestId, "UNSUPPORTED", "this host cannot open links"); return; }
+      if (!granted("workspace:open")) return;
+      const now = this.now();
+      this.opens = this.opens.filter((at) => now - at < OPEN_RATE.ms);
+      if (this.opens.length >= OPEN_RATE.count) { this.fail(m.requestId, "BUSY", `at most ${OPEN_RATE.count} opens in ${OPEN_RATE.ms / 1000} s`); return; }
+      this.opens.push(now);
+      const frameId = m.args[0].frameId;
+      if (frameId !== null && !this.deps.hasFrame(frameId)) { this.fail(m.requestId, "BAD_REQUEST", `unknown frame ${frameId}`); return; }
+      void reply(open(m.args[0]));
+      return;
+    }
     if (m.name === "code") {
       const code = this.services.code;
       if (!code) { this.fail(m.requestId, "UNSUPPORTED", "this host cannot search code"); return; }
@@ -684,6 +780,14 @@ export class CommunityLink {
         if (!c.sleepAgent) { this.unsupported("sleepAgent"); return; }
         c.sleepAgent(args[0] as string);
         return;
+      case "broadcastInput": {
+        const b = this.services.broadcast;
+        if (!b) { this.unsupported("broadcastInput"); return; }
+        const ids = (args[0] as string[]).filter((id) => this.deps.hasTile(id));
+        this.broadcastSet = ids.length > 0;
+        b.set(ids);
+        return;
+      }
       case "openHostMenu":
         if (!c.openHostMenu) { this.unsupported("openHostMenu"); return; }
         if (args.length > 1) c.openHostMenu(args[0] as HostMenu, args[1] as ViewRect); else c.openHostMenu(args[0] as HostMenu);

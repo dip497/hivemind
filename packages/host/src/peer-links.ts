@@ -103,6 +103,8 @@ const PHONE_MAY = new Set([
   // The notes left on pages, listed, sent to an agent and closed or reopened; and what an agent asks
   // on a Browser tile, answered.
   "review.list", "review.message", "review.resolve", "review.dismiss", "review.reopen",
+  // What is drawn on the board, to look at.
+  "board.read", "board.picture", "board.image", "page.list",
   "browser.asks", "browser.answer",
 ]);
 export const phoneMay = (method: string, params: unknown[]): boolean =>

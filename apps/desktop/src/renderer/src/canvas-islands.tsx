@@ -4,12 +4,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useStore } from "@xyflow/react";
 import { useCamera } from "./canvas-camera";
 import { Button } from "./components/ui/button";
-import { actionKey } from "./shortcut";
+import { actionKey, runShortcut } from "./shortcut";
+import { LayoutGrid } from "./components/icons";
 
 /** Bottom-left zoom + nav island (Excalidraw footer). Uses react-flow's
  *  imperative camera API; lives inside <ReactFlow> so the hooks resolve. */
-export function ZoomIsland({ tileCount, onReset, minimapOn, onToggleMinimap, onFocus }: { tileCount: number; onReset: () => void; minimapOn: boolean; onToggleMinimap: () => void; onFocus: () => void }) {
-  const { zoomIn, zoomOut, zoomTo, fitView } = useCamera();
+export function ZoomIsland({ tileCount, onReset, minimapOn, onToggleMinimap, onFocus, onFit }: { tileCount: number; onReset: () => void; minimapOn: boolean; onToggleMinimap: () => void; onFocus: () => void; onFit: () => void }) {
+  const { zoomIn, zoomOut, zoomTo } = useCamera();
   const zoom = useStore((s) => s.transform[2]);
   const pct = Math.round(zoom * 100);
   const [fpsOn, setFpsOn] = useState(false);
@@ -42,7 +43,10 @@ export function ZoomIsland({ tileCount, onReset, minimapOn, onToggleMinimap, onF
         </IslandBtn>
       </div>
       <div className="hm-island flex items-center overflow-hidden">
-        <IslandBtn title="Fit to view (Esc)" onClick={() => fitView({ duration: 200, padding: 0.2 })}>
+        <IslandBtn title={`Overview of every page (${actionKey("overview")})`} onClick={() => runShortcut("overview")}>
+          <LayoutGrid aria-hidden className="size-[13px]" />
+        </IslandBtn>
+        <IslandBtn title="Fit to view (Esc)" onClick={onFit}>
           <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M2 5V2h3M9 2h3v3M12 9v3H9M5 12H2V9" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
         </IslandBtn>
         <IslandBtn title="Focus selected (.)  ·  Esc to fit all" onClick={onFocus}>

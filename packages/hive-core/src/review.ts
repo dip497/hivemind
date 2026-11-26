@@ -13,7 +13,7 @@ import path from "node:path";
 import { findRoot, HiveError, replaceFile, replaceFileWithCopy } from "./storage.js";
 
 export * from "./review-shape.js";
-import { byAgent, onPage, REVIEW_INTENTS, statusOf, type DiffComment, type PageAnchor, type PageBox, type PageComment, type PageElement, type ReviewComment, type ReviewIntent, type ReviewReply, type CommentFields } from "./review-shape.js";
+import { MAX_CODE_CONTEXT, MAX_CODE_TEXT, byAgent, onBoard, onCode, onDiff, onPage, REVIEW_INTENTS, statusOf, type BoardAnchor, type BoardComment, type CodeAnchor, type CodeComment, type DiffComment, type PageAnchor, type PageBox, type PageComment, type PageElement, type ReviewComment, type ReviewIntent, type ReviewReply, type CommentFields } from "./review-shape.js";
 
 export const REVIEW_FILE = "review.json";
 /** Where a page note's picture is kept, beside review.json. */
@@ -84,6 +84,15 @@ function anchor(raw: unknown): PageAnchor | null {
   };
 }
 
+function boardAnchor(raw: unknown): BoardAnchor | null {
+  if (!raw || typeof raw !== "object") return null;
+  const b = raw as Record<string, unknown>;
+  const [on, what] = [str(b.on, 300), str(b.what, 300)];
+  return { ...(on ? { on } : {}), x: coord(b.x), y: coord(b.y), ...(what ? { what } : {}) };
+}
+
+const lines = (v: unknown): string => (typeof v === "string" ? v.slice(0, MAX_CODE_CONTEXT) : "");
+
 function reply(raw: unknown): ReviewReply | null {
   if (!raw || typeof raw !== "object") return null;
   const r = raw as Record<string, unknown>;
@@ -116,6 +125,11 @@ export function normalizeComments(raw: unknown): ReviewComment[] {
         ? { replies: c.replies.map(reply).filter((r): r is ReviewReply => r !== null) }
         : {}),
     };
+    const pinned = c.board === undefined ? null : boardAnchor(c.board);
+    if (pinned) {
+      out.push({ ...fields, board: pinned });
+      continue;
+    }
     const page = c.page === undefined ? null : anchor(c.page);
     if (page) {
       const attachments = Array.isArray(c.attachments) ? c.attachments.filter(isAttachmentName).slice(0, 50) : [];
@@ -124,6 +138,11 @@ export function normalizeComments(raw: unknown): ReviewComment[] {
     }
     const file = str(c.file, 4096);
     if (!file) continue;
+    if (typeof c.text === "string") {
+      const start = Math.max(1, line(c.startLine));
+      out.push({ ...fields, file, startLine: start, endLine: Math.max(start, line(c.endLine)), text: c.text.slice(0, MAX_CODE_TEXT), before: lines(c.before), after: lines(c.after) });
+      continue;
+    }
     const start = line(c.startLine);
     out.push({ ...fields, file, startLine: start, endLine: Math.max(start, line(c.endLine)), side: c.side === "deletions" ? "deletions" : "additions" });
   }
@@ -160,14 +179,14 @@ async function mutate(
   return next;
 }
 
-type NewComment = (Omit<DiffComment, "id" | "at"> | Omit<PageComment, "id" | "at">) & { id?: string; at?: string };
+type NewComment = (Omit<DiffComment, "id" | "at"> | Omit<CodeComment, "id" | "at"> | Omit<PageComment, "id" | "at"> | Omit<BoardComment, "id" | "at">) & { id?: string; at?: string };
 
 export async function addComment(root: string, input: NewComment): Promise<ReviewComment> {
   const list = await readComments(root);
   const comment = normalizeComments([
     { ...input, id: input.id ?? `c-${Date.now().toString(36)}-${list.length.toString(36)}`, at: input.at ?? new Date().toISOString() },
   ])[0];
-  if (!comment) throw new Error("a review comment needs a body, and a file or a place on a page");
+  if (!comment) throw new Error("a review comment needs a body, and a file, a place on a page or a place on the board");
   list.push(comment);
   await writeComments(root, list);
   return comment;
@@ -181,6 +200,15 @@ const open = (c: ReviewComment, what: string) => { if (c.resolved) refuse(c, wha
 
 export function editComment(root: string, id: string, body: string): Promise<ReviewComment | null> {
   return mutate(root, id, (c) => ({ ...c, body }));
+}
+
+/** A comment on code, moved to where its lines are now, with what they say now. */
+export function moveComment(root: string, id: string, to: CodeAnchor): Promise<ReviewComment | null> {
+  return mutate(root, id, (c) => {
+    if (!onCode(c)) throw new HiveError("REVIEW_NOT_CODE", `comment ${c.id} is not on a file's lines`);
+    const moved = normalizeComments([{ ...c, ...to }])[0];
+    return moved && onCode(moved) ? moved : c;
+  });
 }
 
 export async function deleteComment(root: string, id: string): Promise<boolean> {
@@ -238,15 +266,19 @@ export interface CommentFilter {
   file?: string;
   /** open includes seen; resolved includes dismissed. */
   status?: "open" | "resolved" | "all";
-  on?: "diff" | "page";
+  /** `notes`: on pages and on the board, as an agent answers them; `code`: on a file's lines. */
+  on?: "diff" | "code" | "page" | "board" | "notes";
 }
+
+const isOn = (c: ReviewComment, on: NonNullable<CommentFilter["on"]>): boolean =>
+  on === "page" ? onPage(c) : on === "board" ? onBoard(c) : on === "notes" ? onPage(c) || onBoard(c) : on === "code" ? onCode(c) : onDiff(c);
 
 export async function listComments(root: string, filter: CommentFilter = {}): Promise<ReviewComment[]> {
   const status = filter.status ?? "open";
   return (await readComments(root)).filter(
     (c) =>
-      (filter.file === undefined || (!onPage(c) && c.file === filter.file)) &&
-      (filter.on === undefined || (filter.on === "page") === onPage(c)) &&
+      (filter.file === undefined || ((onDiff(c) || onCode(c)) && c.file === filter.file)) &&
+      (filter.on === undefined || isOn(c, filter.on)) &&
       (status === "all" || (status === "resolved") === (c.resolved === true)),
   );
 }
@@ -341,13 +373,26 @@ export function pageNoteText(c: PageComment, root: string): string {
   ].join("\n");
 }
 
-/** Open page notes as one message to an agent, with how to answer them. */
-export function pageNotesMessage(notes: readonly PageComment[], root: string): string {
-  const n = notes.length;
+/** A note on the board as an agent reads it: where it is pinned, and the words. */
+export function boardNoteText(c: BoardComment): string {
+  const b = c.board;
   return [
-    `${n} note${n === 1 ? "" : "s"} on a page to address:`,
+    `${c.id}${c.intent ? ` (${c.intent})` : ""}: ${c.body}`,
+    b.on ? `  pinned on ${b.on}${b.what ? ` "${b.what}"` : ""} on the board; \`hive ctl board --ids ${b.on}\` shows it` : `  pinned on the board at ${b.x},${b.y}`,
+    ...(byAgent(c) ? [`  left by an agent: ${c.author}`] : []),
+    ...(c.replies ?? []).map((r) => `  ↳ ${r.author}: ${r.body}`),
+  ].join("\n");
+}
+
+/** Open notes on pages and the board as one message to an agent, with how to answer them. */
+export function pageNotesMessage(notes: ReadonlyArray<PageComment | BoardComment>, root: string): string {
+  const n = notes.length;
+  const pages = notes.filter((c) => onPage(c)).length;
+  const place = pages === n ? "on a page" : pages === 0 ? "on the board" : "on pages and the board";
+  return [
+    `${n} note${n === 1 ? "" : "s"} ${place} to address:`,
     "",
-    ...notes.flatMap((c) => [pageNoteText(c, root), ""]),
+    ...notes.flatMap((c) => [onPage(c) ? pageNoteText(c, root) : boardNoteText(c), ""]),
     "Mark each with `hive ctl notes seen <id>` when you start on it, then `hive ctl notes done <id> --summary \"…\"` or `hive ctl notes dismiss <id> --reason \"…\"`; answer a question with `hive ctl notes reply <id> \"…\"`.",
   ].join("\n");
 }

@@ -1,0 +1,67 @@
+---
+title: "Split the canvas into pages"
+description: "Give each part of a big system a page of its own on the one canvas, go inside it to work there, nest pages as deep as you like and come back by the path at the top."
+---
+
+A page is a frame on the canvas, marked as a page. You go inside it: the camera fits it, everything outside it dims, and the path at the top left shows where you are. Nothing is hidden, so a page and what is around it stay on one canvas.
+
+<AgentPrompt description="Paste this into your coding agent to have it draw a big system as pages on your Hivemind board." page="pages">{`
+Draw how this project fits together on the Hivemind board, one page per main part.
+
+1. Check you are in a Hivemind tile: \`hive ctl whoami --json\` answers.
+2. Read the project and pick its main parts, at most 6.
+3. Draw the overview outside any page: one box per part, and links for what calls what. Pipe JSON to \`hive ctl draw --page top --json\`, as \`{"title": "Overview", "boxes": [{"id": "api", "text": "API"}], "links": [["web", "api", "calls"]]}\`.
+4. For each part, make a page: \`hive ctl page new "API" --json\` prints its \`id\`. A part inside another goes in with \`--in <page>\`.
+5. Draw that part inside its page: \`hive ctl draw --page <page> --json\`, with the same JSON shape.
+6. Check each page you drew in: \`hive ctl board --check --page <page> --json\`. It exits 10 and lists problems, each with a \`fix\`, when something is wrong. Fix them, or take back your last change with \`hive ctl board undo --json\`.
+7. Check the whole canvas the same way, without \`--page\`.
+
+At the end, tell me each page's title and id. \`hive ctl page list --json\` lists them.
+`}</AgentPrompt>
+
+<Steps>
+<Step title="Make a page">
+Ask an agent, or run:
+
+```bash
+hive ctl page new "Payments" --json                  # {"id": "frame-…"}
+hive ctl page new "Checkout" --in <payments> --json  # a page inside Payments
+```
+
+`--at x,y` puts its corner there; left out, it goes in a free spot. Any frame becomes a page from its **⋯** menu: **Make a page**. A page has a page mark before its title.
+</Step>
+<Step title="Go inside it">
+Double-click its title, select it and press Enter, or click it under **Pages** in Layers. The camera flies to it, what is outside it dims, and the path reads `Workspace › Payments › Checkout`. A plain frame works the same way: double-click its title bar beside the title.
+
+An agent takes you there with `hive ctl page open <page>`; it takes a frame's id too. That needs the app: `hive host` has no window.
+</Step>
+<Step title="Put things in it">
+Draw, open terminals and start agents inside it, and they belong to it. An agent draws in it with `--page`:
+
+```bash
+hive ctl draw --page <payments> --file flow.json --json
+hive ctl board move <ids> --page <payments> --json   # move what is drawn into a page
+hive ctl board move <ids> --page top --json          # or out of the page it is in
+```
+
+While you are inside a page, select-all, a drag across the canvas and a new widget's free spot take only what is inside it.
+</Step>
+<Step title="Come back out">
+Click a name in the path to go to it, press Backspace, Esc or ⌘↑ / Ctrl+↑ to go out one level, or click the dimmed canvas outside it. Pan and zoom freely meanwhile. `hive ctl page open top` goes back to the whole canvas.
+</Step>
+<Step title="See every page at once">
+Press ⇧⌘M / Ctrl+Shift+M, from a terminal too, or click the grid button by the zoom controls. **Overview** covers the window with a card for each page and each frame at the top: a small picture of what it holds, how many agents, tiles and drawings, and its agents that need you, are working or have finished. A page's inner pages are grouped under it. What is in no frame is one **Canvas** card.
+
+Type to find a page by its title or any word inside it. The arrows pick a card, Enter or a click goes inside it. Esc or the same key closes it.
+</Step>
+</Steps>
+
+## What to check
+
+- `hive ctl page list --json` lists every page with its `parent` (the page it is in, null for none) and how many drawn things and tiles are inside it, at any depth.
+- `--page <page>` on `board`, `board --check`, `board --png` and `erase` takes what is inside that page or frame, at any depth. Without it, they take the whole canvas.
+- Pages and frames nest to any depth; each grows round what it holds.
+
+To draw on a page, see [Draw on the canvas](/drawing). Every flag is in the [CLI reference](/cli), and `page.list`, `page.new` and `page.open` are in the [API methods](/api-methods).
+
+<LastValidated />

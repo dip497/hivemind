@@ -114,3 +114,27 @@ test("hive ctl notes add refuses what needs no app to refuse: no tile to say whe
     expect((r.json as { error: { fix: string } }).error.fix).toContain(fix);
   }
 });
+
+test("an agent lists comments on code with where their lines are now, reads one with its lines, and answers in its thread", async () => {
+  const dir = workspace();
+  fs.mkdirSync(path.join(dir, "src"));
+  fs.writeFileSync(path.join(dir, "src", "a.ts"), "// new header\nconst a = 1;\nconst b = a + 1;\nexport { b };\n");
+  const root = path.join(dir, ".hivemind");
+  await addComment(root, { id: "c-code", file: "src/a.ts", startLine: 1, endLine: 2, text: "const a = 1;\nconst b = a + 1;", before: "", after: "export { b };", body: "why two consts?", author: "you", intent: "question" });
+  await addComment(root, { id: "c-gone", file: "src/a.ts", startLine: 9, endLine: 9, text: "removed();", before: "x();", after: "y();", body: "drop this", author: "you" });
+  await addComment(root, { file: "a.ts", startLine: 1, endLine: 1, side: "additions", body: "rename", author: "you" });
+
+  const listed = hive(["review", "list", "--on", "code", "--json"], { cwd: dir });
+  expect(listed.code).toBe(0);
+  expect((listed.json as { comments: { id: string; now: unknown }[] }).comments).toMatchObject([
+    { id: "c-code", now: { startLine: 2, endLine: 3 } },
+    { id: "c-gone", now: null },
+  ]);
+
+  const shown = hive(["review", "show", "c-code"], { cwd: dir });
+  expect(shown.stdout).toContain("now at src/a.ts:2-3");
+  expect(shown.stdout).toContain("c-code (question): @src/a.ts#L1-2\nwhy two consts?\n```\nconst a = 1;");
+  expect(hive(["review", "show", "c-gone"], { cwd: dir }).stdout).toContain("outdated");
+
+  expect(hive(["review", "reply", "c-code", "one is derived", "--json"], { cwd: dir }).json).toMatchObject({ replies: [{ body: "one is derived" }] });
+});

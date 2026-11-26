@@ -648,6 +648,9 @@ button { cursor: pointer; }
 .notes-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
 .notes-list li { display: flex; flex-direction: column; gap: 4px; border-bottom: 1px solid var(--line, rgba(127,127,127,.25)); padding-bottom: 8px; }
 .notes-list p { margin: 0; }
+.drawing-view { overflow: auto; max-height: 56vh; }
+.drawing-picture { display: block; width: 100%; height: auto; border-radius: 8px; }
+.drawing-picture.full { width: auto; max-width: none; }
 .note-what { font-weight: 600; }
 .note-actions { display: flex; gap: 6px; flex-wrap: wrap; }
 .note-actions input { flex: 1; min-width: 120px; }

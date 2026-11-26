@@ -44,6 +44,13 @@ export function isSnoozed(t: Pick<ModelTile, "snoozedUntil" | "needsYou">, now: 
   return t.snoozedUntil !== undefined && t.snoozedUntil > now && !t.needsYou;
 }
 
+/** The tile that most recently started waiting on the person, or null when none waits. */
+export function newestWaiting<T extends Pick<ModelTile, "needsYou" | "activity">>(tiles: readonly T[]): T | null {
+  let best: T | null = null;
+  for (const t of tiles) if (t.needsYou && (!best || (t.activity ?? -1) > (best.activity ?? -1))) best = t;
+  return best;
+}
+
 /** A heading and the tiles under it, for the groupings that are not the workspace's own tree. */
 export interface Bucket { key: string; label: string; tiles: ModelTile[] }
 
@@ -124,10 +131,13 @@ export function layersView(input: {
   query?: string;
   /** Leave asleep tiles out of every list but Pinned. */
   hideAsleep?: boolean;
+  /** What kind of row is listed; all when not given. */
+  show?: LayersShow;
 }): LayersView {
   const { prefs, now } = input;
+  const show = input.show ?? "all";
   const q = input.query?.trim().toLowerCase() ?? "";
-  const found = (t: ModelTile) => !q || `${t.name} ${input.agentLabel(t)}`.toLowerCase().includes(q);
+  const found = (t: ModelTile) => showsTile(show, t) && (!q || `${t.name} ${input.agentLabel(t)}`.toLowerCase().includes(q));
   const byId = new Map(input.tiles.map((t) => [t.id, t]));
   const snoozedNow = (t: ModelTile) => isSnoozed(t, now);
   const pinned = input.pinned.map((id) => byId.get(id)).filter((t): t is ModelTile => !!t && found(t) && !snoozedNow(t));
@@ -140,7 +150,7 @@ export function layersView(input: {
   };
   const rest = sorted(input.tiles.filter((t) => !pinnedIds.has(t.id) && found(t) && !snoozedNow(t) && passes(t, prefs, now) && shown(t)), prefs.sortBy);
   const snoozed = input.tiles.filter((t) => found(t) && snoozedNow(t) && shown(t)).sort((a, b) => a.snoozedUntil! - b.snoozedUntil!);
-  const filtering = !!q || prefs.status !== "all" || prefs.activity !== "all" || prefs.machines.length > 0 || hiddenAsleep > 0;
+  const filtering = !!q || show !== "all" || prefs.status !== "all" || prefs.activity !== "all" || prefs.machines.length > 0 || hiddenAsleep > 0;
   const tree = prefs.groupBy === "machine" || prefs.groupBy === "group";
   const byFrame = new Map<string | null, ModelTile[]>();
   const buckets: Bucket[] = [];
@@ -176,6 +186,107 @@ export function layersView(input: {
   for (const [key, list] of byFrame) byFrame.set(key, nest(list, kids));
   for (const b of buckets) b.tiles = nest(b.tiles, kids);
   return { pinned, tree, byFrame, buckets, filtering, kids, snoozed, hiddenAsleep };
+}
+
+/** What kind of row Layers lists: everything, or only agents, drawings or pages. Chosen for each
+ *  workspace, kept in its Layers layout. */
+export const LAYERS_SHOW = ["all", "agents", "drawings", "pages"] as const;
+export type LayersShow = (typeof LAYERS_SHOW)[number];
+
+function showsTile(show: LayersShow, t: ModelTile): boolean {
+  return show === "all" || (show === "agents" && t.agent !== undefined);
+}
+
+/** A drawing as Layers lists it: the board objects that share one drawing id, or a frame's shapes
+ *  that belong to no drawing. */
+export interface DrawingRow {
+  /** The drawing id; `shapes:` and the frame's id for a frame's loose shapes. */
+  key: string;
+  name: string;
+  /** Its frame, or null on the bare canvas. */
+  frameId: string | null;
+  /** The tile of the agent that drew it. */
+  by?: string;
+  /** One of its objects: what a click on the row goes to. */
+  objectId: string;
+  /** All it says, lower case: what a search looks in. */
+  text: string;
+  /** What its second column says: how many shapes, or what it is. Empty when its name says so. */
+  detail: string;
+  /** It holds a shape, which can be locked (an arrow cannot). */
+  lockable: boolean;
+  /** Every shape in it is locked. */
+  locked: boolean;
+}
+
+/** Drawing rows by frame (null: the bare canvas), each frame's in board order. */
+export type DrawingsByFrame = ReadonlyMap<string | null, readonly DrawingRow[]>;
+
+/**
+ * The drawings and pages a search and the All / Agents / Drawings / Pages choice let through. A
+ * page is listed for its own sake when it is in `pages`; it is still listed for what it holds.
+ * The tiles' own filters (status, last activity, machines) leave both out under All. Nothing
+ * searched, under All or Drawings: `drawings` is the map given, so it can be kept by identity.
+ */
+export function layersFound(input: {
+  drawings: DrawingsByFrame;
+  /** The frames that are pages. */
+  pages: readonly { id: string; title: string }[];
+  prefs: LayersPrefs;
+  show?: LayersShow;
+  query?: string;
+}): { drawings: DrawingsByFrame; pages: ReadonlySet<string> } {
+  const show = input.show ?? "all";
+  const q = input.query?.trim().toLowerCase() ?? "";
+  const { prefs } = input;
+  const tilesFiltered = prefs.status !== "all" || prefs.activity !== "all" || prefs.machines.length > 0;
+  const open = show === "drawings" || show === "pages" || !tilesFiltered;
+  const none: DrawingsByFrame = new Map();
+  let drawings = none;
+  if (open && (show === "all" || show === "drawings")) {
+    if (!q) drawings = input.drawings;
+    else {
+      const kept = new Map<string | null, DrawingRow[]>();
+      for (const [frame, rows] of input.drawings) {
+        const hit = rows.filter((r) => r.text.includes(q));
+        if (hit.length) kept.set(frame, hit);
+      }
+      drawings = kept;
+    }
+  }
+  const pages = new Set<string>();
+  if (open && (show === "all" || show === "pages")) {
+    for (const p of input.pages) if (!q || p.title.toLowerCase().includes(q)) pages.add(p.id);
+  }
+  return { drawings, pages };
+}
+
+/** A part of what a frame holds. `tiles` is its agents and tools together, in canvas order. */
+export type FramePart = "tiles" | "agents" | "tools" | "frames" | "pages" | "drawings";
+/** One part's rows: under a heading of their own that folds (`grouped`), or straight under the frame. */
+export interface FramePartList { part: FramePart; label: string; count: number; grouped: boolean }
+/** A part with more rows than this, in a frame that holds something else too, gets a heading. */
+export const FEW_ROWS = 3;
+const PART_LABELS: Record<FramePart, string> = { tiles: "Tiles", agents: "Agents", tools: "Tools", frames: "Frames", pages: "Pages", drawings: "Drawings" };
+
+/**
+ * How a frame's rows read as a folder tree, in this order: agents, tools, frames, pages, drawings,
+ * each part with rows once. Drawings fold under one heading once there are two; agents, tools and
+ * pages do when they have more than `FEW_ROWS` and the frame holds something else too. Frames are
+ * folders already and never get one. While neither agents nor tools have a heading, they are one
+ * `tiles` part, so their rows keep the canvas's order.
+ */
+export function frameParts(counts: Readonly<{ agents: number; tools: number; frames: number; pages: number; drawings: number }>): FramePartList[] {
+  const total = counts.agents + counts.tools + counts.frames + counts.pages + counts.drawings;
+  const heads = (part: FramePart, n: number): boolean =>
+    part === "drawings" ? n > 1 : part !== "frames" && n > FEW_ROWS && total > n;
+  const list = (part: FramePart, count: number): FramePartList => ({ part, label: PART_LABELS[part], count, grouped: heads(part, count) });
+  const tilesApart = heads("agents", counts.agents) || heads("tools", counts.tools);
+  const parts: FramePartList[] = tilesApart
+    ? [list("agents", counts.agents), list("tools", counts.tools)]
+    : [{ part: "tiles", label: PART_LABELS.tiles, count: counts.agents + counts.tools, grouped: false }];
+  parts.push(list("frames", counts.frames), list("pages", counts.pages), list("drawings", counts.drawings));
+  return parts.filter((p) => p.count > 0);
 }
 
 /** `list` without the tiles whose starter is in it too, which go into `kids` under it, in list

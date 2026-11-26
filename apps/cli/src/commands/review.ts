@@ -3,7 +3,7 @@
  * has no other way to reach. Reads `.hivemind/review.json` directly, so it
  * works whether or not the app is running.
  *
- *   hive review list [--file <p>] [--status open|resolved|all] [--on page|diff] [--json]
+ *   hive review list [--file <p>] [--status open|resolved|all] [--on page|board|diff|code] [--json]
  *   hive review show <id> [--json]
  *   hive review reply <id> <message> [--json]
  *   hive review resolve <id> [--summary <why>] [--attach <file>]... [--json]
@@ -15,11 +15,12 @@
  * `hive ctl notes add` alone needs the running app, which holds the page.
  */
 import { execFile } from "node:child_process";
+import fs from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 import { defineCommand } from "citty";
 import {
-  ATTACHMENT_KINDS, HiveError, MAX_ATTACHMENT_BYTES, attachToComment, checkAttachment, deleteComment, dismissComment, findRoot, listComments, markSeen, onPage,
+  ATTACHMENT_KINDS, HiveError, MAX_ATTACHMENT_BYTES, attachToComment, boardNoteText, checkAttachment, codeCommentText, deleteComment, dismissComment, findCodeAnchor, findRoot, listComments, markSeen, onBoard, onCode, onPage,
   pageNoteText, readComments, replyTo, reopenComment, resolveComment, reviewRoot, statusOf, type PageBox, type ReviewComment,
 } from "@hivemind/core";
 import type { Result } from "@hivemind/workspace-api/methods";
@@ -37,11 +38,34 @@ async function storeRoot(): Promise<string> {
   const cwd = process.cwd();
   const root = await findRoot(cwd);
   if (root) return root;
-  const repo = await run("git", ["rev-parse", "--show-toplevel"], { cwd })
-    .then((r) => r.stdout.trim())
-    .catch(() => cwd);
-  return reviewRoot(repo);
+  return reviewRoot(await repoTop());
 }
+
+const repoTop = (): Promise<string> => run("git", ["rev-parse", "--show-toplevel"], { cwd: process.cwd() })
+  .then((r) => r.stdout.trim())
+  .catch(() => process.cwd());
+
+/** A comment on code with where its lines are in the file now (`now`), null when they are gone. */
+async function withNow(list: ReviewComment[]): Promise<ReviewComment[]> {
+  if (!list.some(onCode)) return list;
+  const top = await repoTop();
+  const read = new Map<string, Promise<string[] | null>>();
+  const linesOf = (file: string) => {
+    if (!read.has(file)) read.set(file, fs.readFile(path.resolve(top, file), "utf8").then((t) => t.replace(/\r\n?/g, "\n").split("\n"), () => null));
+    return read.get(file)!;
+  };
+  return Promise.all(list.map(async (c) => {
+    if (!onCode(c)) return c;
+    const lines = await linesOf(c.file);
+    return { ...c, now: lines ? findCodeAnchor(lines, c) : null };
+  }));
+}
+
+const nowOf = (c: ReviewComment): string => {
+  if (!onCode(c) || !("now" in c)) return "";
+  const now = (c as { now: { startLine: number; endLine: number } | null }).now;
+  return now ? `now at ${c.file}:${now.startLine}${now.endLine !== now.startLine ? `-${now.endLine}` : ""}` : "outdated: its lines are no longer in the file";
+};
 
 const ATTACH_KINDS = ATTACHMENT_KINDS.map((k) => `.${k}`).join(", ");
 
@@ -82,15 +106,19 @@ function attachedFiles(rawArgs: readonly string[]): string[] {
 const idArg = { id: { type: "positional", required: true, description: "comment id (from `hive review list`)" } } as const;
 const jsonArg = { json: { type: "boolean" } } as const;
 
-const where = (c: ReviewComment): string => onPage(c)
-  ? `${c.page.url} ${c.page.elements[0]?.name ?? "area"}`.slice(0, 80)
-  : `${c.file}:${c.startLine}${c.endLine !== c.startLine ? `-${c.endLine}` : ""}`;
+const where = (c: ReviewComment): string => {
+  if (onBoard(c)) return `board ${c.board.on ?? `${c.board.x},${c.board.y}`}${c.board.what ? ` "${c.board.what}"` : ""}`.slice(0, 80);
+  if (onPage(c)) return `${c.page.url} ${c.page.elements[0]?.name ?? "area"}`.slice(0, 80);
+  return `${c.file}:${c.startLine}${c.endLine !== c.startLine ? `-${c.endLine}` : ""}`;
+};
 
 const oneLine = (c: ReviewComment): string =>
   `${c.id.padEnd(18)} ${statusOf(c).padEnd(9)} ${where(c).padEnd(32)} ${c.body.split("\n")[0]!.slice(0, 60)}`;
 
-const detail = (c: ReviewComment, root: string): string => onPage(c)
-  ? [`${c.id}  ${statusOf(c)}${c.summary ? ` — ${c.summary}` : ""}  by ${c.author} at ${c.at}`, "", pageNoteText(c, root)].join("\n")
+const detail = (c: ReviewComment, root: string): string => onCode(c)
+  ? [`${c.id}  ${statusOf(c)}${c.summary ? ` — ${c.summary}` : ""}  by ${c.author} at ${c.at}`, nowOf(c), "", codeCommentText(c)].filter((l, i) => i !== 1 || l).join("\n")
+  : onBoard(c) || onPage(c)
+  ? [`${c.id}  ${statusOf(c)}${c.summary ? ` — ${c.summary}` : ""}  by ${c.author} at ${c.at}`, "", onBoard(c) ? boardNoteText(c) : pageNoteText(c, root)].join("\n")
   : [
     `${c.id}  ${statusOf(c)}${c.summary ? ` — ${c.summary}` : ""}`,
     `${where(c)}  ${c.side}  by ${c.author} at ${c.at}`,
@@ -99,12 +127,12 @@ const detail = (c: ReviewComment, root: string): string => onPage(c)
     ...(c.replies ?? []).flatMap((r) => ["", `  ${r.author} at ${r.at}:`, `  ${r.body.replace(/\n/g, "\n  ")}`]),
   ].join("\n");
 
-const onArg = { on: { type: "string", description: "page | diff: only notes on a page, or only comments on a diff" } } as const;
-const onOf = (v: unknown): "page" | "diff" | undefined => (v === "page" || v === "diff" ? v : undefined);
+const onArg = { on: { type: "string", description: "page | board | diff | code: only notes on a page, pinned on the board, comments on a diff, or comments on a file's lines in the editor" } } as const;
+const onOf = (v: unknown): "page" | "board" | "diff" | "code" | undefined => (v === "page" || v === "board" || v === "diff" || v === "code" ? v : undefined);
 
 /** `on`: only comments on a page, or only on a diff, whatever the caller asks. */
-const listOf = (on?: "page" | "diff") => defineCommand({
-  meta: { name: "list", description: on === "page" ? "List the notes left on pages (open by default)" : "List review comments (open by default)" },
+const listOf = (on?: "notes") => defineCommand({
+  meta: { name: "list", description: on ? "List the notes left on pages and pinned on the board (open by default)" : "List review comments (open by default)" },
   args: {
     file: { type: "string", description: "only this path" },
     status: { type: "string", description: "open | resolved | all (default open; open includes seen, resolved includes dismissed)" },
@@ -115,7 +143,7 @@ const listOf = (on?: "page" | "diff") => defineCommand({
     const ctx = { json: !!args.json };
     try {
       const status = args.status === "resolved" || args.status === "all" ? args.status : "open";
-      const list = await listComments(await storeRoot(), { file: args.file || undefined, status, on: on ?? onOf(args.on) });
+      const list = await withNow(await listComments(await storeRoot(), { file: args.file || undefined, status, on: on ?? onOf(args.on) }));
       return ok(ctx, { comments: list }, () =>
         list.length === 0 ? "no comments" : list.map(oneLine).join("\n"));
     } catch (e) { return fail(ctx, e, "list_failed"); }
@@ -129,8 +157,9 @@ const showCmd = defineCommand({
     const ctx = { json: !!args.json };
     try {
       const root = await storeRoot();
-      const c = (await readComments(root)).find((x) => x.id === args.id);
-      if (!c) return err(ctx, "not_found", `no comment ${args.id}`);
+      const found = (await readComments(root)).find((x) => x.id === args.id);
+      if (!found) return err(ctx, "not_found", `no comment ${args.id}`);
+      const [c] = await withNow([found]) as [ReviewComment];
       return ok(ctx, c, () => detail(c, root));
     } catch (e) { return fail(ctx, e, "show_failed"); }
   },
@@ -291,7 +320,10 @@ const watchOf = (on?: "page" | "diff") => defineCommand({
       const deadline = Date.now() + (Number.isFinite(seconds) && seconds > 0 ? seconds : WATCH_DEFAULT_S) * 1000;
       for (;;) {
         const fresh = (await listComments(root, filter)).filter((c) => !seen.has(c.id));
-        if (fresh.length > 0) return ok(ctx, { comments: fresh }, () => fresh.map((c) => detail(c, root)).join("\n\n"));
+        if (fresh.length > 0) {
+          const now = await withNow(fresh);
+          return ok(ctx, { comments: now }, () => now.map((c) => detail(c, root)).join("\n\n"));
+        }
         if (Date.now() >= deadline) {
           process.exitCode = 4;
           return ok(ctx, { comments: [] }, () => "no new comments");
@@ -303,7 +335,7 @@ const watchOf = (on?: "page" | "diff") => defineCommand({
 });
 
 export const reviewCmd = defineCommand({
-  meta: { name: "review", description: "Review comments left on a diff, and notes left on a page" },
+  meta: { name: "review", description: "Review comments left on a diff or on code in the editor, and notes left on a page" },
   subCommands: {
     list: listOf(), show: showCmd, reply: replyCmd, seen: seenCmd,
     resolve: resolveCmd, dismiss: dismissCmd, reopen: reopenCmd, watch: watchOf(),
@@ -313,9 +345,9 @@ export const reviewCmd = defineCommand({
 /** `hive ctl notes`: the notes left on a page in a Browser tile, which are review comments on a
  *  page, answered the same way. */
 export const notesCmd = defineCommand({
-  meta: { name: "notes", description: "Notes on a page in a Browser tile: leave one, list, read and answer them" },
+  meta: { name: "notes", description: "Notes on a page in a Browser tile or pinned on the board: leave one on a page, list, read and answer them" },
   subCommands: {
-    add: addCmd, list: listOf("page"), show: showCmd, seen: seenCmd, done: resolveCmd, dismiss: dismissCmd,
+    add: addCmd, list: listOf("notes"), show: showCmd, seen: seenCmd, done: resolveCmd, dismiss: dismissCmd,
     reply: replyCmd, reopen: reopenCmd, watch: watchOf("page"),
   },
 });

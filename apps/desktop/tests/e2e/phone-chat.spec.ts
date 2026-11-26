@@ -141,6 +141,22 @@ test("a question on a Browser tile reaches the phone over the network, and the p
   await page.locator("[data-more]").click();
   await page.locator("[data-open-notes]").click();
   await expect(page.locator('[data-page-notes] [data-note="c-phone"]')).toContainText("bigger on phones", { timeout: 20_000 });
+
+  // A note pinned on the board is among them, and what is drawn comes as a picture of the computer's.
+  const repo = path.join(root, "api");
+  await desktop.evaluate((r) => window.hive.boardNote(r, { body: "pinned here", at: { x: 4, y: 5 } }), repo);
+  await desktop.evaluate((r) => window.hive.workspaceEditObjectsSync(r, { objects: { "shape-p": { id: "shape-p", kind: "shape", form: "rect", x: 0, y: 0, w: 120, h: 60, text: "On the phone", drawing: "drawing-p" } } }), repo);
+  await page.locator("[data-close-notes]").click();
+  await page.locator("[data-more]").click();
+  await page.locator("[data-open-notes]").click();
+  await expect(page.locator("[data-page-notes] [data-note]").last()).toContainText("pinned here", { timeout: 20_000 });
+  await page.locator("[data-close-notes]").click();
+  await page.locator("[data-more]").click();
+  await page.locator("[data-open-drawings]").click();
+  const drawing = page.locator('[data-drawing="drawing-p"]');
+  await expect(drawing).toHaveText("On the phone", { timeout: 20_000 });
+  await drawing.click();
+  await expect.poll(() => page.locator("[data-drawing-picture]").evaluate((img: HTMLImageElement) => img.naturalWidth), { timeout: 20_000 }).toBeGreaterThan(100);
 });
 
 test("a message sent from the phone while Claude Code works shows in its chat at once, as the person's, and stays there once Claude Code takes it into the running turn", async ({}, testInfo) => {

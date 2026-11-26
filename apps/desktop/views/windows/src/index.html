@@ -6,7 +6,15 @@
   <link rel="stylesheet" href="./windows.css" />
 </head>
 <body>
+  <nav class="w-groups" aria-label="Layouts" hidden></nav>
   <main class="w-room" aria-label="Panes"></main>
+  <dialog class="w-switch" closedby="any" aria-label="Go to a tile">
+    <div class="w-switch-head">
+      <input type="text" role="combobox" aria-expanded="true" aria-controls="w-switch-list" aria-autocomplete="list" aria-label="Tile name, agent or folder" placeholder="Go to a tile: name, agent or folder" autofocus spellcheck="false" />
+      <form method="dialog"><button class="w-switch-close" aria-label="Close">Esc</button></form>
+    </div>
+    <ul id="w-switch-list" role="listbox" aria-label="Tiles"></ul>
+  </dialog>
   <script type="module" src="./windows.js"></script>
 </body>
 </html>

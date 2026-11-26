@@ -17,7 +17,7 @@ import { firstOfEachId, isObject, type Fields } from "./input.js";
 import { readOrder, writeOrder } from "./order.js";
 import { rebaseObject, sameJson } from "./rebase.js";
 import { OBJECTS, stampSchema } from "./schema.js";
-import { BOARD_OBJECT_KINDS, SIDES, WIDGET_FIELD_BYTES, type BoardEdit, type BoardObject, type ChecklistItem } from "./shapes.js";
+import { BOARD_OBJECT_KINDS, MAX_ALT, MAX_SHAPE_POINTS, SHAPE_FORMS, isBoardImage, SHAPE_TEXT_SIZES, SIDES, WIDGET_FIELD_BYTES, isStroke, type BoardEdit, type BoardObject, type ChecklistItem, type ShapeForm, dropBadStyle } from "./shapes.js";
 
 const TEXT = "text";
 const LABEL = "label";
@@ -166,7 +166,28 @@ function toBoardObject(raw: unknown): BoardObject | null {
   if (x.color !== undefined && typeof x.color !== "string") return null;
   const { text, label, items, [ITEM_ORDER]: _order, ...fields } = x;
   if (x.kind === "arrow") {
+    dropBadStyle(fields);
     return isArrowEnd(x.from) && isArrowEnd(x.to) && typeof label === "string" ? ({ ...fields, label } as BoardObject) : null;
+  }
+  if (x.kind === "shape") {
+    if (!(SHAPE_FORMS as readonly unknown[]).includes(x.form) || ![x.x, x.y, x.w, x.h].every(isNumber)) return null;
+    if (text !== undefined && typeof text !== "string") return null;
+    if (isStroke(x.form as ShapeForm) ? !isPoints(x.points) : x.points !== undefined) return null;
+    // What does not fit its field is dropped, not the shape.
+    if (fields.size !== undefined && !(SHAPE_TEXT_SIZES as readonly unknown[]).includes(fields.size)) delete fields.size;
+    dropBadStyle(fields);
+    if (fields.head !== undefined && typeof fields.head !== "boolean") delete fields.head;
+    if (fields.filled !== undefined && typeof fields.filled !== "boolean") delete fields.filled;
+    if (fields.by !== undefined && typeof fields.by !== "string") delete fields.by;
+    if (fields.drawing !== undefined && typeof fields.drawing !== "string") delete fields.drawing;
+    // A picture is what it shows: one without a whole reference is not kept.
+    if (x.form === "image" ? !isBoardImage(fields.image) : fields.image !== undefined) {
+      if (x.form === "image") return null;
+      delete fields.image;
+    }
+    if (fields.alt !== undefined && (typeof fields.alt !== "string" || x.form !== "image")) delete fields.alt;
+    else if (typeof fields.alt === "string" && fields.alt.length > MAX_ALT) fields.alt = fields.alt.slice(0, MAX_ALT);
+    return { ...fields, ...(text !== undefined ? { text } : {}) } as unknown as BoardObject;
   }
   if (x.kind === "widget") {
     if (typeof x.widget !== "string" || x.widget.length === 0) return null;
@@ -211,6 +232,11 @@ function fits(value: unknown): boolean {
 
 function isArrowEnd(x: unknown): boolean {
   return isObject(x) && typeof x.id === "string" && x.id.length > 0 && (SIDES as readonly unknown[]).includes(x.side);
+}
+
+function isPoints(x: unknown): boolean {
+  return Array.isArray(x) && x.length >= 2 && x.length <= MAX_SHAPE_POINTS
+    && x.every((p) => Array.isArray(p) && p.length === 2 && isNumber(p[0]) && isNumber(p[1]));
 }
 
 function isNumber(x: unknown): x is number {

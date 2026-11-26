@@ -36,9 +36,10 @@ Every `hive` command exits with one of these. This is the one list; other pages 
 | 4 | `TIMEOUT` | a wait ran out (`read`, `open-review`, `workflow`) |
 | 5 | `NOT_FOUND`, `NO_BROWSER_TILE`, `NO_ELEMENT`, `ATTACHMENT_MISSING` | no such tile, frame, issue, workspace, Browser tile, element on the page or file |
 | 6 | `FORBIDDEN` | a bad or missing token, or a call the caller may not make |
-| 7 | `UNSUPPORTED`, `RATE_LIMITED`, `DEPTH_EXCEEDED`, `OCCLUDED`, `PART_OF_A_PACKAGE`, `SEVERAL_BROWSER_TILES`, `SEVERAL_ELEMENTS`, `ATTACHMENT_TYPE`, `ATTACHMENT_TOO_BIG`, `ATTACHMENT_NOT_A_NOTE`, `REVIEW_PICTURES` | refused — the runtime cannot do this, or not now; `read` of an idle agent with nothing new; `sleep` or `wake` that did nothing for a reason other than it being so already; `tile look` of a tile something is drawn over; a plugin that is part of a package changes only with it |
+| 7 | `UNSUPPORTED`, `RATE_LIMITED`, `DEPTH_EXCEEDED`, `OCCLUDED`, `PART_OF_A_PACKAGE`, `SEVERAL_BROWSER_TILES`, `SEVERAL_ELEMENTS`, `ATTACHMENT_TYPE`, `ATTACHMENT_TOO_BIG`, `ATTACHMENT_NOT_A_NOTE`, `REVIEW_PICTURES`, `NOTHING_TO_UNDO`, `NOTHING_TO_REDO` | refused — the runtime cannot do this, or not now; `read` of an idle agent with nothing new; `sleep` or `wake` that did nothing for a reason other than it being so already; `tile look` of a tile something is drawn over; a plugin that is part of a package changes only with it; `board undo` or `board redo` with nothing of yours left to take or put back |
 | 8 | | `read` only: the agent stopped to wait on an answer (a question, a permission) |
 | 9 | `ASLEEP` | the agent is asleep: `send`, `keys`, `read` and `connect` to it are refused (a `report` to it waits in its inbox); the fix is `hive ctl wake <tile>` |
+| 10 | | `board --check` only: it found something wrong; each problem is printed with its fix |
 | 1 | `FAILED` | other |
 
 ### `hive ctl read`
@@ -134,6 +135,17 @@ hive ctl inbox [--wait 90s] [--tile id] # what other agents sent you, each once 
 hive ctl stream <tileId> [--lines 40] [--timeout 30s]
                        [--snapshot] [--json]        # what it prints, live; --lines: the last N first
 hive ctl focus <tileId>
+hive ctl open <url|path[:line[:col]]> [--tile t] [--json]
+                                        # where a click would (links.web, links.files): {to, tile?, path?, url?}
+                                        # a path is read from here; exit 5 not there, 7 the app would ask first
+hive ctl code outline <file> [--json]   # classes, functions, members: {accuracy, by, symbols: [{name, kind, line, col, endLine, children?}]}
+hive ctl code definition <file:line[:col]> [--json]
+hive ctl code usages <file:line[:col]> [--json]
+                                        # {accuracy, by, partial?, places: [{at, file, line, col, text}], also?}; line and col from 1
+                                        # partial: what a compiler answer covered when less than the workspace; also: text places beside it
+                                        # accuracy compiler: a language server's answer; syntax: the file's outline,
+                                        # or for usages every place the word is written
+hive ctl code hover <file:line[:col]> [--json]   # the symbol's type and doc comment as markdown: {accuracy, by, text}
 hive ctl tile look <tileId> [--out f.png] [--json]  # brought into view, waited for until it drew:
                                         # {tile, state, drew, console, png} (png: the picture's path)
 hive ctl close <tileId>                 # ends what runs in it; exit 5 if it is not open
@@ -147,6 +159,34 @@ hive ctl take-back-file <id>            # the phone no longer shows or fetches i
 hive ctl connect <src> <dst>            # src's finished replies go to dst's inbox; dst is told by one line typed into it, which starts a turn
 hive ctl disconnect <src> [<dst>]
 hive ctl open-tool <owner/name/tool> [--frame f] [--url https://…]
+hive ctl draw [--file f.json] [--text f|-] [--direction down|right] [--near id] [--at x,y] [--frame f|none] [--page p|top]
+                                        # JSON on stdin or in --file, or flowchart text; answers with `problems`
+hive ctl draw --image <file> [--alt "…"] [--width n] [--at x,y] [--near id] [--frame f|none] [--page p|top]
+                                        # a PNG, JPEG, WebP or GIF (at most 10 MB) as a picture on the board; answers its id, hash and size
+hive ctl draw --update <drawing> [--file f.json | --text f|-]
+                                        # the drawing changed in place: boxes found by key or id keep their place and the person's changes,
+                                        # new ones go beside what they link to, the rest is erased; answers added, changed, erased, locked
+                                        # --page: inside that page or frame; top: in no page; left out: the frame of what it is drawn beside
+hive ctl board [--ids a,b] [--drawing d] [--limit n] [--svg f] [--png f] [--theme light] [--show id] [--page p|top]
+                                        # --page: what is inside that page or frame, at any depth; left out: the whole canvas
+hive ctl board --drawing <d> --as text  # the drawing as flowchart text, keyed, for draw --update
+hive ctl board --selected               # what the person has selected now, in each window: {windows: [{window, person, name, selected}]}
+hive ctl board changes [--since seq] [--follow]
+                                        # {seq, changes: [{seq, at, by: person|agent|view|app, who?, objects}], erased, lost?}; --follow prints each after, until Ctrl+C
+hive ctl board --check [--page p|top]   # what is wrong with what is drawn (inside that page or frame), each with a fix; exit 0 when nothing is, 10 when something is
+hive ctl board move <ids|drawing> --to x,y | --page p|top   # --page alone: into that page or frame, near its corner; top: out of the page they are in
+hive ctl board style <ids|drawing> [--color c] [--dash solid|dashed|dotted] [--weight thin|medium|thick] [--rough yes|no]
+hive ctl board connect <from> <to> [--label "…"] [--route straight|elbow|curve] [--dash dashed]
+hive ctl board lock|unlock <ids|drawing>       # a locked shape cannot be moved, resized, restyled or erased
+hive ctl board front|back <ids|drawing>        # in front of everything else on the board, or behind it
+hive ctl board align <ids|drawing> --how left|centre|right|top|middle|bottom|spread-across|spread-down
+hive ctl board duplicate <ids|drawing> [--by dx,dy]   # copies, 24,24 from the originals by default; a negative one as --by=-24,0
+hive ctl board undo|redo                # take back, or put back, your own last change; exit 7 when there is none
+hive ctl erase [ids] [--drawing d] [--mine] [--by tile] [--page p|top]   # --page: only what is inside that page or frame
+hive ctl page list                      # every page: id, title, the page it is in, how much is drawn and open inside it, at any depth
+hive ctl page new "Title" [--in p|top] [--at x,y]   # a page: a frame marked as one, inside --in when given; prints its id
+hive ctl page open <p|top>              # the app's window flies to that page or frame and goes inside it (top: back out); exit 7 on `hive host`, which has no window
+hive ctl pin "what it says" [--on id] [--at x,y]   # a note on the board; hive ctl notes answers it
                                         # open a tile of a tool that is switched on
 hive ctl view emit <name> ['{"json":1}' | -] [--view id]
                                         # a named event to the view shown
@@ -202,7 +242,20 @@ hive ctl plugin call windows focus-left     # also focus-right, focus-up, focus-
 hive ctl plugin call windows maximize       # show the focused pane alone, or bring the others back
 hive ctl plugin call windows close-pane
 hive ctl plugin call windows unsplit
+hive ctl plugin call windows panes          # the layout shown, its panes and tabs, each tile's attention
+hive ctl plugin call windows needs-you      # show the tile that most recently started waiting on you
+hive ctl plugin call windows next-tab       # also prev-tab, last-tab
+hive ctl plugin call windows move-tab-next-pane   # also move-tab-prev-pane
+hive ctl plugin call windows swap-pane      # trade the focused pane's tabs with the next pane's
+hive ctl plugin call windows equalize       # every pane the same size
+hive ctl plugin call windows open-layout '{"frame":"<frame id>"}'   # or {"page":"<id>"}; {} for every tile
+hive ctl plugin call windows group-by '{"by":"page"}'               # or "frame"
+hive ctl plugin call windows broadcast '{"on":true}'                # typing goes to every terminal shown
 ```
+
+Every command answers with the same JSON as `panes`. Each tile's attention is one of `needs-you`,
+`failed`, `done`, `new-output`, `working` or `quiet`. To show one tile in its pane, use
+`hive ctl focus <tile>`.
 
 ## Plugins
 
@@ -334,8 +387,8 @@ hive network enrol-link [--data <dir>] [--uses n] [--expires 7d]
 To read and answer comments left on an agent's changes. Guide: [Review an agent's changes](/review).
 
 ```text
-hive review list [--file src/x.ts] [--status open|resolved|all] [--on page|diff]
-hive review show <id>                   # one comment with its replies; a page note's elements and picture
+hive review list [--file src/x.ts] [--status open|resolved|all] [--on page|board|diff|code]   # --json: a comment on code has text, before, after and now, its lines today (null: outdated)
+hive review show <id>                   # one comment with its replies; a page note's elements and picture; a code comment's lines and where they are now
 hive review reply <id> "fixed in 3f2c1a"
 hive review seen <id>                   # an open comment you are on; refused once it is closed
 hive review resolve <id> [--summary "how it was addressed"] [--attach file]...
@@ -343,7 +396,7 @@ hive review dismiss <id> --reason "why it is not done"
 hive review reopen <id>                 # only a resolved or dismissed one
 hive ctl notes add --selector "<css>" --body "what you found" [--intent fix|change|question] [--tile <browser tile>] [--attach file]... [--json]
 hive ctl notes add --area x,y,width,height --body "what you found"   # page pixels, for what no selector names
-hive ctl notes list [--status open|resolved|all] [--json]   # the notes on pages
+hive ctl notes list [--status open|resolved|all] [--json]   # the notes on pages and on the board
 hive ctl notes show|seen|reopen <id>
 hive ctl notes done <id> [--summary "what was done"] [--attach file]...   # .webm .mp4 .png .jpg .gif, up to 200 MB each
 hive ctl notes dismiss <id> --reason "why not"

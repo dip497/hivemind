@@ -21,7 +21,8 @@ import {
   type ActivityLevel, type ViewFontFace, type PromptOutcome, type ViewAgent, type ViewAgentStatus, type ViewSession, type CommandName, type HostMessage, type PluginMessage, type RequestErrorCode, type ShareOutcome, type StatusTone, type SurfaceRect, type LineRect, type CommandKeys,
   type ViewCommands, type ViewDevice, type ViewEvent, type ViewEventKind, type ViewFeature, type ViewHistoryDay, type ViewParticipant, type ViewPermission, type ViewPresence, type ViewRect, type ViewStatus, type ViewTheme, type ViewWidget, type ViewWidgetBand,
   ISSUE_CALLS, type IssueCall, type ViewIssue, type ViewIssueAssignee, type ViewIssueState, type ViewIssueSummary,
-  type CodeCall, type ViewFindFilesPage, type ViewGrepMode, type ViewGrepPage,
+  type CodeCall, type ViewFindFilesPage, type ViewGrepMode, type ViewGrepPage, type ViewOpened,
+  BOARD_REQUEST_PERMISSION, type BoardAnswers, type BoardRequest, type ViewBoardChange, type ViewBoardChangeAsk, type ViewBoardDrawAsk, type ViewBoardEraseAsk, type ViewBoardPictureAsk, type ViewBoardReadAsk,
 } from "./protocol.js";
 
 /** A request the host refused or could not answer (`UNSUPPORTED` when it lacks the feature). */
@@ -33,7 +34,7 @@ export class HostError extends Error {
 }
 
 /** 1.3: what arrives with a status — absent from a host that predates it. 1.4: `agent`, on agent tiles. */
-export interface StatusInfo { since?: number; exact?: boolean; agent?: ViewAgentStatus }
+export interface StatusInfo { since?: number; exact?: boolean; agent?: ViewAgentStatus; /** 1.21: when this person last looked at it; null: not yet. */ seen?: number | null }
 
 type Hello = Extract<HostMessage, { type: "hello" }>;
 type EventMap = {
@@ -49,6 +50,8 @@ type EventMap = {
    *  already released — forget the rect. The client drops it from what it
    *  last sent, so a plugin that ignores the event still stays consistent. */
   undock: { tileId: string };
+  /** 1.21 (feature `broadcast`): the terminals typing goes to together now; `[]` once it stopped. */
+  broadcast: Extract<HostMessage, { type: "broadcast" }>;
 };
 
 export interface ViewClient {
@@ -107,6 +110,14 @@ export interface ViewClient {
   /** 1.19 (feature `code`), `workspace:code`: find a frame's files and lines, and open one in its
    *  editor. An app before 1.19 has no such methods: check `supports("code")` first. */
   readonly code: ViewCode;
+  /** 1.20 (feature `board`): what is drawn on the workspace's board. Reading and following need
+   *  `workspace:board`, drawing, changing, erasing and undo `workspace:draw`. An app before 1.20
+   *  has no such methods: check `supports("board")` first. */
+  readonly board: ViewBoard;
+  /** 1.21 (feature `open`), `workspace:open`, at most 5 in 10 s: open a web address, or a file of a frame's folder (`src/a.ts:12:4`), where
+   *  the person's click would: a Browser tile or their browser, the Code tile at that line, the Image
+   *  tile. Rejects `UNSUPPORTED` where the app would ask them, and on an app before 1.21. */
+  open(thing: string, opts?: { frameId?: string | null }): Promise<ViewOpened>;
   /** 1.3: per-tile status intervals for a local day (YYYY-MM-DD). */
   history(day: string): Promise<ViewHistoryDay>;
   /** 1.3: ask the user to copy or save this PNG; resolves with what they chose. */
@@ -188,6 +199,25 @@ export interface ViewCode {
   open(frameId: string | null, file: string, at?: { line?: number; col?: number }): Promise<{ tileId: string | null }>;
 }
 
+/** 1.20: the workspace's board, as `hive ctl draw`, `board` and `page` see it. A page is a frame
+ *  marked as a stop on a window's path; `page` keeps to what is inside a page or frame, at any
+ *  depth, and null or left out is the whole canvas. */
+export interface ViewBoard {
+  /** An overview (frames, tiles, drawings, objects) of the canvas or inside a page, or `ids` / a `drawing` in full. */
+  read(ask?: ViewBoardReadAsk): Promise<BoardAnswers["boardRead"]>;
+  /** An SVG of a page, or of one drawing. */
+  picture(ask?: ViewBoardPictureAsk): Promise<BoardAnswers["boardPicture"]>;
+  /** Draw boxes and links laid out for you, or shapes you place, as one drawing. */
+  draw(ask: ViewBoardDrawAsk): Promise<BoardAnswers["boardDraw"]>;
+  /** Move, restyle, lock, restack, align, copy or move into a page what is drawn. */
+  change(ask: ViewBoardChangeAsk): Promise<BoardAnswers["boardChange"]>;
+  erase(ask: ViewBoardEraseAsk): Promise<BoardAnswers["boardErase"]>;
+  /** Take back this view's last write; the person's own undo never takes the view's back. */
+  undo(): Promise<BoardAnswers["boardUndo"]>;
+  /** What changed, at most one batch a frame, until the returned function is called. */
+  on(listener: (change: ViewBoardChange) => void): () => void;
+}
+
 /** Whether a workspace keeps issues: `ready` once set up; `folder` names where they would live. */
 export interface ViewIssuesStatus { ready: boolean; folder: string | null; suggested: string }
 
@@ -252,6 +282,22 @@ class Client implements ViewClient {
     picked: (frameId, query, file) => this.codeCall({ call: "picked", frameId, query, file }) as Promise<null>,
     open: (frameId, file, at) => this.codeCall({ call: "open", frameId, file, ...at }) as Promise<{ tileId: string | null }>,
   };
+  private boardCbs = new Set<(change: ViewBoardChange) => void>();
+  readonly board: ViewBoard = {
+    read: (ask = {}) => this.boardCall("boardRead", ask),
+    picture: (ask = {}) => this.boardCall("boardPicture", ask),
+    draw: (ask) => this.boardCall("boardDraw", ask),
+    change: (ask) => this.boardCall("boardChange", ask),
+    erase: (ask) => this.boardCall("boardErase", ask),
+    undo: () => this.boardCall("boardUndo", {}),
+    on: (listener) => {
+      this.need("workspace:board", "board.on");
+      if (!this.supports("board")) return () => {};
+      this.boardCbs.add(listener);
+      if (this.boardCbs.size === 1) this.send({ type: "subscribeBoard" });
+      return () => { if (this.boardCbs.delete(listener) && this.boardCbs.size === 0) this.send({ type: "unsubscribeBoard" }); };
+    },
+  };
   readonly issues: ViewIssues = Object.fromEntries(ISSUE_CALLS.map((call) => [call, (...args: unknown[]) => this.issueCall(call, args)])) as unknown as ViewIssues;
   private widgetCbs = new Set<(widgets: ViewWidget[]) => void>();
   private band: ViewWidgetBand | null = null;
@@ -301,10 +347,11 @@ class Client implements ViewClient {
         this.sendLines();
         this.emit(m.type, m);
         break;
-      case "names": case "selection": this.emit(m.type, m); break;
+      case "names": case "selection": case "broadcast": this.emit(m.type, m); break;
       case "status": {
-        const info: StatusInfo | undefined = m.since === undefined && m.agent === undefined ? undefined : {
+        const info: StatusInfo | undefined = m.since === undefined && m.agent === undefined && m.seen === undefined ? undefined : {
           ...(m.since === undefined ? {} : { since: m.since }), ...(m.exact === undefined ? {} : { exact: m.exact }), ...(m.agent ? { agent: m.agent } : {}),
+          ...(m.seen === undefined ? {} : { seen: m.seen }),
         };
         for (const cb of this.status.get(m.tileId) ?? []) cb(m.status, info);
         break;
@@ -336,6 +383,11 @@ class Client implements ViewClient {
         this.issueList = m.issues;
         for (const cb of this.issueCbs) cb(m.issues);
         break;
+      case "board": {
+        const { type: _, ...change } = m;
+        for (const cb of this.boardCbs) cb(change);
+        break;
+      }
       case "invoke": void this.answer(m.invokeId, m.name, m.args); break;
       case "participants":
         this.participants = m.participants;
@@ -573,10 +625,22 @@ class Client implements ViewClient {
     return this.request((requestId) => ({ type: "request", requestId, name: "issue", args: [{ call, args }] }), 30_000);
   }
 
+  open(thing: string, opts?: { frameId?: string | null }): Promise<ViewOpened> {
+    this.need("workspace:open", "open");
+    if (!this.supports("open")) return Promise.reject(new HostError("UNSUPPORTED", "this host cannot open links"));
+    return this.request((requestId) => ({ type: "request", requestId, name: "open", args: [{ thing, frameId: opts?.frameId ?? null }] }), 30_000) as Promise<ViewOpened>;
+  }
+
   private codeCall(c: CodeCall): Promise<unknown> {
     this.need("workspace:code", `code.${c.call}`);
     if (!this.supports("code")) return Promise.reject(new HostError("UNSUPPORTED", "this host cannot search code"));
     return this.request((requestId) => ({ type: "request", requestId, name: "code", args: [c] }), 30_000);
+  }
+
+  private boardCall<N extends BoardRequest>(name: N, ask: object): Promise<BoardAnswers[N]> {
+    this.need(BOARD_REQUEST_PERMISSION[name], `board.${name.slice("board".length).toLowerCase()}`);
+    if (!this.supports("board")) return Promise.reject(new HostError("UNSUPPORTED", "this host has no board"));
+    return this.request((requestId) => ({ type: "request", requestId, name, args: [ask] }) as PluginMessage, 30_000) as Promise<BoardAnswers[N]>;
   }
 
   pressWidget(id: string, action: unknown): void {

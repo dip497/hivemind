@@ -87,6 +87,8 @@ const app: App = {
   close: (agent) => act(() => phone!.close(agent), NOTICES.closed),
   browserAsks: (agent) => phone ? phone.browserAsks(agent).catch(() => []) : Promise.resolve([]),
   answerBrowserAsk: (agent, ask, answer) => phone ? phone.answerBrowserAsk(agent, ask, answer).catch(() => false) : Promise.resolve(false),
+  drawings: (agent) => phone ? phone.drawings(agent) : Promise.resolve([]),
+  drawingPicture: (agent, id) => phone ? phone.drawingPicture(agent, id, document.documentElement.dataset.mode === "light" ? "light" : "dark") : Promise.reject(new Error("no computer is reached")),
   notes: (agent) => phone ? phone.notes(agent).catch(() => []) : Promise.resolve([]),
   changeNote: (agent, id, to, reason) => phone ? phone.changeNote(agent, id, to, reason) : Promise.resolve(false),
   sendNotes: (agent, ids) => phone ? phone.sendNotes(agent, ids) : Promise.resolve(false),

@@ -6,7 +6,8 @@
 // Repo SCOPING of tile bodies moved to tile-surfaces.test.ts.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildBaseNodes, reuseNodes, type NodeBuildCtx } from "../../src/renderer/src/canvas-node-build.ts";
+import { buildBaseNodes, OUTSIDE_FOCUS, reuseNodes, type NodeBuildCtx } from "../../src/renderer/src/canvas-node-build.ts";
+import { framesWithin } from "@hivemind/workspace-doc/pages";
 import type { FrameState, TileInstance } from "../../src/renderer/src/canvas-persistence.ts";
 
 const noop = () => {};
@@ -18,7 +19,7 @@ function ctx(over: Partial<NodeBuildCtx>): NodeBuildCtx {
     updateFrameTitle: noop, updateFrameColor: noop, deleteFrame: noop, arrangeFrame: noop,
     bringFrameToFront: noop, onAttachWorktree: noop, onCreateWorktree: noop, unbindBranch: noop,
     bindWorkspace: noop, unbindWorkspace: noop, closeTile: noop, onNodeResizeCommit: noop,
-    onTogglePin: noop, onPinChange: noop,
+    onTogglePin: noop, onPinChange: noop, focus: null, enterFrame: noop,
     ...over,
   };
 }
@@ -69,7 +70,7 @@ test("frames emit PARENTS before worktree CHILDREN; child position is relative +
   const child = byId(nodes, "child");
   assert.deepEqual(child.position, { x: 20, y: 40 }, "child position relative to parent (120-100, 140-100)");
   assert.equal(child.parentId, "parent");
-  // zIndex: parent ≤40, child 50–90.
+  // zIndex: parent ≤40, child 50–97.
   const pz = (byId(nodes, "parent").style as { zIndex: number }).zIndex;
   const cz = (child.style as { zIndex: number }).zIndex;
   assert.ok(pz <= 40 && cz >= 50 && cz < 100, `parent ${pz} < child ${cz} < 100`);
@@ -122,4 +123,41 @@ test("a board box is a node of its kind, drawn RELATIVE to its frame and in fron
   assert.equal(byId(nodes, "t1").parentId, undefined);
   assert.deepEqual(byId(nodes, "t1").position, { x: 10, y: 20 });
   assert.equal(nodes.some((n) => n.id === "a1"), false);
+});
+
+// One canvas: Payments is a page, Checkout a page inside it, Cart a frame inside that; Infra apart.
+const nest = [
+  frame({ id: "pay", x: 100, y: 100, w: 2000, h: 2000, page: true }),
+  frame({ id: "check", x: 200, y: 200, w: 1500, h: 1500, parentFrameId: "pay", page: true }),
+  frame({ id: "cart", x: 300, y: 300, parentFrameId: "check" }),
+  frame({ id: "infra", x: 5000, y: 0 }),
+];
+const shape = (id: string, frameId?: string) => ({ id, kind: "shape" as const, form: "rect" as const, x: 600, y: 600, w: 40, h: 40, z: 1, text: id, ...(frameId ? { frame: frameId } : {}) });
+const NEST = {
+  frames: nest,
+  tiles: [tile({ id: "top" }), tile({ id: "inPay" }), tile({ id: "inCart" })],
+  frameOf: { inPay: "pay", inCart: "cart" },
+  positions: { inCart: { x: 320, y: 360 } },
+  objects: [shape("s1", "pay"), shape("s2", "cart"), shape("s4")],
+};
+
+test("pages and frames three deep are all built, each placed from the one holding it, parents first", () => {
+  const nodes = buildBaseNodes(ctx(NEST));
+  assert.deepEqual(nodes.map((n) => n.id).sort(), ["cart", "check", "inCart", "inPay", "infra", "pay", "s1", "s2", "s4", "top"]);
+  const at = (id: string) => nodes.findIndex((n) => n.id === id);
+  assert.ok(at("pay") < at("check") && at("check") < at("cart"), "each frame comes before the frames inside it");
+  assert.equal(byId(nodes, "cart").parentId, "check");
+  assert.deepEqual(byId(nodes, "cart").position, { x: 100, y: 100 });
+  assert.equal(byId(nodes, "inCart").parentId, "cart");
+  assert.deepEqual(byId(nodes, "inCart").position, { x: 20, y: 60 });
+  assert.equal((byId(nodes, "check").data as Record<string, unknown>).page, true);
+  const z = (id: string) => (byId(nodes, id).style as { zIndex: number }).zIndex;
+  assert.ok(z("pay") < z("check") && z("check") < z("cart") && z("cart") < z("inCart"), "each level draws over the one holding it, tiles over all");
+});
+
+test("inside a frame, everything outside it dims and everything in it, at any depth, does not", () => {
+  const nodes = buildBaseNodes(ctx({ ...NEST, focus: framesWithin(nest, "check") }));
+  const dim = nodes.filter((n) => n.className === OUTSIDE_FOCUS).map((n) => n.id).sort();
+  assert.deepEqual(dim, ["inPay", "infra", "pay", "s1", "s4", "top"]);
+  assert.equal(buildBaseNodes(ctx(NEST)).some((n) => n.className === OUTSIDE_FOCUS), false, "on the whole canvas nothing dims");
 });

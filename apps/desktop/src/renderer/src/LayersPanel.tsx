@@ -12,12 +12,12 @@ import { resolveViewId, useViews } from "./workspace/workspace-view";
 import { openAdd } from "./workspace/add-dialog";
 import { setViewMode, useViewMode } from "./workspace/view-mode-store";
 import { exitFailed, groupLook, LOOKS, StatusGlyph, statusLook, statusWord, type StatusLook } from "./workspace/status-look";
-import { actionKey } from "./shortcut";
+import { actionKey, onShortcut } from "./shortcut";
 import { MachineDot, MachineIcon, machineFacts, statusWords } from "./machines/status";
 import { A_DEVICE, GONE_MACHINE, openMachines, placeOf, statusOf, useMachines } from "./machines/store";
 import type { MachineInfo } from "../../shared/ipc";
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type ComponentProps, type ReactNode, type PointerEvent as ReactPointerEvent } from "react";
-import { PanelLeftOpen, ChevronRight, ChevronDown, GitBranch, Server, Folder, FolderOpen, PanelLeftClose, Plus, RefreshCw, Ellipsis, EllipsisVertical, X, Pencil, Trash, Pin, PinOff, Search, Bell, SquarePen, FolderPlus, AddWidget, Blocks, History, Mail, MailOpen, AlarmClock, AlarmClockOff, LayoutList, LogIn, Settings, Settings2, Monitor, Moon, Play } from "./components/icons";
+import { Fragment, memo, useCallback, useContext, useEffect, useMemo, useRef, useState, type ComponentProps, type ReactNode, type PointerEvent as ReactPointerEvent } from "react";
+import { PanelLeftOpen, ChevronRight, ChevronDown, GitBranch, Server, Folder, FolderOpen, PanelLeftClose, Plus, RefreshCw, Ellipsis, EllipsisVertical, X, Pencil, Trash, Pin, PinOff, Search, Bell, SquarePen, FolderPlus, AddWidget, Blocks, History, Mail, MailOpen, AlarmClock, AlarmClockOff, LayoutList, LogIn, Settings, Settings2, Monitor, Moon, Play, Files, RectangleShape } from "./components/icons";
 import { subscribeStatus, type TileStatusKind } from "./agent-status-bus";
 import { AgentIcon, agentById, useAgents } from "./agents";
 import { isOpenedUnread } from "./worker-tiles";
@@ -36,12 +36,18 @@ import type { SleepActions } from "./workspace/SleepAgents";
 import { tileKind } from "./tiles";
 import { KindMark } from "./tiles/mark";
 import { MenuItem } from "./components/ui/menu-item";
-import { isUnread, layersView, recentGroups, type ModelTile, type RecentSession } from "@hivemind/core/layers";
+import { frameParts, isUnread, LAYERS_SHOW, layersFound, newestWaiting, layersView, recentGroups, type DrawingRow, type FramePartList, type LayersShow, type ModelTile, type RecentSession } from "@hivemind/core/layers";
+import type { BoardObject } from "@hivemind/workspace-doc/shapes";
+import { isLocked } from "@hivemind/workspace-doc/board-actions";
+import { drawingRows, objectsIn, type DrawingRows } from "./layer-drawings";
+import { endNamer } from "@hivemind/workspace-doc/drawing-name";
+import { CanvasRuntimeContext } from "./workspace/views/canvas-runtime";
 import type { WorkspaceSummary } from "../../shared/ipc";
 import { useSettings, patchSettings } from "./settings-store";
 import { layersDrawn } from "./workspace/chrome-store";
 import { setPanelOrder } from "./workspace/panel-order";
 import { useViewLayout } from "./workspace/view-layout-store";
+import { publishTileSeen } from "./workspace/tile-seen";
 import { DEFAULT_LAYERS_PREFS, type LayersPrefs } from "@hivemind/core/settings-schema";
 
 /** The tile's kind, as its plugin registered it. */
@@ -78,6 +84,8 @@ export interface LayerFrame {
   folder?: string;
   /** Its folder on this computer, when it is on this computer: where its agents' past sessions are. */
   path?: string;
+  /** Opens into a page of its own. */
+  page?: true;
 }
 
 interface Props {
@@ -108,6 +116,12 @@ interface Props {
   };
   /** Put agents to sleep and wake them, from a tile's menu and the panel's. */
   sleepActions?: SleepActions;
+  /** The whole workspace's board objects: what the drawing rows are made from. */
+  objects?: readonly BoardObject[];
+  /** A drawing row's click: every object of it, to go to them all. */
+  onFocusDrawing?: (ids: string[]) => void;
+  /** A page row's click: go inside it. */
+  onFocusPage?: (id: string) => void;
 }
 
 // One status, one word, shape and colour, shared with every other surface (workspace/status-look).
@@ -141,7 +155,7 @@ const COUNT = "text-count tabular-nums text-[var(--color-fg2)]";
 
 /** This person's own for this workspace: pinned tiles (in pin order), the groups they folded, when
  *  they last looked at each tile, the tiles they snoozed, until when, and whether asleep agents are hidden. */
-interface Mine { pinned: string[]; collapsed: string[]; seen?: Record<string, number>; snoozed?: Record<string, number>; hideAsleep?: boolean }
+interface Mine { pinned: string[]; collapsed: string[]; seen?: Record<string, number>; snoozed?: Record<string, number>; hideAsleep?: boolean; show?: LayersShow }
 const MINE = { viewId: "layers", version: 1, initial: (): Mine => ({ pinned: [], collapsed: [], seen: {}, snoozed: {} }), personal: true } as const;
 
 /** Snooze choices: until when, from now. */
@@ -301,8 +315,136 @@ const TileRow = memo(function TileRow({ t, depth, selected, actions, lines, star
   );
 });
 
+type At = { x: number; y: number };
+
+/** A drawing's row: its name, and what it is or how many shapes. A click goes to all of it;
+ *  its menu (right-click, or ⋯) shows, locks or removes it. Who drew it is in its title. */
+const DrawingRowView = memo(function DrawingRowView({ d, depth, by, onFocus, onMenu }: { d: DrawingRow; depth: number; by?: string; onFocus: (key: string) => void; onMenu: (d: DrawingRow, at: At) => void }) {
+  const Icon = d.key.startsWith("shapes:") ? RectangleShape : Pencil;
+  const detail = [d.detail, d.locked ? "locked" : ""].filter(Boolean).join(" · ");
+  return (
+    <div role="button" tabIndex={0} aria-label={d.name} data-layers-drawing={d.key} data-locked={d.locked || undefined}
+      onClick={() => onFocus(d.key)} onKeyDown={(e) => { if (e.key === "Enter") onFocus(d.key); }}
+      onContextMenu={(e) => { e.preventDefault(); onMenu(d, { x: e.clientX, y: e.clientY }); }}
+      title={by ? `${d.name}, drawn by ${by}` : d.name}
+      className="group flex w-[calc(100%-1rem)] min-w-0 h-8 items-center gap-2.5 mx-2 pr-1.5 rounded-lg text-left text-row text-[var(--color-fg)] outline-none cursor-pointer transition-colors duration-150 hover:bg-[var(--surface-3)] focus-visible:bg-[var(--surface-3)]"
+      style={{ paddingLeft: 12 + depth * 14 }}>
+      <span aria-hidden className="size-4 shrink-0 grid place-items-center text-[var(--color-fg2)]"><Icon size={ICON} /></span>
+      <span className="flex-1 truncate">{d.name}</span>
+      {detail && <span className={`shrink-0 max-w-[45%] truncate ${COUNT} group-hover:hidden`} data-layers-drawing-detail>{detail}</span>}
+      <Button variant="ghost" size="icon-2xs" reveal="hidden" aria-label={`${d.name} actions`} data-layers-drawing-menu
+        onClick={(e) => { e.stopPropagation(); const r = e.currentTarget.getBoundingClientRect(); onMenu(d, { x: r.right, y: r.bottom }); }}>
+        <EllipsisVertical size={12} />
+      </Button>
+    </div>
+  );
+});
+
+/** Drawings listed under one heading: their rows' keys, to remove them all at once. */
+interface DrawingGroup { label: string; keys: string[] }
+
+/** A drawing's menu, or a Drawings heading's. It acts on the window's board, as the canvas's own
+ *  buttons do, so Ctrl/⌘+Z on the canvas takes each change back. */
+function DrawingMenu({ at, onShow, onRemoveAll, close }: { at: At & { row?: DrawingRow; group?: DrawingGroup }; onShow: (key: string) => void; onRemoveAll: (group: DrawingGroup) => void; close: () => void }) {
+  const board = useContext(CanvasRuntimeContext)?.board;
+  const run = (fn: () => void) => { close(); fn(); };
+  const idsOf = (row: DrawingRow) => (board ? objectsIn(board.objectsRef.current, new Set([row.key])) : []);
+  const { row, group } = at;
+  return (
+    <DropdownMenu open onOpenChange={(o) => { if (!o) close(); }}>
+      <DropdownMenuTrigger asChild>
+        <span aria-hidden style={{ position: "fixed", left: at.x, top: at.y, width: 0, height: 0 }} />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" side="bottom" sideOffset={2} className="w-[180px]" data-layers-drawing-actions>
+        {row && (
+          <>
+            <DropdownMenuItem onSelect={() => run(() => onShow(row.key))} data-layers-drawing-show>Show</DropdownMenuItem>
+            {board && row.lockable && (
+              <DropdownMenuItem onSelect={() => run(() => board.lock(idsOf(row), !row.locked))} data-layers-drawing-lock>{row.locked ? "Unlock" : "Lock"}</DropdownMenuItem>
+            )}
+            {board && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem variant="destructive" disabled={row.locked} onSelect={() => run(() => board.remove(...idsOf(row)))} data-layers-drawing-remove>
+                  <span className="shrink-0 grid place-items-center size-4"><Trash size={13} /></span>
+                  <span className="truncate">{row.locked ? "Locked: unlock to remove" : "Remove"}</span>
+                </DropdownMenuItem>
+              </>
+            )}
+          </>
+        )}
+        {group && (
+          <DropdownMenuItem variant="destructive" disabled={!board} onSelect={() => run(() => onRemoveAll(group))} data-layers-drawings-remove-all>
+            <span className="shrink-0 grid place-items-center size-4"><Trash size={13} /></span>
+            <span className="truncate">Remove all…</span>
+          </DropdownMenuItem>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+/** Asks before removing every drawing under a heading, in one edit of the window's board. Locked
+ *  shapes stay, as they do on the canvas. */
+function RemoveDrawingsDialog({ group, close }: { group: DrawingGroup; close: () => void }) {
+  const board = useContext(CanvasRuntimeContext)?.board;
+  const [ids, locked] = useMemo(() => {
+    const objects = board?.objectsRef.current ?? [];
+    const held = new Set(objects.filter(isLocked).map((o) => o.id));
+    const all = objectsIn(objects, new Set(group.keys));
+    return [all.filter((id) => !held.has(id)), all.filter((id) => held.has(id)).length];
+  }, [board, group]);
+  const n = group.keys.length;
+  return (
+    <Dialog open onOpenChange={(o) => { if (!o) close(); }}>
+      <DialogContent className="sm:max-w-[420px]" data-layers-remove-drawings-confirm>
+        <DialogTitle>Remove {n === 1 ? "this drawing" : `${n} drawings`}{group.label ? ` in ${group.label}` : ""}?</DialogTitle>
+        <DialogDescription>
+          {locked > 0 ? `${locked} locked ${locked === 1 ? "shape stays" : "shapes stay"}. ` : ""}Ctrl/⌘+Z on the canvas puts them back.
+        </DialogDescription>
+        <DialogFooter>
+          <Button variant="ghost" autoFocus onClick={close}>Cancel</Button>
+          <Button variant="destructive" disabled={!board || ids.length === 0} data-layers-remove-drawings
+            onClick={() => { close(); board?.remove(...ids); }}>Remove</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+const SHOW_CHOICES: Array<[LayersShow, string]> = [["all", "All"], ["agents", "Agents"], ["drawings", "Drawings"], ["pages", "Pages"]];
+
+/** What kind of row is listed, beside how the list is grouped: "Show: All ⌄"; another choice gets a ✕ back to All. */
+function ShowMenu({ value, onChange }: { value: LayersShow; onChange: (v: LayersShow) => void }) {
+  const label = SHOW_CHOICES.find(([k]) => k === value)![1];
+  return (
+    <span className="flex items-center" data-layers-show>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button type="button" data-layers-show-menu aria-label={`Show: ${label}`}
+            className={`flex items-center gap-1 rounded-md px-1.5 py-0.5 text-count transition-colors duration-150 hover:bg-[var(--surface-3)] hover:text-[var(--color-fg)] ${value === "all" ? "text-[var(--color-fg2)]" : "text-[var(--color-fg)]"}`}>
+            Show: {label}<ChevronDown size={12} />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-[150px]">
+          <DropdownMenuLabel>Show</DropdownMenuLabel>
+          <DropdownMenuRadioGroup value={value} onValueChange={(v) => onChange(v as LayersShow)}>
+            {SHOW_CHOICES.map(([k, text]) => <DropdownMenuRadioItem key={k} value={k} data-layers-show-choice={k}>{text}</DropdownMenuRadioItem>)}
+          </DropdownMenuRadioGroup>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      {value !== "all" && (
+        <button type="button" aria-label="Show all" title="Show all" data-layers-show-clear onClick={() => onChange("all")}
+          className="grid size-5 place-items-center rounded-md text-[var(--color-fg2)] transition-colors duration-150 hover:bg-[var(--surface-3)] hover:text-[var(--color-fg)]">
+          <X size={12} />
+        </button>
+      )}
+    </span>
+  );
+}
+
 // Memo: a child of the canvas view, which re-renders on every drag frame.
-export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTileId, onFocusTile, onFocusFrame, layoutKey = null, canvas = false, folder = null, onResume, frameActions, tileActions, sleepActions }: Props) {
+export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTileId, onFocusTile, onFocusFrame, layoutKey = null, canvas = false, folder = null, onResume, frameActions, tileActions, sleepActions, objects, onFocusDrawing, onFocusPage }: Props) {
   // Before the early `hidden` return: hooks run on every render, in the same order.
   useEffect(layersDrawn, []);
   const machineSnap = useMachines();
@@ -345,6 +487,12 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
   const pickPane = useCallback((p: Pane) => { setPane(p); try { localStorage.setItem("hivemind:layers-pane", p); } catch { /* private window */ } }, []);
   const [closingLoose, setClosingLoose] = useState(false);
   const [query, setQuery] = useState("");
+  const show: LayersShow = LAYERS_SHOW.includes(mine.show as LayersShow) ? mine.show! : "all";
+  const setShow = useCallback((v: LayersShow) => setMine((m) => ({ ...m, show: v })), [setMine]);
+  // A drawing's menu or a Drawings heading's, and the Remove all it asks about.
+  const [drawingMenu, setDrawingMenu] = useState<(At & { row?: DrawingRow; group?: DrawingGroup }) | null>(null);
+  const [removingDrawings, setRemovingDrawings] = useState<DrawingGroup | null>(null);
+  const drawingMenuAt = useCallback((row: DrawingRow, at: At) => { setCard(null); setDrawingMenu({ row, ...at }); }, []);
   // Projects: every workspace here, as main counts it; read again as statuses change.
   const [projects, setProjects] = useState<WorkspaceSummary[]>([]);
   // Recents: this workspace's past agent sessions, read once its folders are known.
@@ -440,6 +588,7 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
     }
   }, [tiles, mine.pinned, mine.seen, mine.snoozed, setMine]);
   const setSeen = useCallback((id: string, at: number) => setMine((m) => ({ ...m, seen: { ...m.seen, [id]: at } })), [setMine]);
+  useEffect(() => publishTileSeen(mine.seen), [mine.seen]);
   const setSnooze = useCallback((id: string, until: number | null) => setMine((m) => {
     const snoozed = { ...m.snoozed };
     if (until === null) delete snoozed[id]; else snoozed[id] = until;
@@ -462,8 +611,9 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
     let g = machineGroups.find((x) => x.key === key);
     if (!g) machineGroups.push(g = { key, label: device?.name ?? (hostId?.startsWith("device:") ? A_DEVICE : hostId?.replace(/:22$/, "")) ?? GONE_MACHINE, ...(hostId ? { hostId } : {}), frames: [] });
     g.frames.push(f);
-    machineOfFrame.set(f.id, key);
-    for (const k of childFramesOf(f.id)) machineOfFrame.set(k.id, key);
+    // Pages and frames nest to any depth: each runs where its top frame does.
+    const mark = (id: string) => { machineOfFrame.set(id, key); for (const k of childFramesOf(id)) if (!machineOfFrame.has(k.id)) mark(k.id); };
+    mark(f.id);
   }
 
   const asleep = useMemo(() => new Set(tiles.filter((t) => t.sleeping).map((t) => t.id)), [tiles]);
@@ -501,11 +651,27 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
     });
   }, [modelTiles, selectedTileId, mine.seen, mine.snoozed, setMine]);
   const agentLabel = (t: ModelTile) => (t.kind === AGENT_TILE_KIND ? agentById(t.agent)?.label ?? t.agent ?? "Agent" : tileKind(t.kind).title ?? "Other");
-  const view = layersView({ tiles: modelTiles, pinned: mine.pinned, prefs, now, agentLabel, query, hideAsleep });
+  const view = layersView({ tiles: modelTiles, pinned: mine.pinned, prefs, now, agentLabel, query, hideAsleep, show });
+  // Rebuilt only when the board's objects array changes, keeping each row that shows the same.
+  const lastRows = useRef<DrawingRows | undefined>(undefined);
+  // Tile names change rarely; statuses often. Key the namer on the names alone.
+  const tileNameKey = modelTiles.map((t) => `${t.id}\u0000${t.name}`).join("\u0001");
+  const rows = useMemo(() => (lastRows.current = drawingRows(objects ?? [], lastRows.current, endNamer(objects ?? [], modelTiles))),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [objects, tileNameKey]);
+  const pages = useMemo(() => frames.filter((f) => f.page).map((f) => ({ id: f.id, title: f.title })), [frames]);
+  const found = useMemo(() => layersFound({ drawings: rows.byFrame, pages, prefs, show, query }), [rows, pages, prefs, show, query]);
+  const tileNames = useMemo(() => new Map(tiles.map((t) => [t.id, t.name])), [tiles]);
+  const focusDrawingRef = useRef(onFocusDrawing);
+  focusDrawingRef.current = onFocusDrawing;
+  const objectsRef = useRef(objects);
+  objectsRef.current = objects;
+  const focusDrawing = useCallback((key: string) => focusDrawingRef.current?.(objectsIn(objectsRef.current ?? [], new Set([key]))), []);
   // What the panel lists, in its order whatever is searched for, told to main: the person's phone
   // lists Home so (spec/home.md).
   const listed = useMemo(() => {
-    const all = query ? layersView({ tiles: modelTiles, pinned: mine.pinned, prefs, now, agentLabel }) : view;
+    // Every tile, whatever is searched for or chosen under Show.
+    const all = query || show !== "all" ? layersView({ tiles: modelTiles, pinned: mine.pinned, prefs, now, agentLabel }) : view;
     const order: string[] = [];
     const put = (t: ModelTile) => { order.push(t.id); for (const k of all.kids.get(t.id) ?? []) put(k); };
     all.pinned.forEach(put);
@@ -515,7 +681,7 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
     return JSON.stringify({ order, pinned: mine.pinned });
   // agentLabel and view are made from these each render.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [modelTiles, mine.pinned, prefs, now, query]);
+  }, [modelTiles, mine.pinned, prefs, now, query, show]);
   useEffect(() => {
     if (layoutKey) window.hive.layersShown?.(layoutKey, JSON.parse(listed) as { order: string[]; pinned: string[] });
   }, [layoutKey, listed]);
@@ -536,6 +702,15 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
     const t = waiting[nextAt.current++ % waiting.length]!;
     onFocusTile(t.id);
   };
+  // The key that works anywhere: the tile that started waiting on you last, whatever has focus.
+  const newestNeedsYou = useRef<() => boolean>(() => false);
+  newestNeedsYou.current = () => {
+    const t = newestWaiting(modelTiles);
+    if (!t) return false;
+    onFocusTile(t.id);
+    return true;
+  };
+  useEffect(() => onShortcut("needs-you", () => newestNeedsYou.current()), []);
   const title = layoutKey?.split(/[\\/]/).filter(Boolean).pop() ?? "Workspace";
 
   // Rows call these; kept stable so a row redraws only when its own tile changes.
@@ -596,7 +771,8 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
   }
 
   const shownIn = (fid: string) => view.byFrame.get(fid) ?? [];
-  const hasShown = (fid: string): boolean => shownIn(fid).length > 0 || childFramesOf(fid).some((k) => hasShown(k.id));
+  const drawingsIn = (fid: string | null): readonly DrawingRow[] => found.drawings.get(fid) ?? [];
+  const hasShown = (fid: string): boolean => shownIn(fid).length > 0 || drawingsIn(fid).length > 0 || found.pages.has(fid) || childFramesOf(fid).some((k) => hasShown(k.id));
   // The look across a frame's listed tiles + sub-frames (a folded frame still signals).
   const frameLooks = (fid: string): StatusLook[] => [
     ...shownIn(fid).map((t) => statusLook(t.status, { failed: failed.has(t.id) })),
@@ -630,6 +806,65 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
     );
   };
 
+  const renderDrawing = (d: DrawingRow, depth: number): ReactNode => (
+    <DrawingRowView key={d.key} d={d} depth={depth} by={d.by ? tileNames.get(d.by) : undefined} onFocus={focusDrawing} onMenu={drawingMenuAt} />
+  );
+
+  // Searched for, or Drawings chosen: the drawings are what is asked for, so their headings stay open.
+  const drawingsAsked = !!query.trim() || show === "drawings";
+  /** A heading over one part of a frame (`key`), its rows under it while open. Drawings start folded. */
+  const subGroup = (key: string, p: FramePartList, depth: number, rows: (depth: number) => ReactNode, group?: DrawingGroup): ReactNode => {
+    const held = p.part === "drawings" && drawingsAsked;
+    const folded = held ? false : p.part === "drawings" ? !collapsed.has(`open:${key}`) : collapsed.has(key);
+    const toggle = () => toggleGroup(p.part === "drawings" ? `open:${key}` : key);
+    const menuAt = group ? (at: At) => { setCard(null); setDrawingMenu({ group, ...at }); } : undefined;
+    return (
+      <div key={key} role="group" aria-label={p.label} data-layers-part={p.part}>
+        <div className="group/part flex w-[calc(100%-1rem)] min-w-0 h-8 items-center mx-2 pr-1.5 rounded-lg transition-colors duration-150 hover:bg-[var(--surface-3)]"
+          style={{ paddingLeft: 12 + depth * 14 }}
+          onContextMenu={menuAt ? (e) => { e.preventDefault(); menuAt({ x: e.clientX, y: e.clientY }); } : undefined}>
+          <button type="button" onClick={toggle} disabled={held} aria-expanded={!folded} data-layers-part-toggle={p.part}
+            className="flex-1 flex items-center gap-2.5 min-w-0 text-left text-row text-[var(--color-fg2)] outline-none hover:text-[var(--color-fg)] focus-visible:text-[var(--color-fg)]">
+            <span aria-hidden className="size-4 shrink-0 grid place-items-center">{folded ? <ChevronRight size={12} /> : <ChevronDown size={12} />}</span>
+            <span className="truncate">{p.label}</span>
+            <span className={`ml-auto shrink-0 ${COUNT} ${menuAt ? "group-hover/part:hidden group-focus-within/part:hidden" : ""}`}>{p.count}</span>
+          </button>
+          {menuAt && (
+            <Button variant="ghost" size="icon-2xs" aria-label={`${p.label} actions`} data-layers-part-menu={p.part}
+              className="hidden group-hover/part:grid group-focus-within/part:grid shrink-0"
+              onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); menuAt({ x: r.right, y: r.bottom }); }}>
+              <EllipsisVertical size={12} />
+            </Button>
+          )}
+        </div>
+        {!folded && rows(depth + 1)}
+      </div>
+    );
+  };
+  /** What a frame (or the bare canvas, `scope`) holds, part by part as `frameParts` lays it out. */
+  const renderParts = (scope: string, label: string, held: { tiles: readonly ModelTile[]; frames: readonly LayerFrame[]; drawings: readonly DrawingRow[] }, depth: number, groupByMachine: boolean, headed = false): ReactNode => {
+    const agentsHere = held.tiles.filter((t) => t.agent !== undefined);
+    const toolsHere = held.tiles.filter((t) => t.agent === undefined);
+    const folders = held.frames.filter((f) => !f.page);
+    const pagesHere = held.frames.filter((f) => f.page);
+    const parts = frameParts({ agents: agentsHere.length, tools: toolsHere.length, frames: folders.length, pages: pagesHere.length, drawings: held.drawings.length });
+    return parts.map((p) => {
+      const rows = (d: number): ReactNode => {
+        switch (p.part) {
+          case "tiles": return held.tiles.map((t) => renderTile(t, d));
+          case "agents": return agentsHere.map((t) => renderTile(t, d));
+          case "tools": return toolsHere.map((t) => renderTile(t, d));
+          case "frames": return folders.map((k) => renderFrameGroup(k, d, groupByMachine));
+          case "pages": return pagesHere.map((k) => renderFrameGroup(k, d, groupByMachine));
+          case "drawings": return held.drawings.map((x) => renderDrawing(x, d));
+        }
+      };
+      if (!p.grouped && !headed) return <Fragment key={`${scope}:${p.part}`}>{rows(depth)}</Fragment>;
+      const group = p.part === "drawings" ? { label, keys: held.drawings.map((x) => x.key) } : undefined;
+      return subGroup(`part:${scope}:${p.part}`, p, depth, rows, group);
+    });
+  };
+
   // A frame group: header + its listed tiles, then its worktree groups one level deeper. While the
   // View menu leaves tiles out, a frame with none of its own listed is left out too.
   const renderFrameGroup = (frame: LayerFrame, depth: number, groupByMachine: boolean): ReactNode => {
@@ -638,7 +873,9 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
     const isCollapsed = collapsed.has(gid);
     const items = shownIn(gid);
     const kids = childFramesOf(gid).filter((k) => !view.filtering || hasShown(k.id));
-    const isWt = !!frame.parentFrameId;
+    const drawings = drawingsIn(gid);
+    // A worktree has a branch; a page or a frame inside one only nests.
+    const isWt = !!frame.branch;
     const agg = frameAgg(gid);
     const commitRename = () => { const t = renaming?.draft.trim(); if (t) frameActions?.onRename(gid, t); setRenaming(null); };
     return (
@@ -656,10 +893,13 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
                 className="flex-1 min-w-0" aria-label="Rename frame" />
             </div>
           ) : (
-            <button onClick={() => onFocusFrame(frame.id)} onDoubleClick={frameActions ? () => setRenaming({ id: gid, draft: frame.title }) : undefined}
+            <button onClick={() => (frame.page && onFocusPage ? onFocusPage(frame.id) : onFocusFrame(frame.id))} onDoubleClick={frameActions ? () => setRenaming({ id: gid, draft: frame.title }) : undefined}
               className="flex-1 flex items-center gap-2.5 min-w-0 text-left text-row font-medium text-[var(--color-fg)]"
-              title={isWt ? `Focus worktree ${frame.branch ?? frame.title}` : `Focus ${frame.title}${frameActions ? " · double-click to rename" : ""}`}>
-              <WorkspaceIcon color={frame.color} remote={frame.remote && !groupByMachine} remoteUri={frame.remoteUri} worktree={isWt} collapsed={isCollapsed} />
+              data-layers-page={frame.page ? gid : undefined}
+              title={isWt ? `Focus worktree ${frame.branch ?? frame.title}` : `${frame.page ? "Go inside" : "Focus"} ${frame.title}${frameActions ? " · double-click to rename" : ""}`}>
+              {frame.page
+                ? <Files size={ICON} className="shrink-0" style={{ color: muted(frame.color) }} />
+                : <WorkspaceIcon color={frame.color} remote={frame.remote && !groupByMachine} remoteUri={frame.remoteUri} worktree={isWt} collapsed={isCollapsed} />}
               <span className="truncate">{frame.title}</span>
               {frame.folder && frame.folder !== frame.title && (
                 <span className={`truncate min-w-0 font-normal ${COUNT}`} title={frame.folder}>{frame.folder}</span>
@@ -671,7 +911,7 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
                 ) : agg && isCollapsed ? (
                   <span aria-label={LOOKS[agg].word} title={LOOKS[agg].word} className="grid shrink-0"><StatusGlyph look={agg} className="size-1.5" /></span>
                 ) : null}
-                {items.length + kids.length > 0 && <span className={`shrink-0 ${COUNT} ${frameActions ? "group-hover/grp:hidden group-focus-within/grp:hidden" : ""}`}>{items.length + kids.length}</span>}
+                {items.length + kids.length + drawings.length > 0 && <span className={`shrink-0 ${COUNT} ${frameActions ? "group-hover/grp:hidden group-focus-within/grp:hidden" : ""}`}>{items.length + kids.length + drawings.length}</span>}
               </span>
             </button>
           )}
@@ -684,12 +924,11 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
             </Button>
           )}
         </div>
-        {!isCollapsed && (items.length > 0 || kids.length > 0) && (
+        {!isCollapsed && (items.length > 0 || kids.length > 0 || drawings.length > 0) && (
           // Nesting guide rail the child rows hang from.
           <div className="relative">
             <span aria-hidden className="absolute top-0 bottom-1 w-px bg-[var(--color-line)]" style={{ left: depth * 14 + 18 }} />
-            {items.map((t) => renderTile(t, depth + 1))}
-            {kids.map((k) => renderFrameGroup(k, depth + 1, groupByMachine))}
+            {renderParts(gid, frame.title, { tiles: items, frames: kids, drawings }, depth + 1, groupByMachine)}
           </div>
         )}
       </div>
@@ -719,7 +958,11 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
   // Loose: in no frame, or in one that is gone. Each such frame id once, or its tiles repeat.
   const goneFrames = new Set(tiles.flatMap((t) => (t.frameId && !frames.some((f) => f.id === t.frameId) ? [t.frameId] : [])));
   const looseTiles = view.tree ? (view.byFrame.get(null) ?? []).concat([...goneFrames].flatMap((id) => view.byFrame.get(id) ?? [])) : [];
-  const nothing = view.pinned.length === 0 && (view.tree ? ![...view.byFrame.values()].some((l) => l.length) : view.buckets.length === 0);
+  const looseDrawings = view.tree ? [...found.drawings].flatMap(([id, list]) => (id === null || !frames.some((f) => f.id === id) ? list : [])) : [];
+  const foundDrawings = view.tree ? [] : [...found.drawings.values()].flat();
+  const foundPages = view.tree ? [] : frames.filter((f) => found.pages.has(f.id));
+  const nothing = view.pinned.length === 0 && found.drawings.size === 0 && found.pages.size === 0
+    && (view.tree ? ![...view.byFrame.values()].some((l) => l.length) : view.buckets.length === 0);
   /** Top frames by the folder they run in, the workspace's first: its own, or the workspace's. */
   const projectsOf = (list: LayerFrame[]) => {
     const by = new Map<string, LayerFrame[]>();
@@ -753,7 +996,7 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
         <PanelMenu title={title} workspaces={projects} here={layoutKey} onHide={() => setHidden(true)} agents={agents} sleepActions={sleepActions}
           onRemoved={(repo) => setProjects((list) => list.filter((w) => w.repo !== repo))} />
         <span className="ml-auto" />
-        <Button variant="ghost" size="icon-xs" aria-label="Search tiles" title="Search tiles" aria-pressed={searching} data-layers-search-toggle
+        <Button variant="ghost" size="icon-xs" aria-label="Search" title="Search tiles, drawings and pages" aria-pressed={searching} data-layers-search-toggle
           onClick={() => { setSearching((x) => !x); setQuery(""); }}><Search size={ICON} className="size-4" /></Button>
         <Button variant="ghost" size="icon-xs" className="relative" data-layers-bell onClick={nextNeedsYou}
           aria-label={needsYou ? `${needsYou} need you: go to the next` : "Nothing needs you"} title={needsYou ? `${needsYou} need you: go to the next` : "Nothing needs you"}>
@@ -766,7 +1009,7 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
       </header>
       {searching && (
         <div className="px-2 pb-1.5">
-          <Input autoFocus value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search tiles" aria-label="Search tiles" data-layers-search
+          <Input autoFocus value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search tiles, drawings, pages" aria-label="Search" data-layers-search
             onKeyDown={(e) => { if (e.key === "Escape") { setSearching(false); setQuery(""); } e.stopPropagation(); }} size="sm" />
         </div>
       )}
@@ -786,15 +1029,18 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
       )}
       {pane === "tiles" && (
       <div className="flex-1 overflow-y-auto overscroll-contain pb-2 text-row" data-layers-pane="tiles">
-        {tiles.length > 0 && nothing && (
+        {(tiles.length > 0 || rows.list.length > 0 || pages.length > 0) && nothing && (
           <div className="px-4 py-3 text-label text-[var(--color-fg3)]" data-layers-nothing>
             Nothing matches.{" "}
-            <button type="button" className="underline hover:text-[var(--color-fg)]" onClick={() => { patchSettings("views.layers", { ...DEFAULT_LAYERS_PREFS, recentsBy: prefs.recentsBy, lines: prefs.lines }); setHideAsleep(false); setQuery(""); }}>Show everything</button>
+            <button type="button" className="underline hover:text-[var(--color-fg)]" onClick={() => { patchSettings("views.layers", { ...DEFAULT_LAYERS_PREFS, recentsBy: prefs.recentsBy, lines: prefs.lines }); setHideAsleep(false); setShow("all"); setQuery(""); }}>Show everything</button>
           </div>
         )}
         <div className={`sticky top-0 z-10 bg-[var(--color-bg2)] mt-1 flex h-7 items-center pl-5 pr-2 ${LABEL}`} data-layers-list-heading>
           <span>{view.tree && !groupByMachine ? "Projects" : "Tiles"}</span>
-          <span className="ml-auto"><ViewMenu prefs={prefs} setPref={setPref} machines={machineChoices} hideAsleep={hideAsleep} setHideAsleep={setHideAsleep} /></span>
+          <span className="ml-auto flex items-center gap-0.5">
+            <ShowMenu value={show} onChange={setShow} />
+            <ViewMenu prefs={prefs} setPref={setPref} machines={machineChoices} hideAsleep={hideAsleep} setHideAsleep={setHideAsleep} />
+          </span>
         </div>
         {tiles.length === 0 && frames.length === 0 && <div className={`pl-5 pr-3 py-1.5 ${LABEL} font-normal`} data-layers-empty>Nothing open yet: start an agent, or open a project.</div>}
         {view.tree ? (
@@ -823,6 +1069,24 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
               ))
             )
         ) : view.buckets.map((b) => section(b.key, b.label, b.tiles, { "data-layers-bucket": b.key }))}
+        {/* Grouped by date, status or agent there is no frame to hang them from: a section each. */}
+        {foundPages.length > 0 && (
+          <section aria-label="Pages" data-layers-pages className="mt-2">
+            <div className={`flex h-7 items-center pl-5 pr-3 ${LABEL}`}><span>Pages</span><span className={`ml-auto ${COUNT}`}>{foundPages.length}</span></div>
+            {foundPages.map((f) => (
+              <button key={f.id} type="button" data-layers-page={f.id} onClick={() => (onFocusPage ?? onFocusFrame)(f.id)} title={`Go inside ${f.title}`}
+                className="flex w-[calc(100%-1rem)] min-w-0 h-8 items-center gap-2.5 mx-2 pl-3 pr-2 rounded-lg text-left text-row text-[var(--color-fg)] transition-colors duration-150 hover:bg-[var(--surface-3)]">
+                <Files size={ICON} className="shrink-0" style={{ color: muted(f.color) }} />
+                <span className="flex-1 truncate">{f.title}</span>
+              </button>
+            ))}
+          </section>
+        )}
+        {foundDrawings.length > 0 && (
+          <section aria-label="Drawings" data-layers-drawings className="mt-2">
+            {renderParts("found", "", { tiles: [], frames: [], drawings: foundDrawings }, 0, false, true)}
+          </section>
+        )}
         {view.snoozed.length > 0 && (
           <section aria-label="Snoozed" data-layers-snoozed className="mt-2">
             <button type="button" onClick={() => toggleGroup("section:snoozed")} aria-expanded={!collapsed.has("section:snoozed")}
@@ -836,14 +1100,14 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
             ))}
           </section>
         )}
-        {looseTiles.length > 0 && (
+        {(looseTiles.length > 0 || looseDrawings.length > 0) && (
           <div className="mt-1.5">
             <div className="group/loose flex items-center gap-2 h-8 pr-2 mx-2 pl-[26px]" data-layers-loose>
               <span className="flex-1 flex items-center gap-2.5 min-w-0 text-row font-medium text-[var(--color-fg)]">
                 <FolderOpen size={ICON} className="shrink-0 text-[var(--color-fg2)]" />
                 <span className="truncate">Canvas</span>
-                <span className={`ml-auto ${COUNT} group-hover/loose:hidden group-focus-within/loose:hidden`}>{looseTiles.length}</span>
-                {tileActions && (
+                <span className={`ml-auto ${COUNT} ${looseTiles.length ? "group-hover/loose:hidden group-focus-within/loose:hidden" : ""}`}>{looseTiles.length + looseDrawings.length}</span>
+                {tileActions && looseTiles.length > 0 && (
                   <button type="button" data-layers-close-loose onClick={() => setClosingLoose(true)}
                     className="ml-auto hidden group-hover/loose:block group-focus-within/loose:block focus-visible:block rounded-md px-1.5 py-0.5 text-label font-medium text-[var(--color-fg2)] hover:bg-[var(--surface-3)] hover:text-[var(--color-fg)]">
                     Close all
@@ -851,7 +1115,7 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
                 )}
               </span>
             </div>
-            {looseTiles.map((t) => renderTile(t, 1))}
+            {renderParts("canvas", "Canvas", { tiles: looseTiles, frames: [], drawings: looseDrawings }, 1, false)}
           </div>
         )}
         {view.hiddenAsleep > 0 && (
@@ -940,6 +1204,8 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
             : {})}
           close={() => setTileMenu(null)} />
       )}
+      {drawingMenu && <DrawingMenu at={drawingMenu} onShow={focusDrawing} onRemoveAll={setRemovingDrawings} close={() => setDrawingMenu(null)} />}
+      {removingDrawings && <RemoveDrawingsDialog group={removingDrawings} close={() => setRemovingDrawings(null)} />}
       <Dialog open={closingLoose} onOpenChange={setClosingLoose}>
         <DialogContent className="sm:max-w-[420px]" data-layers-close-loose-confirm>
           <DialogTitle>Close {looseTiles.length} {looseTiles.length === 1 ? "tile" : "tiles"} on the canvas?</DialogTitle>

@@ -30,7 +30,8 @@ export type ErrorCode =
   | "UNAVAILABLE"
   /** Something else is drawn over what it would show: the message names it. */
   | "OCCLUDED"
-  /** A file for the person's phone is larger than a phone takes (0.39). */
+  /** More bytes than what takes them keeps: a file for the phone (0.39), a file read as text, a
+   *  workspace's board pictures. */
   | "FILE_TOO_BIG"
   /** No phone is paired here to send a file to (0.39). */
   | "NO_PHONE"

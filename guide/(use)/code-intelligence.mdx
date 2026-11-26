@@ -1,0 +1,61 @@
+---
+title: "Find your way around code"
+description: "A file's outline, where a name is defined, every place it is used and its type, in the Code tile and for your agents, each answer saying how sure it is."
+---
+
+The Code tile outlines the file you are in, goes to where a name is defined, lists every place it is used and shows its type when you point at it. Your agents ask the same questions with `hive ctl code` and get the same answers.
+
+<AgentPrompt description="Paste this into your coding agent to have it find its way around code through Hivemind." page="code-intelligence">{`
+Use Hivemind to find your way around this code before you change it.
+
+1. Check you are in a Hivemind tile: \`hive ctl whoami --json\` answers.
+2. Outline a file: \`hive ctl code outline src/app.ts --json\`.
+3. For a name you will change, list its usages: \`hive ctl code usages src/app.ts:12:5 --json\` (line and column from 1, as a compiler prints them). Each place has an \`at\` you can open with \`hive ctl open\`.
+4. Read \`accuracy\` in each answer. \`compiler\` is the compiler's answer; with \`partial\` it covered only part of the workspace, and \`also\` lists places a text search found besides. \`syntax\` means no language server answered: the usages are every place the word is written, so check each one.
+`}</AgentPrompt>
+
+## In the Code tile
+
+| To | Do |
+|---|---|
+| See the file's classes, functions and members | click **outline** at the end of the tab bar; type to filter, click a name to go there. Each Code tile remembers whether its outline is open |
+| Go to where a name is defined | Ctrl+click it (⌘+click on a Mac), or put the cursor on it and press F12. A definition in another file opens in its own tab at its line |
+| List every place a name is used | Shift+F12 on it; click a line to go there, Esc closes the list |
+| See its type and doc comment | point at it |
+
+The outline follows your typing: it is read from the text you are editing, a moment after you stop. The fast answer shows first and the compiler's replaces it when it comes; moving the cursor drops a lookup still under way.
+
+## How sure an answer is
+
+Each answer says where it came from:
+
+| Accuracy | From | Means |
+|---|---|---|
+| `compiler` | the language's own language server | what the compiler sees |
+| `syntax` | the file's text alone | fast and always there, but a name is matched by its spelling |
+
+TypeScript's server loads every project (`tsconfig.json`) of the workspace, up to 60, a few seconds after its first answer. Until it has, or when there are more, a `compiler` answer says which part it covers (`partial`), and the places the text search found that it did not are listed below it, never dropped.
+
+A person you shared the workspace with gets `syntax` answers only: their questions never start a program on your computer.
+
+The outline is always `syntax` and comes first. Definition, usages and type come from a language server when one runs for the language, and from the text when none does.
+
+## Language servers
+
+Hivemind starts a language server the first time you ask about a language in a workspace, and finds it:
+
+| Language | Server it uses |
+|---|---|
+| TypeScript, JavaScript | the workspace's own TypeScript 7 (`typescript` in its `node_modules`), else `tsgo` or `typescript-language-server` on your PATH |
+| Python | `pyright-langserver`, `basedpyright-langserver` or `pylsp` on your PATH |
+| Rust | `rust-analyzer` |
+| Go | `gopls` |
+| Java | `jdtls` |
+
+At most 4 run at once, and each stops after 10 minutes without a question. They run in a helper process beside the app, on the computer that holds the files, so a slow answer never freezes a window. Install a server to get `compiler` answers for its language.
+
+## From an agent or a script
+
+`hive ctl code outline|definition|usages|hover <file>[:line[:col]]`: see [hive ctl](/cli#hive-ctl-agents-and-tiles).
+
+<LastValidated />

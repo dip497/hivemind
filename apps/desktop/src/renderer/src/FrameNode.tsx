@@ -7,7 +7,7 @@
  * move tiles inside (use react-flow `parentId` later for strong containment).
  */
 import { useEffect, useState } from "react";
-import { GitBranch, FolderGit, Server, Ellipsis } from "./components/icons";
+import { GitBranch, FolderGit, Server, Ellipsis, PanelsTopLeft } from "./components/icons";
 import { Button } from "./components/ui/button";
 import { subscribeStatus } from "./agent-status-bus";
 import { exitFailed, groupLook, LOOKS, StatusGlyph, statusLook, type StatusLook } from "./workspace/status-look";
@@ -45,6 +45,10 @@ export interface FrameNodeData {
   /** Terminal tile ids inside this frame — Canvas precomputes via position
    *  overlap. Drives the header chip strip so renames inside surface here. */
   tileIds?: string[];
+  /** A page: a stop on the path while inside it; marked in its title. */
+  page?: boolean;
+  /** Go inside the frame: the camera fits it and what is outside dims. */
+  onEnter?: (id: string) => void;
 }
 
 export function FrameNode({ id, data, selected }: { id: string; data: FrameNodeData; selected: boolean }) {
@@ -130,8 +134,11 @@ export function FrameNode({ id, data, selected }: { id: string; data: FrameNodeD
         data-frame-label
         style={{ pointerEvents: "auto" }}
         onPointerDown={() => data.onBringToFront(data.id)}
+        onDoubleClick={(e) => { if (!editing && e.target === e.currentTarget) data.onEnter?.(data.id); }}
       >
-        <span aria-hidden className="size-2 shrink-0 rounded-full" style={{ background: data.color }} />
+        {data.page
+          ? <PanelsTopLeft aria-label="Page" size={12} className="shrink-0" style={{ color: data.color }} data-frame-page-mark />
+          : <span aria-hidden className="size-2 shrink-0 rounded-full" style={{ background: data.color }} />}
         {editing ? (
           <input
             autoFocus
@@ -156,11 +163,12 @@ export function FrameNode({ id, data, selected }: { id: string; data: FrameNodeD
         ) : (
           <button
             onDoubleClick={() => {
+              if (data.page) { data.onEnter?.(data.id); return; }
               setDraft(data.title);
               setEditing(true);
             }}
             className="min-w-0 flex-1 text-left text-label font-semibold text-[var(--color-fg)] truncate"
-            title="Double-click to rename"
+            title={data.page ? "Double-click to go inside" : "Double-click to rename"}
           >
             {data.title}
           </button>
@@ -249,7 +257,7 @@ export function FrameNode({ id, data, selected }: { id: string; data: FrameNodeD
         </Button>
       </div>
       {menu && (
-        <FrameMenu frame={{ id: data.id, title: data.title, parentFrameId: data.parentFrameId, path: data.workspacePath, remote: isRemoteWs }}
+        <FrameMenu frame={{ id: data.id, title: data.title, parentFrameId: data.parentFrameId, path: data.workspacePath, remote: isRemoteWs, ...(data.page ? { page: true } : {}) }}
           at={menu} actions={data.actions} arrange onClose={() => setMenu(null)}
           onRename={() => { setDraft(data.title); setEditing(true); }} />
       )}

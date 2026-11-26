@@ -118,8 +118,8 @@ function register(pkg: ToolPackage, off: Set<string>): void {
     data: (t, s, h) => ({
       pkg, tileId: t.id, kind: t.kind, name: h.tileNames[t.id] ?? t.label ?? t.kind, frameId: s.frameId,
       repoPath: s.repoPath, cwd: s.cwd, root: s.root, glyph: pkg.tiles[t.kind]?.glyph, onClose: s.onClose, ...s.pin,
-      openUrl: (u) => h.openUrlInBrowser(t.id, u),
-      openFile: (f) => h.openFileFromTile(t.id, s.repoPath && !f.startsWith("/") ? `${s.repoPath}/${f}` : f),
+      openUrl: (u) => h.openThing(t.id, u),
+      openFile: (f, at) => h.openThing(t.id, `${f}${at?.line ? `:${at.line}${at.col ? `:${at.col}` : ""}` : ""}`, s.repoPath ?? undefined),
     }),
     lazy: true,
     body,

@@ -119,7 +119,7 @@ resolves automatically.
 - \`hive ctl add-comment <id> "…"\` · \`hive ctl mark-acceptance <id> <index>\` (0-based; \`--undone\` reopens)
 - \`hive update <id> --title … --assignee claude --assignee-type agent\` · \`hive new "Title" --parent <id>\`
 - \`hive ctl delete-issue <id>\` — destructive; only on an explicit ask.
-- \`hive ctl notes list --json\` · \`hive ctl notes show <id>\` — notes the person left on a page in a Browser tile; answer with \`hive ctl notes seen|done --summary …|dismiss --reason …|reply <id> "…"\`. Prove it with \`--attach <file>\` on \`done\` (a video or image). Comments on a diff: \`hive review list|show|resolve\`.
+- \`hive ctl notes list --json\` · \`hive ctl notes show <id>\` — notes the person left on a page in a Browser tile or pinned on the board; answer with \`hive ctl notes seen|done --summary …|dismiss --reason …|reply <id> "…"\`. Prove it with \`--attach <file>\` on \`done\` (a video or image). Comments on a diff, or on code in the editor (\`@file#L5-10\`): \`hive review list|show|reply|resolve\`; \`hive review list --on code --json\` says where each one's lines are now.
 - \`hive ctl browser sign-in <name>\` · \`hive ctl browser ask "Please sign in"\` — sign in on a Browser tile: the person answers on the tile and the password never reaches you. Never type a password yourself.
 - \`hive ctl notes add --selector "<css>" --body "…" [--intent fix|change|question] [--attach <file>] --json\` — you found a problem on a page in a Browser tile: leave a note the person sees as a pin on it (\`--area x,y,w,h\` for what no selector names; \`--tile\` for a Browser tile outside your frame).
 
@@ -252,6 +252,23 @@ A frame on a folder of another machine (a saved one, or another of the person's 
 
 **Talking to another tile:** an agent in another tile is reached with \`hive ctl send\`, \`hive ctl report\`, \`hive ctl inbox\` and \`hive ctl read\`, whatever agent runs in it.
 
+## Draw on the board
+To show the person how something fits together, draw it next to your tile. Say what connects to what, and it is placed for you:
+\`\`\`bash
+echo '{"title":"Login flow","boxes":[{"id":"web","text":"Web app"},{"id":"api","text":"API","color":"blue"}],"links":[["web","api","login"],["api","me","writes this"]]}' | hive ctl draw --json
+# → {"drawing":"drawing-…","boxes":{"web":"shape-…"},"box":{…},"overlaps":[],"problems":[]}
+printf 'direction down\\nweb[Web app] --> api{Signed in?}: login\\napi -.-> db((Database))\\n' | hive ctl draw --text - --json   # or as flowchart text
+hive ctl board --check --json                                    # what is wrong on the top level, each with a fix; exit 10 when something is
+hive ctl board move <id> --to 400,200 --json                     # fix one thing: also \`board style <ids> --color red --dash dashed\`, \`board connect <from> <to> --label "…"\`
+hive ctl board undo --json                                       # take back your own last change; \`board redo\` puts it back
+hive ctl board --png /tmp/board.png --drawing <drawing> --json   # look at what you drew
+hive ctl board --drawing <drawing> --as text > d.txt             # edit it, then change it in place:
+hive ctl draw --update <drawing> --text d.txt --json             # what you keep stays where the person put it
+hive ctl erase --drawing <drawing> --json
+\`\`\`
+A big system goes in pages, one page per part, so each part reads on its own: \`hive ctl page new "Payments" --json\` makes one (\`--in <page>\` nests it), \`hive ctl draw --page <page>\` draws inside it, and \`hive ctl page list --json\` lists them. \`--page\` also goes on \`board\`, \`board --check\` and \`board --png\` to keep to what is inside one page; without it they read the whole canvas. \`board lock|unlock|front|back <ids>\`, \`board align <ids> --how left\` and \`board duplicate <ids>\` do what the person's buttons do.
+A link may end on a tile, a frame or anything on the board (\`hive ctl board --json\` lists them); \`me\` is your own tile. Every draw answers with \`problems\` (boxes on each other, words that do not fit, an arrow that ends on nothing, a box too small to read), each with \`say\` and \`fix\`: act on them before you tell the person to look. A box's \`form\` is rect, ellipse, diamond, triangle, hexagon, cylinder, cloud, star or parallelogram, and it takes \`dash\` (solid, dashed, dotted), \`weight\` (thin, medium, thick) and \`rough\` (hand-drawn); a link written \`{from, to, label, route, dash, tail}\` takes \`route\` straight, elbow or curve. \`shapes\` take any of those forms, text, line or pen, with their own places. \`hive ctl pin "…" --on <id>\` points at something for the person; \`hive ctl notes\` lists and answers what they pinned for you.
+
 ## Spawn a worker into a frame
 \`\`\`bash
 hive ctl spawn --agent claude --name "auth tests" --frame my-repo \\
@@ -269,9 +286,35 @@ hive ctl rename <tileId> "billing review"           # the name every surface sho
 ## Your inbox
 What other agents send you (a worker's reply or report, that it waits on an answer, an approval it asks) waits in your inbox. Your terminal is only told \`[hive] Your agents sent you messages. Read them: hive ctl inbox\`, when you are at your prompt; nothing an agent wrote is ever typed into it.
 \`\`\`bash
-hive ctl inbox --json              # → {"messages":[{"id","from","name","kind":"reply"|"report"|"waiting"|"approval","turn","text"},…],"dropped":0}; read once
+hive ctl inbox --json              # → {"messages":[{"id","from","name","kind":"reply"|"report"|"waiting"|"approval"|"post"|"mention","turn","channel","text"},…],"dropped":0}; read once
 hive ctl inbox --wait 90s --json   # block until one arrives
 \`\`\`
+
+## Ask and get the answer in one call
+\`\`\`bash
+hive ctl ask <tileId> "Which port does the dev server use?" --timeout 90s --json
+# sends, waits for that agent's turn to end, prints its reply. Exit 4: no answer in time; 5: it closed; 8: it waits on someone; 9: asleep
+\`\`\`
+
+## Channels: talk to several agents at once
+A channel is a name agents follow. A post goes to the inbox of every follower (kind \`post\`); \`@name\` in the text reaches that agent even if it does not follow this channel (kind \`mention\`). Use the name \`hive ctl agents\` shows, spaces written as dashes.
+\`\`\`bash
+hive ctl follow decisions --json                 # posts to #decisions now come to your inbox
+hive ctl post decisions "API errors use {code,message}. @billing-review change yours." --json
+# → {"posted":true,"channel":"decisions","to":[{"tile","name"}],"mentioned":[…],"unknownMentions":[]}; posting follows the channel
+hive ctl channels --json                         # what you follow, and who else does
+hive ctl unfollow decisions --json
+\`\`\`
+Post what others must know (a decision, an interface you changed, a blocker), not progress. A name in \`unknownMentions\` follows no channel yet: reach it with \`hive ctl send\`.
+
+## File claims: do not edit a file another agent is editing
+\`\`\`bash
+hive ctl claim src/auth.ts src/auth.test.ts --note "token expiry fix" --json   # all or none
+# exit 7 CLAIMED when another agent holds one: the error says who, and its fix line how to ask
+hive ctl release src/auth.ts --json              # no path: everything you hold
+hive ctl claims --json                           # every claim and its holder
+\`\`\`
+Claim before the first edit when other agents work in the same folder; release when done. A claim ends when its agent closes or sleeps. A claim stops no write: it only tells agents who has what.
 
 ## Send a task
 \`\`\`bash
@@ -342,6 +385,8 @@ Ids from other registered repos resolve automatically.
 
 ## Also
 \`hive ctl focus <tileId>\` · \`hive ctl close <tileId>\` · \`hive ctl keys <tileId> Down,Enter\` (drive a TUI) ·
+\`hive ctl open src/a.ts:12\` (show the person a file at a line, a page or a picture, where their click would) ·
+\`hive ctl code usages src/a.ts:12:5 --json\` (every usage of a name before you change it; also \`outline\`, \`definition\`, \`hover\`; \`accuracy: syntax\` means matched by spelling, check each; with \`partial\`, also check \`also\`) ·
 \`hive ctl open-review --file plan.md\` (opens a review tile, blocks until the human decides) ·
 \`hive ctl stream <tileId> --json\` (NDJSON: what it prints from now on, until it ends; \`--lines N\` prints the last N lines first).
 

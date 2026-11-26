@@ -179,4 +179,14 @@ its kind. Only the person changes them: an agent is refused.
 | `browserApp.names` | none | other host names a browser may use, such as your Tailscale name |
 | `quit.whenRunning` | `ask` | what quitting does while terminals or agents run here: `ask`, `keep-running` or `stop-everything` |
 
+## links
+
+Where a clicked link or path opens: see [Open links and files](/open-links).
+
+| Path | Default | Means |
+|---|---|---|
+| `links.web` | `system` | a web page opens in your browser (`system`) or a Browser tile (`tile`); one on this computer always in a tile |
+| `links.files` | `code` | a file opens in the Code tile (`code`) or your system's app (`system`); pictures always in the Image tile |
+| `links.allowedSchemes` | none | other kinds of link that go to your system without asking, such as `["vscode"]`; never `javascript`, `data` or `file` |
+
 <LastValidated />

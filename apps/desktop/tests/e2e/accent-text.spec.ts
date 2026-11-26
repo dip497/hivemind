@@ -6,6 +6,7 @@
 // once was (The One Voice Rule).
 import { test, expect, type Page } from "@playwright/test";
 import { launchWindow, type AppWindow } from "./helpers/window";
+import { stopDaemons } from "./helpers/daemons";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs/promises";
 import os from "node:os";
@@ -14,6 +15,8 @@ import path from "node:path";
 let app: AppWindow;
 let page: Page;
 let repo: string;
+/** Its own settings: the accent and the Layers filter it picks stay out of the specs after it. */
+let config: string;
 /** A violet that reads 3:1 on Signal's page and panels, as a mark must, and under 4.5:1. */
 const ACCENT = { brand: "#7c6aa8", accent: "#a493cf" };
 
@@ -30,7 +33,8 @@ test.beforeAll(async () => {
   git("commit", "-q", "-m", "seed");
   git("mv", "old.ts", "renamed.ts");
   await fs.writeFile(path.join(repo, "edited.ts"), "export const y = 2;\n", "utf8");
-  app = await launchWindow({ cwd: repo, args: [`--user-data-dir=/tmp/hm-accent-text-ud-${Date.now()}`] });
+  config = await fs.mkdtemp(path.join(os.tmpdir(), "hm-accent-text-config-"));
+  app = await launchWindow({ cwd: repo, env: { ...process.env, XDG_CONFIG_HOME: config }, args: [`--user-data-dir=/tmp/hm-accent-text-ud-${Date.now()}`] });
   page = app.page;
   await page.waitForSelector(".react-flow", { timeout: 15_000 });
   await page.evaluate((a) => window.hive.settingsSet("appearanceExtra.accent", a), ACCENT);
@@ -39,7 +43,9 @@ test.beforeAll(async () => {
 
 test.afterAll(async () => {
   await app?.close();
+  stopDaemons(config);
   await fs.rm(repo, { recursive: true, force: true }).catch(() => {});
+  await fs.rm(config, { recursive: true, force: true }).catch(() => {});
 });
 
 /** Visible text, shadow roots included, drawn in one of `tokens`, with the words it says. */

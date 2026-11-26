@@ -7,7 +7,7 @@ import init, { Device, type Host, Homes, Term, type ViewSession, connectWith, de
 import type { Filter } from "./home.js";
 import type { Account, Computer } from "./accounts.js";
 import { deviceKey, get } from "./store.js";
-import type { Agent, BrowserAsk, EarlierPage, Folders, Held, HeldLook, Offered, Others, Overview, PageNote, Paired, Photo, Piece, Places, Reply, Screen, Sent, SentFile, Shown, SlashCommand, Start, Unfolded, ViewFile } from "./types.js";
+import type { Agent, BrowserAsk, Drawing, EarlierPage, Folders, Held, HeldLook, Offered, Others, Overview, PageNote, Paired, Photo, Piece, Places, Reply, Screen, Sent, SentFile, Shown, SlashCommand, Start, Unfolded, ViewFile } from "./types.js";
 import { message } from "./words.js";
 
 /** What connecting shows, step by step (pair.ts). */
@@ -389,6 +389,14 @@ export class Phone {
 
   answerBrowserAsk(agent: Agent, ask: number, answer: "yes" | "always" | "no" | "done"): Promise<boolean> {
     return this.on(agent.device).answerBrowserAsk(agent.workspace, ask, answer);
+  }
+
+  drawings(agent: Agent): Promise<Drawing[]> {
+    return this.on(agent.device).drawings(agent.workspace) as Promise<Drawing[]>;
+  }
+
+  drawingPicture(agent: Agent, id: string | null, theme: "dark" | "light"): Promise<string> {
+    return this.on(agent.device).drawingPicture(agent.workspace, id ?? undefined, theme);
   }
 
   async notes(agent: Agent): Promise<PageNote[]> {

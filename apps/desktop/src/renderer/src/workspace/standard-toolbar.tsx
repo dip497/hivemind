@@ -11,6 +11,8 @@ import { AppControls } from "./app-controls";
 import { openAdd } from "./add-dialog";
 import { actionKey } from "../shortcut";
 import { useShown } from "../multiplayer/shown";
+import { PagePath } from "../PagePath";
+import { drawButtonSlot, drawRowSlot } from "./chrome-store";
 
 export interface StandardToolbarProps {
   actions: readonly ToolbarAction[];
@@ -45,23 +47,29 @@ export function StandardToolbar(props: StandardToolbarProps) {
   const callbacks: Record<Exclude<ToolbarActionId, "agent" | "board">, () => void> = {
     frame: onFrame, browser: onBrowser, theme: onTheme,
   };
-  return <div role="group" aria-label="Workspace tools" className={`hm-island flex max-w-[calc(100vw-32px)] flex-wrap items-center justify-center gap-0.5 ${compact ? "p-1" : "p-1.5"}`} data-tool-island>
-    {actions.map((action) => {
-      if (action.id === "agent") return <AgentAction key={action.id} {...props} action={action} />;
-      if (action.id === "board") return props.canAdd ? <ActionButton key={action.id} action={action} labels={labels} onClick={() => openAdd()} icon={<AddWidget />} /> : null;
-      const Icon = icons[action.id];
-      return <ActionButton key={action.id} action={action} labels={labels} onClick={callbacks[action.id]} icon={<Icon />} />;
-    })}
-    <ViewSwitch compact={compact} />
-    {/* One action, whichever is left to do: download it, or restart into what is downloaded. */}
-    {(props.updateAvailable || props.updateStaged) && <Button variant="ghost" size="sm" className="ml-1"
-      onClick={props.updateStaged && !props.upgrading ? props.onRestart : props.onUpgrade}
-      disabled={props.upgrading} aria-busy={props.upgrading}
-      title={props.upgrading ? "Downloading the update…" : props.updateStaged ? "Downloaded — restart to finish" : "Update available — click to download it"}>
-      {props.upgrading ? <Spinner className="animate-spin" /> : props.updateStaged ? <RotateCw /> : <Upload />}
-      {props.upgrading ? "Updating…" : props.updateStaged ? "Restart to finish" : "Update available"}
-    </Button>}
-    <AppControls />
+  // Two rows, the second the canvas's drawing tools while they are out; the island is as wide as the wider.
+  return <div role="group" aria-label="Workspace tools" className={`hm-island flex max-w-[calc(100vw-32px)] flex-col items-center ${compact ? "p-1" : "p-1.5"}`} data-tool-island>
+    <div className="flex max-w-full flex-wrap items-center justify-center gap-0.5">
+      <PagePath />
+      {actions.map((action) => {
+        if (action.id === "agent") return <AgentAction key={action.id} {...props} action={action} />;
+        if (action.id === "board") return props.canAdd ? <ActionButton key={action.id} action={action} labels={labels} onClick={() => openAdd()} icon={<AddWidget />} /> : null;
+        const Icon = icons[action.id];
+        return <ActionButton key={action.id} action={action} labels={labels} onClick={callbacks[action.id]} icon={<Icon />} />;
+      })}
+      <ViewSwitch compact={compact} />
+      {/* One action, whichever is left to do: download it, or restart into what is downloaded. */}
+      {(props.updateAvailable || props.updateStaged) && <Button variant="ghost" size="sm" className="ml-1"
+        onClick={props.updateStaged && !props.upgrading ? props.onRestart : props.onUpgrade}
+        disabled={props.upgrading} aria-busy={props.upgrading}
+        title={props.upgrading ? "Downloading the update…" : props.updateStaged ? "Downloaded — restart to finish" : "Update available — click to download it"}>
+        {props.upgrading ? <Spinner className="animate-spin" /> : props.updateStaged ? <RotateCw /> : <Upload />}
+        {props.upgrading ? "Updating…" : props.updateStaged ? "Restart to finish" : "Update available"}
+      </Button>}
+      <span ref={drawButtonSlot} className="contents" />
+      <AppControls />
+    </div>
+    <div ref={drawRowSlot} className="contents" />
   </div>;
 }
 

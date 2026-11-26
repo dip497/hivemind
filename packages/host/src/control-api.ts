@@ -22,7 +22,7 @@ import type { ControlWork } from "./control/methods.js";
 type Method =
   | "browser.signIns" | "browser.ask" | "browser.signIn" | "browser.askState" | "browser.asks" | "browser.answer"
   | "agent.send" | "agent.rename" | "agent.keys" | "agent.read" | "agent.output" | "agent.sessions" | "agent.sleep" | "agent.wake" | "tool.open" | "link.connect" | "link.disconnect"
-  | "view.emit" | "plugin.list" | "plugin.commands" | "plugin.open" | "plugin.call" | "plugin.close" | "tile.focus" | "tile.look" | "page.note"
+  | "view.emit" | "plugin.list" | "plugin.commands" | "plugin.open" | "plugin.call" | "plugin.close" | "tile.focus" | "tile.look" | "page.note" | "opener.open"
   | "views.rescan" | "agents.rescan" | "widgets.rescan" | "tools.rescan" | "settings.reload" | "host.status" | "host.join" | "host.add";
 
 /** What an agent asks of the person on a Browser tile; there are none where no window holds one. */
@@ -149,6 +149,8 @@ export function controlApi(o: ControlApiOptions): Domain<Method> {
       "plugin.call": async (_from, plugin, command, args, tile) => (await o.control()).pluginCall(plugin, command, args, tile),
       "plugin.close": async (_from, instance, plugin) => (await o.control()).pluginClose(text(instance, "instance"), plugin != null ? text(plugin, "plugin") : undefined),
       "tile.focus": done((w, tile) => w.focus(text(tile, "tile"))),
+      // An agent opens where it is; the person names the tile, or the window picks.
+      "opener.open": async (from, thing, tile) => (await o.control()).open(text(thing, "thing"), callerOf(from) ?? optional(tile, "tile") ?? undefined),
       "tile.look": async (_from, tile) => (await o.control()).look(text(tile, "tile")),
       "page.note": async (from, tile, note) => {
         const asked = pageNoteAsked(note);
@@ -177,6 +179,7 @@ export function controlApi(o: ControlApiOptions): Domain<Method> {
       "plugin.call": (plugin, command) => ({ target: named(plugin) && `${plugin as string}:${named(command) ?? ""}` }),
       "plugin.close": (instance) => ({ target: named(instance) }),
       "page.note": (tile) => ({ target: tileOf(tile) }),
+      "opener.open": (thing) => ({ target: named(thing) }),
       "views.rescan": () => ({}),
       "agents.rescan": () => ({}),
       "widgets.rescan": () => ({}),

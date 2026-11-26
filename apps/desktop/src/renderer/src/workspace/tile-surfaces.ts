@@ -76,7 +76,7 @@ export function createTileSurfaceBuilder(): (ctx: TileSurfaceCtx) => TileSurface
         owner?.worktreePath, owner?.workspacePath, owner?.workspaceRoot,
         ctx.pinnedIds.has(tile.id), ctx.editorTabs[tile.id],
         ctx.browserOpenReqs[tile.id], ctx.tileNames[tile.id], ctx.agentTitles[tile.id],
-        ctx.openFileInTile, ctx.openUrlInBrowser, ctx.openFileFromTile,
+        ctx.openFileInTile, ctx.openUrlInBrowser, ctx.openThing, ctx.openFileFromTile,
         ctx.closeTabInTile, ctx.closeTile, ctx.renameTile, ctx.onTogglePin, ctx.sleepTile, ctx.wakeTile,
         ctx.historyReqs[tile.id], ctx.showHistory, ctx.editorReveals[tile.id],
       ];

@@ -3,6 +3,8 @@ import { EditorSkeleton, RowsSkeleton } from "../workspace/tile-skeletons";
 import type { TilePlugin, PinRect, TileKindSpec, TileBodyArgs, HistoryRequest, EditorReveal } from "./api";
 
 export type WorkbenchTileData = {
+  /** The tile, and the frame it is in: where its unsaved work is reported and its questions go from. */
+  tileId: string;
   repoPath: string;
   tabs: string[];
   onOpenFile: (path: string) => void;
@@ -33,6 +35,7 @@ export const codeTile: TilePlugin<WorkbenchTileData> = {
     workbench: { ...CODE, title: undefined, sameAs: "editor" },
   },
   data: (t, s, h) => s.repoPath === null ? null : {
+    tileId: t.id,
     repoPath: s.repoPath,
     tabs: h.editorTabs[t.id] ?? [],
     onOpenFile: (file: string) => h.openFileInTile(t.id, file),

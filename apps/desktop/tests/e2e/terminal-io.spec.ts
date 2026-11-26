@@ -71,9 +71,14 @@ test("a path or address a terminal shows opens on Ctrl+click only: a plain click
   const term = page.locator(".react-flow__node-terminal").last();
   const screen = term.locator(".xterm-screen");
   await screen.click();
-  // An address goes to the system's browser: here, it is only written down.
+  // An address on the web goes to the system's browser (links.web's default): here, it is only written
+  // down, by the app's main process or, in a browser tab, by the page.
+  await app.app.evaluate(({ shell }) => { const g = globalThis as unknown as { opened: string[] }; g.opened = []; shell.openExternal = async (u: string) => { g.opened.push(u); }; });
   await page.evaluate(() => { const w = window as unknown as { __opened: string[] }; w.__opened = []; window.open = ((u: string) => { w.__opened.push(String(u)); return null; }) as typeof window.open; });
-  const opened = () => page.evaluate(() => (window as unknown as { __opened: string[] }).__opened);
+  const opened = async () => [
+    ...await app.app.evaluate(() => (globalThis as unknown as { opened: string[] }).opened),
+    ...await page.evaluate(() => (window as unknown as { __opened: string[] }).__opened),
+  ];
   const text = () => term.evaluate((el) => ([el, ...el.querySelectorAll("*")].find((e) => "__hmScreen" in e) as (Element & { __hmScreen(): string }) | undefined)?.__hmScreen() ?? "");
   /** `run` cleared the terminal and printed `shows` alone on its first row. */
   const printed = (run: string, shows: string) => expect.poll(async () => {
@@ -94,14 +99,27 @@ test("a path or address a terminal shows opens on Ctrl+click only: a plain click
     await page.mouse.click(onIt.x, onIt.y);
     await page.keyboard.up("Control");
     await expect.poll(done, { message: `${what}: Ctrl+click` }).toBe(true);
-    await screen.click({ position: { x: box.width - 10, y: box.height - 10 } });
+    // A file opened flies the canvas to its Code tile: back to the terminal, as its notification's click goes.
+    await page.evaluate((t) => window.dispatchEvent(new CustomEvent("hivemind:focus-tile", { detail: t })), await term.getAttribute("data-id"));
+    await expect.poll(async () => { const b = (await screen.boundingBox())!; await page.waitForTimeout(100); const a = (await screen.boundingBox())!; return a.x === b.x && a.y === b.y; }).toBe(true);
+    await screen.click({ position: { x: (await screen.boundingBox())!.width - 10, y: (await screen.boundingBox())!.height - 10 } });
   };
   const code = page.locator(".react-flow__node-editor, .react-flow__node-workbench");
   await printed("echo ./notes.ts", "./notes.ts");
   await follows("a path", async () => (await code.count()) === 1);
-  await printed("echo http://127.0.0.1:9/text", "http://127.0.0.1:9/text");
-  await follows("an address", async () => (await opened()).includes("http://127.0.0.1:9/text"));
+  await printed("echo https://example.invalid/text", "https://example.invalid/text");
+  await follows("an address", async () => (await opened()).includes("https://example.invalid/text"));
   // A link a program prints as one (OSC 8), under text of its own.
-  await printed(String.raw`printf '\e]8;;http://127.0.0.1:9/osc\e\\osc-link\e]8;;\e\\\n'`, "osc-link");
-  await follows("a link printed as one", async () => (await opened()).includes("http://127.0.0.1:9/osc"));
+  await printed(String.raw`printf '\e]8;;https://example.invalid/osc\e\\osc-link\e]8;;\e\\\n'`, "osc-link");
+  await follows("a link printed as one", async () => (await opened()).includes("https://example.invalid/osc"));
+  // A page on this computer opens in a Browser tile, never the system's browser.
+  const browserTile = (on: boolean) => page.evaluate((e) => window.hive.settingsSet("plugins.state.tool:@hivemind/web", { enabled: e }), on);
+  await browserTile(true);
+  try {
+    await printed("echo http://127.0.0.1:9/text", "http://127.0.0.1:9/text");
+    await follows("a local address", async () => (await page.locator(".react-flow__node-browser").count()) === 1);
+    expect(await opened()).not.toContain("http://127.0.0.1:9/text");
+  } finally {
+    await browserTile(false);
+  }
 });

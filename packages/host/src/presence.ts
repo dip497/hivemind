@@ -12,8 +12,8 @@ import { PresenceHub, presenceOf } from "@hivemind/workspace-host/presence";
 /** Everyone in a workspace is told who is there at most this often. */
 export const PRESENCE_EVERY_MS = 50;
 
-export function presence(server: () => WorkspaceServer, me: () => string): Domain<never, "presence.set"> {
-  const hub = new PresenceHub();
+/** `hub`: who is where, shared with what else asks (the board's selection). */
+export function presence(server: () => WorkspaceServer, me: () => string, hub = new PresenceHub()): Domain<never, "presence.set"> {
   const ids = new WeakMap<Connection, string>();
   let made = 0;
   const idOf = (c: Connection): string => {

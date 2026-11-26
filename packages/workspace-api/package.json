@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@hivemind/agent-host": "workspace:*",
+    "@hivemind/code-intel": "workspace:*",
     "@hivemind/core": "workspace:*",
     "@hivemind/view-sdk": "workspace:*",
     "@hivemind/workspace-doc": "workspace:*",

@@ -1,4 +1,4 @@
-# Workspace API (0.41)
+# Workspace API (0.43)
 
 What a workspace's host is asked for, and what it answers. The host is the machine the
 workspace's repo is on; today its callers are the app's windows (in the app, or in a browser tab it serves), peers on
@@ -67,7 +67,7 @@ and not read (a program that stopped reading) is closed.
 The first line says who connects: `{"hello": {"token", "workspace"?}}`.
 
 - **The install's token** (`hcp.token`) is the person at this machine. The host answers
-  `{"hello": {"api": "0.41", "as": "person"}}` and serves every method, as to a window of theirs.
+  `{"hello": {"api": "0.43", "as": "person"}}` and serves every method, as to a window of theirs.
 - **A grant's token** is a program the person let drive workspaces (`grant.create`), or a tool
   plugin's service, whose grant is made when it starts and taken back when it stops (`plugin` in
   `grant.list` names the plugin). It names one of the grant's workspaces by its folder, which may
@@ -107,9 +107,13 @@ after a minute without it, and never what was typed.
 
 A peer names the workspace by its id, `hive://<workspaceId>`, wherever a call takes a repo (or a
 `cwd` inside it); the host reads that as its repo. A guest's call or notice about a workspace
-(`store.*`, `git.*`, `worktree.*`, `file.*`, `issue.*`, `review.*`, `people.*`,
-`presence.set`, `agent.startable`, `agent.start`, `agent.sessions`, `tool.open`, `frame.*`, and `view.open`, whose second param names it) names this one, or a place in it, and nothing else on the host: another folder, a
-path out of it (`..`), another workspace or a machine is `FORBIDDEN` (a notice is dropped). A
+(`store.*`, `git.*`, `worktree.*`, `file.*`, `issue.*`, `review.*`, `people.*`, `board.*`,
+`presence.set`, `agent.startable`, `agent.start`, `agent.sessions`, `tool.open`, `frame.*`, the code
+questions (`code.findFiles`, `code.picked`, `code.grep`, `code.outline`, `code.definition`,
+`code.usages`, `code.hover`, 0.43), `page.list`, `page.new`, `page.open`, and `view.open`, whose second param names it) names this one, or a place in it, and nothing else on the host: another folder, a
+path out of it (`..`), another workspace or a machine is `FORBIDDEN` (a notice is dropped). The
+board is the workspace's whole: `board.*` and `page.*`, like `agent.sleep` and `agent.wake`, name
+the workspace itself, and a folder in it is `FORBIDDEN` (0.43). A
 place in it is its repo or the worktree of one of its frames, wherever git put it (0.20). The
 person's own devices are the owner, there as here. What the host answers of every agent it runs
 (`status.all`, `link.list`) a peer is answered for the workspace's own agents alone, as it hears
@@ -191,6 +195,8 @@ sends, and one participant per device.
   empty, a state from the list, a positive `github` number, …); a field the method does not name
   is dropped. An issue id is `PREFIX-N` or a sub-issue's `PREFIX-N.M`.
 - Review comments are saved as a list; anything else would replace every comment with none.
+- A code question (`code.outline`, `code.definition`, `code.usages`, `code.hover`) without the
+  editor's `text` reads the file from disk: one over 5 MB is `FILE_TOO_BIG`, as `file.read` (0.43).
 
 ## Methods
 
@@ -210,6 +216,11 @@ sends, and one participant per device.
 | `code.findFiles` | `repo`, `query`, `limit`? | `{files: [{path, git?}], engine}` (0.40): files by a fuzzy name, best first (`limit` 1 to 500, 50 if left out); `git` is the file's git status where it is not clean; `engine` is `fff`, or `git` where fff cannot load (the `hive` binary, a repo on another machine) | read |
 | `code.picked` | `repo`, `query`, `file` | `null` (0.40): the person opened `file` for `query`, so it ranks higher for that query next time | read |
 | `code.grep` | `repo`, `query`, `{mode?, cursor?, caseSensitive?}`? | `{lines: [{path, line, col, text, ranges}], next, files, engine, note?}` (0.40): lines holding `query` (1 to 1000 characters), 200 a page; `mode` is `plain` (the default), `regex` or `fuzzy`; `ranges` are the matched columns of `text`; `next` is the `cursor` of the page after, `null` on the last; `note` says why a `regex` query fff could not read was searched as plain text. fff searches the files used most first and stops a page at 1.5 s, so a page can hold fewer than 200 lines and still have a `next` | read |
+| `code.outline` | `repo`, `file`, `{text?, version?}`? | `{question, value: [{name, kind, span, nameAt, children}], accuracy, version, by}` or `null` (0.43): the file's classes, functions and their members from tree-sitter (`accuracy` `syntax`); `line` counts from 1, `col` from 0; `text` asks about the editor's unsaved text, `version` is the caller's own count, given back | read |
+| `code.definition` | `repo`, `file`, `{line, col}`, `{text?, version?}`? | `{question, value: [{file, span, text?}], accuracy, version, by}` or `null` (0.43): where the symbol at that place is defined, from the language server on this machine (`compiler`), else from the file's own outline (`syntax`); a file on another machine is refused `UNSUPPORTED` | read |
+| `code.usages` | `repo`, `file`, `{line, col}`, `{text?, version?}`? | as `code.definition`, with `partial?` and `also?` (0.43): every usage, its definition included, from the language server, else every place the word is written as a whole word (`syntax`, the first page of a `code.grep`); `partial` says what a compiler answer covered when less than the workspace, and `also` holds the text places it lacks | read |
+| `code.hover` | `repo`, `file`, `{line, col}`, `{text?, version?}`? | `{question, value: {text, span?}, accuracy, version, by}` or `null` (0.43): what the language server says of the symbol, as markdown | read |
+| `code.cancel` (notice) | `ask` | (0.43) takes back the code question the caller asked with `opts.ask`: it answers `null`. With `opts.ask`, every code method also sends the asker `code.answered(ask, answer)` for each answer better than the last, the fastest first; a guest (a peer without the `owner` access, not on this machine) gets `syntax` answers only, so their questions never start a language server | read |
 | `git.stage` | `repo`, `files` | `null` | target `repo`, detail `N files` |
 | `git.unstage` | `repo`, `files` | `null` | target `repo`, detail `N files` |
 | `git.discard` | `repo`, `files` | `null` (a tracked file goes back to HEAD, an untracked one is removed) | target `repo`, detail `N files` |
@@ -226,8 +237,10 @@ sends, and one participant per device.
 | `worktree.remove` | `repo`, `worktree`, `force`? | `null` | target the worktree |
 | `worktree.prune` | `repo` | `{removed}` | target `repo` |
 
-| `file.read` | `repo`, `file` | the file's text | read |
+| `file.read` | `repo`, `file` | the file's text; a binary file (a NUL in its first 8 KB) is `UNSUPPORTED` and one over 5 MB is `FILE_TOO_BIG` (0.43), so neither is ever edited as text | read |
 | `file.write` | `repo`, `file`, `contents` | `null` | target the file |
+| `file.stat` | `repo`, `file` | `{kind, size}` (`kind` `file` or `folder`) or `null` when nothing is there (0.43); on this computer only | read |
+| `file.bytes` | `repo`, `file` | `{base64, size}` (0.43): a file's bytes, at most 32 MB, as a picture the Image tile shows; on this computer only | read |
 | `issue.list` | `root` | `[{id, title, state, parent, labels, assignee, github, created, updated, path}]` | read |
 | `issue.read` | `root`, `id` | the issue, with its `sections` (`description`, `acceptanceCriteria`, `activity`, `extra`) | read |
 | `issue.create` | `root`, `{title, state?, parent?, labels?, assignee?, description?, acceptanceCriteria?, github?}` | the issue | target its id |
@@ -239,7 +252,19 @@ sends, and one participant per device.
 | `issue.unlink` | `root`, `id`, `other` | `{removed}` | target `id->other` |
 | `issue.move` | `root`, `id`, `prefix`, `mode` (`move` \| `copy`) | `{newId, newIssue, mode, from}` | target `id`, detail `move to PREFIX` |
 | `review.list` | `repo` | `[{id, file, startLine, endLine, side, body, author, at, resolved?, summary?, replies?}]`, and notes on pages with `page` in place of the file and lines and, (0.38), `attachments?`: file names beside their picture | read |
-| `review.save` | `repo`, `comments` | `null` (the list replaces the repo's comments) | target `repo` |
+| `review.save` | `repo`, `comments` | `null` (the list replaces the repo's comments on a diff; notes and comments on code are kept) | target `repo` |
+| `review.add` | `repo`, `{file, startLine, endLine, text, before, after, body, intent?}` | the comment (0.43): on lines of a file as it is on disk, by the person; `text` is those lines, `before` and `after` up to two lines around them. `review.list` lists it with `text`, `before` and `after` in place of `side` | target `repo` |
+| `review.move` | `repo`, `id`, `{startLine, endLine, text, before, after}` | the comment (0.43): a comment on code moved to where its lines are now. Any other comment is `BAD_REQUEST` | target `id` |
+| `review.seen` | `repo`, `id` | the comment | target `id` |
+| `review.resolve` | `repo`, `id`, `summary`? | the comment | target `id` |
+| `review.dismiss` | `repo`, `id`, `reason` | the comment | target `id` |
+| `review.reopen` | `repo`, `id` | the comment | target `id` |
+| `review.reply` | `repo`, `id`, `body` | the comment | target `id` |
+| `review.edit` | `repo`, `id`, `body` | the comment | target `id` |
+| `review.delete` | `repo`, `id` | `null` | target `id` |
+| `review.message` | `repo`, `ids` | these notes on a page as one message to an agent, with how to answer them; `null` when none is there | read |
+
+Each of `review.seen` … `review.delete` refuses a comment not where the change starts from (core's review rules).
 
 `root` is a workspace's `.hivemind` directory. An issue's `state` is one of `backlog`, `todo`,
 `in_progress`, `in_review`, `done`, `cancelled`; a link's `type` one of `relates`, `blocks`,
@@ -268,10 +293,13 @@ log.
 | `agent.answer` | `tile`, `since`, `{text}` or `{decision, feedback?, always?}` | `{answered, by?}`: what the agent waits on the person for is answered, a plan decided, a permission allowed or denied with the agent's own keys, a supervised tool use allowed or denied (0.20), and with `always` every later use of that tool by that agent too, until it closes (0.23), or a line typed into its terminal, only while it still waits on that wait (`since`) and once (`needs.md`, "Answering"); a plan or supervised tool use answered already says who answered first (`by`: `{person, name}`, 0.21) | target the agent's tile |
 | `agent.approval` | `tile` | `{request, since, tool, summary, input, expiresAt, truncated?}` (0.31): the supervised tool use the agent waits on, `summary` as its supervisor is told it (a command cut to 300 characters, an edit's file alone) and `input` whole, as the agent's hook gave it (text as it is, else JSON, two spaces a level), cut to 262,144 characters, `truncated` then. `NOT_FOUND` when it waits on none. `hive ctl approval <request>` | read |
 | `agent.conversationBefore` | `tile`, `session`, `before` | `{entries, before}` (0.39): what was said just before byte `before` of the session (`agents.md`, "Conversation"). `NOT_FOUND` once the agent is in another session | read |
+| `agent.tool` | `tile`, `use` | the tool use `use` in the agent's conversation, unfolded (`agents.md` 0.9) | read |
 | `agent.transcript` | `tile` | `{session, path}` (0.32): the session the agent is in and its file, for a program reading the agent's own records, as its hooks are handed `transcript_path`. Answered only to a caller on this machine (the person, a program or agent on the drive socket) about an agent running on it: else `UNSUPPORTED` (a phone or guest reads it with `agent.conversation`). `NOT_FOUND` when it keeps no session file yet | read |
 | `agent.send` | `tile`, `text`, `{images?}` | `{sent, held?, photos?}`: a message for the agent, whatever it is doing, a prompt of up to 32768 characters (0.23) typed in as its next prompt once it is at its prompt, Enter after it, or at once into the turn it is in when its manifest says it reads one there (`steer`); `held` true while it waits for that turn to end (0.33); `images` (0.33) at most 4 photos as `agent.start` takes them, each checked by its first bytes, kept on the machine the agent runs on in a private folder of its tile's (`<app data>/photos/<tile>/`, or `~/.hivemind/photos/<tile>/` on a saved machine) under names of their own, deleted a week after, their paths `photos` and handed to the agent as its manifest says (`pastedImages`: each pasted alone before the words; else after the words, a line each), the words then possibly empty; the `agent.read` after it waits for the turn it starts; `sent` false: no agent runs there (`needs.md`, "Sending", 0.10) | target the agent's tile |
 | `agent.startable` | `repo` | `{programs, frames}`: the agents this device starts, with their model and mode choices, and the workspace's frames, each on the machine its folder is on (`agents.md`, "Starting", 0.11) | — |
 | `agent.start` | `repo`, `{program, frame?, prompt?, model?, mode?, name?, resume?, supervise?, report?}` | `{tile}`: an agent started as the person launches one at their desktop, their saved options with these on top, never in its unattended mode unless `mode` says so (`agents.md`, 0.11); `supervise` makes its caller its supervisor, and a program or an agent its parent (0.20; an agent, 0.23) | target the new tile |
+| `agent.places` | `repo` | `{machines: [{id, name, programs, folders, unreached?}]}`: where an agent may be started in the workspace, each machine (this computer first, `id` `""`) with the agents found there and its projects and recent folders (`agents.md` 0.8) | — |
+| `agent.folders` | `repo`, `folder` | `{path, folders: [{name, path}], more?}`: the folders in `folder`, one of the workspace's projects or inside one | — |
 | `agent.interrupt` | `tile` | `{interrupted}`: the keys its manifest says interrupt its turn, typed a moment apart, while it works or waits (`agents.md`, "Stopping", 0.11) | target the agent's tile |
 | `agent.close` | `tile` | `{closed}`: its session ended and its tile taken off its board, as `hive ctl close` (`agents.md`, 0.11) | target the agent's tile |
 | `agent.sleep` | `repo`, `target`? (a tile or a frame, by id or name; none: every agent of the workspace but the agent asking, 0.33), `force`? | `{slept, skipped: [{tile, why, already?}]}` (`already`: asleep already, 0.33): each agent's process ended, its tile kept with its last screen and its conversation to wake to; one working or waiting on someone is skipped unless `force`, as one that cannot resume its conversation, a shell and a session started elsewhere are; a name two tiles share is `BAD_REQUEST` (`agents.md`, "Sleep", 0.29) | target the workspace, detail the target |
@@ -294,6 +322,22 @@ log.
 | `browser.askState` | `ask`, `ms?` | `{state: waiting \| working}` or `{state: done, outcome: done \| no \| expired \| sent \| person, url?, why?}`, as soon as it is done or after `ms`, at most 10 s (0.38) | read |
 | `browser.asks` | | `{asks}`: the questions waiting on the person (0.38) | read |
 | `browser.answer` | `ask`, `yes \| always \| no \| done` | `{answered}`: the person's; refused to an agent's tile (0.38) | read |
+| `board.draw` | `repo`, `{title?, direction?, boxes?: [{id, text, form?, color?, filled?}], links?: [[from, to, label?] or {from, to, label?}], shapes?: [{form, x?, y?, w?, h?, text?, size?, points?, head?, filled?, color?}], at?, near?, frame?, update?, keep?}` | `{drawing, objects, boxes, box, frame?, overlaps, added?, changed?, erased?, locked?}` (0.42; `update`, 0.43): at most 500 at once, and 5000 shapes on a board. Boxes and links are placed for the caller, beside `near`, or else beside its tile, in that one's frame, on free canvas, unless `at` says where; a link's end names a box, or a tile, frame or object there (`me`: the caller's tile). `update` names a drawing to change in place, keeping its id: a box whose key or id is in it keeps its place and what was not said of it, a new box is placed beside what it links to (all new: where the drawing was), and what is left out is erased but for what the person locked or `keep` names; one `board.undo` step. `overlaps` says what it landed on. `boxes` maps each box's id to its shape's | *Can edit board* |
+| `board.read` | `repo`, `{ids?, drawing?, limit?}`? | `{frames, tiles, drawings, objects, full?, more?}` (0.42): in canvas coordinates. `objects` is an overview, the first `limit` (200 if left out), `more` counting the rest; `ids` or `drawing` puts those in `full`, points and all | read |
+| `board.selected` | `repo` | `{windows: [{window, person, name, selected}]}` (0.43): what each window showing the workspace, or another device, has selected now | read |
+| `board.changes` | `repo`, `since`?, `follow`? | `{seq, changes: [{seq, at, by, who?, objects}], erased, lost?}` (0.43): the board's changes after `since` (left out: where the feed is now) and who made each (`by` `person`, `agent`, `view` or `app`; `objects` null: any may have); `erased`, those of their objects no longer on the board; `lost`, some are no longer kept, so read the board. With `follow`, each change after it is a `board.changed` to the caller until it goes | read |
+| `board.picture` | `repo`, `{drawing?, theme?, png?}`? | `{svg, width, height}` (0.42): what is drawn, or one drawing, in plain colours for `dark` or `light`, with what an arrow ends on shown faintly. Nothing in it runs or loads anything: a picture on the board is drawn from its bytes as a `data:` URL, front-most first while 4 MB of them fit, the rest as a box with its alt text. `png` answers `{png, width, height}` instead, base64, on a machine with a window: not `UNSUPPORTED`; only for the person or an agent here | read |
+| `board.keepImage` | `repo`, `{type, data}` | `{hash, type, width, height}` (0.43): keep a picture for the board, a PNG, JPEG, WebP or GIF of at most 10 MB in base64, its type and size read from its bytes and its hash their sha256. One over 4096 pixels on its long side is made smaller by a window, else `UNSUPPORTED`; anything else `BAD_REQUEST`. Kept by the workspace's host, never in the document, at most 500 MB of pictures a workspace: a new one past that is `FILE_TOO_BIG` | *Can edit board* |
+| `board.image` | `repo`, `hash` | `{type, data}` (0.43): a picture kept for the board, in base64; none is `NOT_FOUND` | read |
+| `board.erase` | `repo`, `{ids?, drawing?, by?}` | `{erased}` (0.42): shapes and arrows by id, of a drawing, or drawn by the agent of a tile (`me`: the caller's), with any arrow that ends on one. Nothing matching is `NOT_FOUND` | *Can edit board* |
+| `board.change` | `repo`, `{ids, to?, color?, dash?, weight?, rough?, locked?, stack?, align?, duplicate?, page?}`, `{writer}`? | `{changed, locked, copies?}` (0.43): shapes and arrows already drawn moved, restyled, locked, restacked, lined up, copied (`duplicate` `{dx, dy}`) or moved into a page (`page` null: out of it); `locked` those left as they were, locked by the person | *Can edit board* |
+| `board.undo` | `repo`, `{writer}`? | `{undone}` (0.43): the caller's own last board change taken back; kept an hour unused | *Can edit board* |
+| `board.redo` | `repo`, `{writer}`? | `{redone}` (0.43): the change taken back made again | *Can edit board* |
+| `board.note` | `repo`, `{body, on?, at?}` | the note (0.42): a review comment pinned on the tile, frame or object `on` (which it follows), `at` from its corner, or on the canvas `at`; by the caller's agent, or the person. `review.*` lists and answers it | *Can edit board* |
+| `board.show` | `repo`, `target` | `null` (0.42): a window brings the drawing or object `target` into view; `UNSUPPORTED` with no window | this machine's own |
+| `page.list` | `repo` | `{pages: [{id, title, parent, objects, tiles}]}` (0.43): the workspace's pages, frames marked as stops on a window's path; `parent` the nearest page it is inside or null; `objects` and `tiles` count what is inside it, at any depth | read |
+| `page.new` | `repo`, `{title, in?, at?}` | `{id}` (0.43): a page, inside the page or frame `in` or on the canvas itself, its corner `at` or a free spot | *Can edit board* |
+| `page.open` | `repo`, `id` or null | `null` (0.43): a window flies to the page or frame and goes inside it (null: out to the whole canvas); `UNSUPPORTED` with no window | this machine's own |
 | `tool.open` | `repo`, `{tool, frame?, url?}` | `{tile}`: an installed tool's tile (`tool` its id) placed on the board, in `frame` or the one in view (0.23) | target the new tile |
 | `view.list` | | `[{id, name, version, entry, page}]`: the community views installed on this device whose manifest says `"phone": true` (below, 0.12), and the page a screen loads to show each (0.14) | read |
 | `view.file` | `id`, `path` | `{data, type, csp}`: one of the view's files as the app serves its windows (below), `path` inside its package (a link out of it, or `..`, is `BAD_REQUEST`), its bytes base64, its type, and the policy to serve it under (0.14); 4 MiB at most | read |
@@ -349,6 +393,7 @@ says it is asked at the machine itself.
 | `tile.focus` | `tile` | `null`: the tile brought forward in the window showing it | — |
 | `tile.look` | `tile` | `{tile, state, reason?, drew, console, png, width, height}` (0.32): the tile brought into view in the window, waited for (8 s at most) until its plugin drew or failed, then pictured: `png` base64, cropped to its box. `state` is its plugin's (`null` for a tile no plugin draws, which counts as drawn); `console` the last 100 lines its plugin's code wrote and the errors it threw, oldest first, kept in the window and read only here. An agent looks only at its own workspace's tiles. The tile is raised above the others first; `OCCLUDED`, naming it, when anything else is still drawn over part of it, a notification too (nothing the person sees is hidden for a picture); `UNSUPPORTED` where no window shows tiles | read |
 | `page.note` | `tile`, `{body, intent?, selector}` or `{body, intent?, area}` | `{note, kept}` (0.38): a note on the page in the Browser tile `tile`, or an agent's tile beside the one Browser tile in its frame, holding what a person's holds, by the agent asking or `you`. `area` is `{x, y, width, height}` in page pixels. `kept`: the folder its review is in. `UNSUPPORTED` where no window shows pages | target `tile` |
+| `opener.open` | `thing`, `tile`? | `{to, url?, path?, line?, col?, tile?}` (0.43): a URL or an absolute file (`path:line:col`) opened in the window where the person's link settings say (`to` `browser-tile`, `system-browser`, `code`, `image` or `os`), as a click in `tile`'s frame (an agent's own tile when an agent asks). `UNSUPPORTED` where it would ask the person, `NOT_FOUND` when the file is not there | this machine's own |
 | `plugin.list` | | `{plugins: [{plugin, kind, instance, label, state, reason?, since, drew, commands}], views: [{id, label, active}]}`: every plugin running in a window (a tool's tile, a widget with code, a community view), `state` `starting` until its code connects, then `ready`; `drew` once a tool's tile painted its first content (0.32); `failed` with its `reason` when it did not start in 15 s or was disabled; and the views the window can show (0.27) | read |
 | `plugin.commands` | | the commands each ready plugin running in a window offers | read |
 | `plugin.open` | `plugin` (`tool:<owner>/<name>[/<tool>]`, `widget:@<owner>/<name>` or `view:<id>`), `frame`? (a tool's tile's) | what opening it answers: a tool's tile placed (`{tile}`), a widget added to the board (`{widget}`), a view switched to (`{view}`); for one with code, once it can be called or 10 s pass, with its `instance`, `state`, `reason`? and `commands` (0.27) | target the plugin |
@@ -412,6 +457,7 @@ A diff's `scope` is one of `{"kind": "working", "staged"?}`, `{"kind": "branch",
 | `link.spawn` | `{child, parent, connected}` (`parent` null: every wire touching `child`) | to every client, as an agent spawns another, or the tile goes |
 | `tile.opened` | `{tileId, repo, background, near?, by}` | to every client, as the control plane opens a tile, before it reaches the layout: its host starts it, with its first task; a client showing `repo` lays it out. `by` (0.33): `person`, `agent` or `program`, who opened it; a window goes to one the person opened, and to one an agent or program opened only when the person's `agents.whenAgentStartsAgent` is `go` |
 | `terminal.data` | `tile`, `data` | to each client that shows the terminal, its output in batches; a screen the host sends in place of what the client shows starts with `ESC c` |
+| `agent.said` | `tile`, `entries`, `cursor`, `session` | to whoever follows the agent's conversation, what was said next in its session `session` |
 | `terminal.exit` | `tile`, `{code, signal?, slept?}` | to each client that showed it, as its session ends; `slept`: it was put to sleep, and is not gone (0.29) |
 | `terminal.activity` | `{[tile]: 0..3}` | to every client, as watched terminals' output gets busier or quieter |
 | `tile.lines` | `{lines: {[tile]: line}}` | to a client that watches lines (`tile.watchLines`) alone, the watched tiles whose last line changed, each with its line now: at once after a quiet spell, then at most every 250 ms (0.34); a peer hears only its workspace's tiles |
@@ -421,11 +467,14 @@ A diff's `scope` is one of `{"kind": "working", "staged"?}`, `{"kind": "branch",
 | `terminal.typing` | `tile`, `{id, person, name}` | to each client that opened the terminal but the one typing, as someone types into it: at most once a second while the same one types on. A client says so on the terminal for a moment, and does not draw that person's pointer meanwhile |
 | `file.changed` | `repo`, `{paths}` | to each client watching the repo (the app's window watches the one it opens), at most one every 300 ms |
 | `store.changed` | `{repo, part, objects?}` (`core`, `board` or `view:<id>`) | to every client but the one whose write it was, on each change to a workspace's layouts; for the board, `objects` names the objects that changed (0.28; none: any may have) |
+| `board.changed` | `repo`, `{seq, at, by, who?, objects}` | to a caller following the board's changes (`board.changes` with `follow`), each change as it is made (0.43) |
+| `code.answered` | `ask`, `{question, value, accuracy, version, by, partial?, also?}` | to the caller alone, as a code question asked with `opts.ask` has a better answer than the last one sent: the fastest first, then a more accurate one (0.43) |
 | `presence.changed` | `repo`, `[{id, person, name, color, cursor, over, selection}]` | to every client, as someone in the workspace moves, selects, arrives or leaves (at once after a quiet spell, and at most every 50 ms): everyone there now, one per connection (`id`), `person` their key |
 | `appearance.changed` | `appearance` | to every client, when what `appearance.get` answers changes (0.17); a client checks it as settings are, whoever sent it |
 | `people.asked` | `repo`, `{req, workspace, profile, role}` | to the owner's clients, as someone asks to join with a link: `workspace` the workspace's name, `profile` `{name, color}` as they gave it, `role` the link's |
 | `people.answered` | `repo`, `req` | to the owner's clients, as the question `req` is answered, or nobody answered it in time |
 | `view.said` | `session`, `message` | to the caller of a view session alone, each view protocol message its host says to the view |
+| `view.rects` | `session`, `[{tileId, x, y, w, h, chrome?, radius?}]` | to the caller of a view session alone, where the view draws its surfaces |
 | `view.ended` | `session`, `why` | to the caller of a view session, as its host disables the view (it flooded, or sent what it may not, past the limits): the session is over |
 
 ## Views on a remote screen

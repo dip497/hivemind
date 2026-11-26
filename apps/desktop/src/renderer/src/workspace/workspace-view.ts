@@ -17,9 +17,11 @@
 import { useSyncExternalStore, type ComponentType } from "react";
 import type { IslandPlacement } from "@hivemind/core/settings-schema";
 import type { HostMenu, ViewRect } from "@hivemind/view-sdk/protocol";
+import type { OpenedThing } from "@hivemind/workspace-api/opener";
 import type { FrameState, TileInstance } from "../canvas-persistence";
 import type { LayerFrame, LayerTile } from "../LayersPanel";
 import type { FrameActions } from "../FrameMenu";
+import type { FlyTarget } from "../fly-to";
 import type { SleepActions } from "./SleepAgents";
 import type { TileKind } from "../tile-kinds";
 import type { StatusEvent, TileStatusKind } from "../agent-status-bus";
@@ -72,9 +74,9 @@ export type SpawnOpts = {
 export interface WorkspaceCommands {
   selectTile: (id: string | null) => void;
   selectFrame: (id: string | null) => void;
-  /** Bring a tile/frame into view. The canvas flies its camera; other views
-   *  treat it as select + reveal. `exact` asks for 1:1 (terminal/editor text). */
-  focusTile: (id: string, opts?: { exact?: boolean }) => void;
+  /** Go to a tile, frame, board object or drawing (`flyTo`, fly-to.ts); null: everything. The
+   *  canvas flies its camera; other views treat a tile as select + reveal. `exact` asks for 1:1. */
+  focusTile: (target: FlyTarget, opts?: { exact?: boolean }) => void;
   closeTile: (id: string) => void;
   spawnTile: (kind: TileKind, frameId: string | null, opts?: SpawnOpts) => string | undefined;
   spawnVis: (which: "tree" | "shell" | "issues") => void;
@@ -97,6 +99,9 @@ export interface WorkspaceCommands {
   /** Open a file of a frame's folder in that frame's editor, at a line when given; starts an editor
    *  there when it has none. The editor tile's id, or null when none could open it. */
   openFile: (frameId: string | null, path: string, at?: { line?: number; col?: number }) => string | null;
+  /** Open a link or a frame's file where the person's click would (`open-thing.ts`); rejects
+   *  `UNSUPPORTED` where the app would ask them, `NOT_FOUND` when the file is not there. */
+  openThing: (thing: string, from: { frameId: string | null }) => Promise<OpenedThing>;
   /** Live agent status, PER TILE, off the awareness bus. Deliberately not on
    *  the model: a status transition (~1 Hz while agents work) reaches only the
    *  subscribers of that tile — a 3D view colours one object, a rail recolours
